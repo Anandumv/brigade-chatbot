@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Message, ProjectInfo, PersonaInfo, ChatQueryResponse } from '@/types';
 import { apiService } from '@/services/api';
 import { ResponseCard } from './ResponseCard';
-import { Send, Loader2, Sparkles, AlertCircle } from 'lucide-react';
+import { Send, Loader2, Sparkles, User, AlertCircle, Zap } from 'lucide-react';
 
 interface ChatInterfaceProps {
     projects: ProjectInfo[];
@@ -95,50 +95,62 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
     };
 
     return (
-        <div className="flex flex-col h-full bg-white relative">
+        <div className="flex flex-col h-full bg-white relative font-sans">
             {/* Minimal Header */}
-            <div className="flex justify-center items-center py-4 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
-                <div className="flex items-center gap-2">
-                    <span className="text-xl font-semibold text-gray-800 tracking-tight">Pinclick Genie</span>
-                    <Sparkles className="w-5 h-5 text-pinclick-red" />
+            <div className="flex justify-center items-center py-4 bg-white/90 backdrop-blur-md sticky top-0 z-20 border-b border-gray-50">
+                <div className="flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-gray-50/50 border border-gray-100">
+                    <span className="text-sm font-semibold text-gray-700 tracking-wide">Pinclick Genie</span>
+                    <div className="bg-gradient-to-tr from-rose-500 to-orange-500 p-1 rounded-full shadow-sm">
+                        <Sparkles className="w-3 h-3 text-white fill-white" />
+                    </div>
                 </div>
             </div>
 
             {/* Chat Area */}
-            <div className="flex-1 overflow-y-auto w-full max-w-3xl mx-auto px-4 pb-32">
+            <div className="flex-1 overflow-y-auto w-full max-w-3xl mx-auto px-4 pb-36">
                 {messages.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6 animate-fade-in">
-                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-red-500 to-pink-600 flex items-center justify-center shadow-xl shadow-red-200">
-                            <Sparkles className="w-8 h-8 text-white" />
+                    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-8 animate-fade-in px-4">
+                        <div className="relative group cursor-default">
+                            <div className="absolute -inset-1 bg-gradient-to-r from-rose-400 to-orange-500 rounded-full blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
+                            <div className="relative w-24 h-24 rounded-full bg-white flex items-center justify-center shadow-2xl ring-1 ring-gray-100">
+                                <Sparkles className="w-10 h-10 text-rose-500 fill-rose-50" />
+                            </div>
                         </div>
-                        <h1 className="text-3xl font-bold text-gray-900">How can I help you today?</h1>
+                        <div className="space-y-2 max-w-md">
+                            <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600">
+                                How can I help you today?
+                            </h1>
+                            <p className="text-gray-400 text-sm">
+                                Ask about project details, pricing, or amenities.
+                            </p>
+                        </div>
                     </div>
                 ) : (
-                    <div className="space-y-6 py-6">
+                    <div className="space-y-8 py-8">
                         {messages.map((message) => (
                             <div
                                 key={message.id}
-                                className={`flex gap-4 ${message.role === 'user' ? 'justify-end' : ''} animate-slide-up`}
+                                className={`flex gap-4 ${message.role === 'user' ? 'justify-end' : ''} animate-slide-up group`}
                             >
                                 {/* Bot Icon */}
                                 {message.role === 'assistant' && (
-                                    <div className="w-8 h-8 flex-shrink-0 rounded-full bg-red-100 flex items-center justify-center mt-1">
-                                        <Sparkles className="w-4 h-4 text-pinclick-red" />
+                                    <div className="w-8 h-8 flex-shrink-0 rounded-full bg-gradient-to-br from-rose-100 to-orange-50 border border-rose-100 flex items-center justify-center shadow-sm mt-0.5">
+                                        <Sparkles className="w-4 h-4 text-rose-600" />
                                     </div>
                                 )}
 
                                 <div
-                                    className={`max-w-[85%] ${message.role === 'user'
-                                        ? 'bg-gray-100 text-gray-900 rounded-2xl px-5 py-3'
+                                    className={`max-w-[80%] ${message.role === 'user'
+                                        ? 'bg-gray-100 text-gray-900 rounded-[20px] rounded-tr-sm px-6 py-3.5 shadow-sm'
                                         : 'w-full'
                                         }`}
                                 >
                                     {message.role === 'user' ? (
-                                        <p className="text-sm leading-relaxed">{message.content}</p>
+                                        <p className="text-[15px] leading-relaxed font-medium text-gray-800">{message.content}</p>
                                     ) : message.isLoading ? (
-                                        <div className="flex items-center gap-2 text-gray-400">
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                            <span className="text-sm">Thinking...</span>
+                                        <div className="flex items-center gap-3 text-gray-500 bg-gray-50/50 rounded-2xl px-4 py-3 w-fit">
+                                            <Loader2 className="w-4 h-4 animate-spin text-rose-500" />
+                                            <span className="text-sm font-medium">Genie is thinking...</span>
                                         </div>
                                     ) : (
                                         <ResponseCard
@@ -150,6 +162,13 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                                         />
                                     )}
                                 </div>
+
+                                {/* User Icon */}
+                                {message.role === 'user' && (
+                                    <div className="w-8 h-8 flex-shrink-0 rounded-full bg-gray-200 border border-gray-300 flex items-center justify-center shadow-sm mt-0.5 overflow-hidden">
+                                        <User className="w-5 h-5 text-gray-500" />
+                                    </div>
+                                )}
                             </div>
                         ))}
                         <div ref={messagesEndRef} />
@@ -158,40 +177,46 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
             </div>
 
             {/* Floating Input Area */}
-            <div className="fixed bottom-0 left-0 w-full bg-gradient-to-t from-white via-white to-transparent pb-6 pt-10 px-4">
-                <div className="max-w-3xl mx-auto relative shadow-2xl rounded-3xl bg-white border border-gray-100">
-                    <form onSubmit={handleSubmit} className="relative flex items-end p-2">
-                        <textarea
-                            ref={inputRef}
-                            value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            onKeyDown={handleKeyDown}
-                            placeholder="Message Pinclick Genie..."
-                            className="w-full resize-none bg-transparent border-0 focus:ring-0 text-gray-800 placeholder-gray-400 py-3 pl-4 pr-12 max-h-48"
-                            rows={1}
-                            style={{ minHeight: '52px' }}
-                        />
-                        <button
-                            type="submit"
-                            disabled={!input.trim() || isLoading}
-                            className={`absolute right-3 bottom-3 p-2 rounded-xl transition-all ${input.trim()
-                                ? 'bg-pinclick-red text-white hover:bg-red-600 shadow-md'
-                                : 'bg-gray-100 text-gray-400'
-                                }`}
-                        >
-                            {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                        </button>
-                    </form>
-                </div>
-                {error && (
-                    <div className="text-center mt-2 flex items-center justify-center gap-2 text-red-500 text-xs">
-                        <AlertCircle className="w-3 h-3" />
-                        {error}
+            <div className="fixed bottom-0 left-0 w-full bg-gradient-to-t from-white via-white/95 to-transparent pb-8 pt-12 px-4 z-10 pointer-events-none">
+                <div className="max-w-3xl mx-auto pointer-events-auto">
+                    {error && (
+                        <div className="mb-3 mx-auto w-fit flex items-center gap-2 bg-red-50 text-red-600 px-4 py-2 rounded-full text-xs font-medium border border-red-100 animate-slide-up">
+                            <AlertCircle className="w-3 h-3" />
+                            {error}
+                        </div>
+                    )}
+
+                    <div className="relative group transition-all duration-300 focus-within:-translate-y-1">
+                        <div className="absolute -inset-0.5 bg-gradient-to-r from-rose-200 via-orange-200 to-rose-200 rounded-[2rem] opacity-40 group-focus-within:opacity-100 blur transition duration-500"></div>
+                        <div className="relative shadow-xl shadow-gray-200/50 rounded-[1.8rem] bg-white border border-gray-100">
+                            <form onSubmit={handleSubmit} className="relative flex items-end p-2 pl-6">
+                                <textarea
+                                    ref={inputRef}
+                                    value={input}
+                                    onChange={(e) => setInput(e.target.value)}
+                                    onKeyDown={handleKeyDown}
+                                    placeholder="Message Pinclick Genie..."
+                                    className="w-full resize-none bg-transparent border-0 focus:ring-0 text-gray-800 placeholder-gray-400 py-4 max-h-48 text-[15px]"
+                                    rows={1}
+                                    style={{ minHeight: '56px' }}
+                                />
+                                <button
+                                    type="submit"
+                                    disabled={!input.trim() || isLoading}
+                                    className={`mb-1.5 mr-1.5 p-2.5 rounded-full transition-all duration-300 ${input.trim()
+                                        ? 'bg-gradient-to-tr from-rose-600 to-orange-500 text-white shadow-lg hover:shadow-orange-200 scale-100'
+                                        : 'bg-gray-100 text-gray-300 scale-90'
+                                        }`}
+                                >
+                                    {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5 ml-0.5" />}
+                                </button>
+                            </form>
+                        </div>
                     </div>
-                )}
-                <p className="text-center text-[10px] text-gray-400 mt-2">
-                    Pinclick Genie can make mistakes. Consider checking important information.
-                </p>
+                    <p className="text-center text-[10px] text-gray-400 mt-3 font-medium tracking-wide">
+                        Pinclick Genie can make mistakes. Consider checking important information.
+                    </p>
+                </div>
             </div>
         </div>
     );
