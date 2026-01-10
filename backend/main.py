@@ -75,7 +75,7 @@ class ChatQueryRequest(BaseModel):
 class SourceInfo(BaseModel):
     """Source information for answer."""
     document: str
-    section: str
+    section: Optional[str] = "General"
     page: Optional[int] = None
     excerpt: str
     similarity: float
