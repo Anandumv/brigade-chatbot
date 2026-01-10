@@ -17,8 +17,8 @@ class IntentClassifier:
     """Classifies user queries into predefined intent categories."""
 
     def __init__(self):
-        self.client = OpenAI(api_key=settings.openai_api_key)
-        self.model = "gpt-4-turbo-preview"
+        self.client = OpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url)
+        self.model = settings.gpt_model
 
     def classify_intent(self, query: str) -> IntentType:
         """

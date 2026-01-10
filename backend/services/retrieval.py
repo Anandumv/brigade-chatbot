@@ -15,7 +15,7 @@ class RetrievalService:
     """Service for retrieving relevant document chunks based on query similarity."""
 
     def __init__(self):
-        self.client = OpenAI(api_key=settings.openai_api_key)
+        self.client = OpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url)
         self.embedding_model = settings.embedding_model
         self.similarity_threshold = settings.similarity_threshold
         self.top_k = settings.top_k_results

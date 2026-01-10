@@ -16,7 +16,7 @@ class AnswerGenerator:
     """Generate answers using GPT-4 with hard anti-hallucination constraints."""
 
     def __init__(self):
-        self.client = OpenAI(api_key=settings.openai_api_key)
+        self.client = OpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url)
         self.model = settings.gpt_model
         self.temperature = settings.temperature
         self.max_tokens = settings.max_tokens

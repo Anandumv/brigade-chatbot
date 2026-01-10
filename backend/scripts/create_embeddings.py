@@ -28,7 +28,7 @@ class EmbeddingGenerator:
     """Generate embeddings for text using OpenAI."""
 
     def __init__(self):
-        self.client = OpenAI(api_key=settings.openai_api_key)
+        self.client = OpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url)
         self.model = settings.embedding_model
         self.batch_size = 100  # Process in batches to avoid rate limits
 

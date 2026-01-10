@@ -16,7 +16,7 @@ class PersonaPitchGenerator:
     """Generate persona-tailored sales pitches."""
 
     def __init__(self):
-        self.client = OpenAI(api_key=settings.openai_api_key)
+        self.client = OpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url)
         self.model = settings.gpt_model
         self.temperature = 0.3  # Slightly higher for creative pitches
 
