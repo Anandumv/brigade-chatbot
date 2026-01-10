@@ -16,6 +16,8 @@ from services.retrieval import retrieval_service
 from services.confidence_scorer import confidence_scorer
 from services.refusal_handler import refusal_handler
 from services.answer_generator import answer_generator
+from services.multi_project_retrieval import multi_project_retrieval
+from services.persona_pitch import persona_pitch_generator
 from database.supabase_client import supabase_client
 
 # Configure logging
@@ -206,13 +208,22 @@ async def chat_query(request: ChatQueryRequest):
                 response_time_ms=int((time.time() - start_time) * 1000)
             )
 
-        # Step 6: Generate answer
-        if intent == "comparison":
+        # Step 6: Generate answer (with persona support)
+        if request.persona:
+            # Phase 2: Persona-based pitch
+            result = persona_pitch_generator.generate_persona_pitch(
+                query=request.query,
+                chunks=chunks,
+                persona=request.persona
+            )
+        elif intent == "comparison":
+            # Multi-project comparison
             result = answer_generator.generate_comparison_answer(
                 query=request.query,
                 chunks=chunks
             )
         else:
+            # Standard answer
             result = answer_generator.generate_answer(
                 query=request.query,
                 chunks=chunks,
@@ -336,18 +347,158 @@ async def get_project(project_id: str):
         raise HTTPException(status_code=500, detail=f"Error fetching project: {str(e)}")
 
 
+# === Phase 2 Endpoints ===
+
+@app.get("/api/personas")
+async def get_personas():
+    """Get list of available buyer personas."""
+    try:
+        return persona_pitch_generator.get_available_personas()
+    except Exception as e:
+        logger.error(f"Error fetching personas: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/chat/compare")
+async def compare_projects(
+    query: str,
+    project_ids: Optional[List[str]] = None,
+    user_id: Optional[str] = None
+):
+    """
+    Compare multiple projects based on a query.
+
+    Args:
+        query: Comparison question
+        project_ids: Optional list of project IDs to compare
+        user_id: User ID for logging
+
+    Returns:
+        Comparison answer with sources from multiple projects
+    """
+    start_time = time.time()
+
+    try:
+        # Retrieve chunks from all or specified projects
+        if project_ids and len(project_ids) > 1:
+            grouped_chunks = await multi_project_retrieval.retrieve_for_comparison(
+                query=query,
+                project_ids=project_ids
+            )
+            # Flatten for answer generation
+            chunks = [chunk for chunks_list in grouped_chunks.values() for chunk in chunks_list]
+        else:
+            # Retrieve from all projects
+            chunks = await retrieval_service.retrieve_similar_chunks(query=query)
+
+        # Generate comparison answer
+        result = answer_generator.generate_comparison_answer(
+            query=query,
+            chunks=chunks
+        )
+
+        response_time_ms = int((time.time() - start_time) * 1000)
+
+        if user_id:
+            await supabase_client.log_query(
+                user_id=user_id,
+                query=query,
+                intent="comparison",
+                answered=True,
+                confidence_score=result["confidence"],
+                response_time_ms=response_time_ms
+            )
+
+        return {
+            "answer": result["answer"],
+            "sources": result["sources"],
+            "confidence": result["confidence"],
+            "response_time_ms": response_time_ms
+        }
+
+    except Exception as e:
+        logger.error(f"Error in comparison: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # === Admin Endpoints (Phase 2) ===
 
-# Placeholder for admin endpoints
-# @app.post("/api/admin/upload-document")
-# async def upload_document():
-#     """Upload new document (Phase 2)"""
-#     pass
+class QueryAnalytics(BaseModel):
+    """Query analytics response."""
+    total_queries: int
+    answered_queries: int
+    refused_queries: int
+    refusal_rate: float
+    avg_response_time_ms: float
+    top_intents: List[Dict[str, Any]]
+    recent_refusals: List[Dict[str, Any]]
 
-# @app.get("/api/admin/analytics")
-# async def get_analytics():
-#     """Get query analytics (Phase 2)"""
-#     pass
+
+@app.get("/api/admin/analytics", response_model=QueryAnalytics)
+async def get_analytics(user_id: str, days: int = 7):
+    """
+    Get query analytics for the past N days.
+
+    Args:
+        user_id: Admin user ID
+        days: Number of days to analyze
+
+    Returns:
+        Analytics data
+    """
+    try:
+        # Verify admin role (simplified for now)
+        # In production, check user_profiles.role == 'admin'
+
+        # Query Supabase for analytics
+        from datetime import datetime, timedelta
+
+        cutoff_date = datetime.now() - timedelta(days=days)
+
+        # Get query logs
+        response = supabase_client.client.table("query_logs").select("*").gte("created_at", cutoff_date.isoformat()).execute()
+
+        logs = response.data if response.data else []
+
+        # Calculate metrics
+        total = len(logs)
+        answered = sum(1 for log in logs if log.get("answered"))
+        refused = total - answered
+        refusal_rate = (refused / total * 100) if total > 0 else 0
+
+        # Avg response time
+        response_times = [log.get("response_time_ms", 0) for log in logs if log.get("response_time_ms")]
+        avg_response_time = sum(response_times) / len(response_times) if response_times else 0
+
+        # Top intents
+        from collections import Counter
+        intent_counts = Counter(log.get("intent") for log in logs if log.get("intent"))
+        top_intents = [{"intent": intent, "count": count} for intent, count in intent_counts.most_common(5)]
+
+        # Recent refusals
+        recent_refusals = [
+            {
+                "query": log.get("query", ""),
+                "refusal_reason": log.get("refusal_reason", ""),
+                "created_at": log.get("created_at", "")
+            }
+            for log in sorted(logs, key=lambda x: x.get("created_at", ""), reverse=True)
+            if not log.get("answered")
+        ][:10]
+
+        return QueryAnalytics(
+            total_queries=total,
+            answered_queries=answered,
+            refused_queries=refused,
+            refusal_rate=round(refusal_rate, 2),
+            avg_response_time_ms=round(avg_response_time, 2),
+            top_intents=top_intents,
+            recent_refusals=recent_refusals
+        )
+
+    except Exception as e:
+        logger.error(f"Error fetching analytics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # === Development Helper Endpoints ===
