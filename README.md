@@ -6,6 +6,7 @@ A grounded, non-hallucinatory chatbot for real estate sales teams that generates
 
 ## Features
 
+### Core Features
 - ✅ **Zero Hallucinations** - Strict grounding to source documents only
 - ✅ **100% Source Attribution** - Every answer cites its sources
 - ✅ **Confidence Scoring** - Transparent about answer reliability
@@ -13,6 +14,13 @@ A grounded, non-hallucinatory chatbot for real estate sales teams that generates
 - ✅ **Intent Classification** - Routes queries appropriately
 - ✅ **Sub-3s Response Time** - Fast enough for live sales conversations
 - ✅ **Complete Audit Trail** - All queries logged for analytics
+
+### Phase 2 Features (Production Ready)
+- ✅ **Web Search Fallback** - Real-time web search using Tavily API when data not in DB
+- ✅ **Sales Query Expansion** - Automatically expands "2BHK", "3BHK" queries for better matching
+- ✅ **Persona-Based Pitches** - Tailored responses for 4 buyer personas (investor, first-time buyer, senior citizen, family)
+- ✅ **Multi-Project Comparison** - Compare features across multiple Brigade projects
+- ✅ **Analytics Dashboard** - Query insights, refusal analysis, performance metrics
 
 ## Architecture
 
@@ -68,6 +76,10 @@ User Query
    - `SUPABASE_URL` - Your Supabase project URL
    - `SUPABASE_KEY` - Your Supabase anon key
    - `SUPABASE_SERVICE_KEY` - Your Supabase service role key
+   - `TAVILY_API_KEY` - (Optional) Tavily API key for web search fallback
+     - Get free API key at [https://tavily.com](https://tavily.com)
+     - Free tier: 1000 searches/month
+     - If not provided, falls back to LLM general knowledge
 
 ### Database Setup
 
@@ -201,24 +213,82 @@ curl -X POST "http://localhost:8000/api/chat/query" \
 }
 ```
 
+### Phase 2: Web Search Fallback
+
+When data isn't in the database, the chatbot searches the web using Tavily API:
+
+```bash
+curl -X POST "http://localhost:8000/api/chat/query" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "What are property prices in Whitefield Bangalore?",
+    "user_id": "user-123"
+  }'
+```
+
+**Response includes web search results with clear external source indication.**
+
+### Phase 2: Persona-Based Pitch
+
+Tailor responses to specific buyer personas:
+
+```bash
+curl -X POST "http://localhost:8000/api/chat/query" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "Why should I invest in Brigade Citrine?",
+    "persona": "investor",
+    "user_id": "user-123"
+  }'
+```
+
+**Available Personas:** `investor`, `first_time_buyer`, `senior_citizen`, `family`
+
+### Phase 2: Multi-Project Comparison
+
+```bash
+curl -X POST "http://localhost:8000/api/chat/compare" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "Compare amenities in Brigade Citrine and Avalon",
+    "user_id": "user-123"
+  }'
+```
+
 ## Testing
 
-### Test Document Processing
+**Comprehensive Testing Guide:** See [API_TESTING_GUIDE.md](API_TESTING_GUIDE.md) for complete testing instructions.
 
+### Quick Start Tests
+
+1. **Test basic query:**
 ```bash
-cd backend
-python scripts/process_documents.py "../Brigade Citrine E_Brochure 01-1.pdf"
+curl -X POST "http://localhost:8000/api/chat/query" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What is Brigade Citrine?", "user_id": "test"}'
 ```
 
-### Test Retrieval (Development Endpoint)
+2. **Test web search fallback:**
+```bash
+curl -X POST "http://localhost:8000/api/chat/query" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "Property prices in Bangalore", "user_id": "test"}'
+```
+
+3. **Test sales query expansion:**
+```bash
+curl -X POST "http://localhost:8000/api/chat/query" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "Show me 2bhk flats", "user_id": "test"}'
+```
+
+### Development Endpoints (if ENVIRONMENT=development)
 
 ```bash
+# Test retrieval only
 curl "http://localhost:8000/api/dev/test-retrieval?query=sustainability+features"
-```
 
-### Test Intent Classification
-
-```bash
+# Test intent classification
 curl "http://localhost:8000/api/dev/test-intent?query=Will+property+value+increase?"
 ```
 
@@ -235,13 +305,18 @@ chatbot/
 │   │   └── supabase_client.py       # Database client
 │   ├── services/
 │   │   ├── intent_classifier.py     # Intent classification
-│   │   ├── retrieval.py             # Vector similarity search
+│   │   ├── retrieval.py             # Vector similarity search (+ query expansion)
 │   │   ├── confidence_scorer.py     # Confidence calculation
 │   │   ├── refusal_handler.py       # Refusal logic
-│   │   └── answer_generator.py      # GPT-4 answer generation
+│   │   ├── answer_generator.py      # GPT-4 answer generation
+│   │   ├── web_search.py            # Tavily web search fallback
+│   │   ├── multi_project_retrieval.py # Multi-project comparison
+│   │   └── persona_pitch.py         # Persona-based pitches
 │   └── scripts/
 │       ├── process_documents.py     # Document processing
-│       └── create_embeddings.py     # Embedding generation
+│       ├── create_embeddings.py     # Embedding generation
+│       └── full_pipeline.py         # End-to-end processing
+├── API_TESTING_GUIDE.md            # Comprehensive API testing guide
 ├── .env.example                     # Environment template
 ├── .gitignore
 └── README.md
@@ -289,21 +364,28 @@ chatbot/
 
 ## Next Steps
 
-### Phase 2 Features (Planned)
+### Phase 2 Features ✅ COMPLETE
 
-- [ ] Multi-project comparison queries
-- [ ] External source integration (RERA, govt portals)
-- [ ] Persona-based pitch generation
+- ✅ Multi-project comparison queries
+- ✅ Web search fallback (Tavily API integration)
+- ✅ Persona-based pitch generation (4 personas)
+- ✅ Sales query expansion (2BHK, 3BHK auto-expansion)
+- ✅ Analytics dashboard endpoint
+
+### Future Enhancements
+
 - [ ] React frontend with chat UI
-- [ ] Admin dashboard for document management
-- [ ] Analytics and reporting
+- [ ] Admin dashboard for document upload
+- [ ] Real-time RERA data integration
+- [ ] User authentication with Supabase Auth
+- [ ] File upload UI (currently via scripts)
+- [ ] Advanced analytics visualizations
 
 ### Current Limitations
 
-- Single project only (Phase 1)
-- Internal documents only
-- No file upload UI (use scripts)
-- No user authentication (Supabase RLS ready)
+- No frontend UI (API-only, use curl/Postman for testing)
+- Manual document processing via scripts
+- No user authentication (Supabase RLS ready for implementation)
 
 ## Troubleshooting
 

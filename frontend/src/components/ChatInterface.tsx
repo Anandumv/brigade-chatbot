@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Message, ProjectInfo, PersonaInfo, ChatQueryResponse } from '@/types';
 import { apiService } from '@/services/api';
 import { ResponseCard } from './ResponseCard';
-import { Send, Loader2, Sparkles, MessageSquare, Bot } from 'lucide-react';
+import { Send, Loader2, Sparkles, AlertCircle } from 'lucide-react';
 
 interface ChatInterfaceProps {
     projects: ProjectInfo[];
@@ -59,7 +59,7 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
         try {
             const response: ChatQueryResponse = await apiService.sendQuery({
                 query: userMessage.content,
-                project_id: undefined, // Always search all projects
+                project_id: undefined,
                 persona: undefined,
             });
 
@@ -94,141 +94,104 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
         }
     };
 
-    const suggestedQueries = [
-        'What amenities does Brigade Citrine offer?',
-        'Tell me about the unit configurations in Avalon',
-        'Compare Brigade Citrine and Avalon',
-        'What is the price range for 3BHK units?',
-    ];
-
     return (
-        <div className="flex flex-col h-full bg-gradient-to-b from-gray-50 to-white">
-            {/* Header - Clean and simple */}
-            <div className="flex-shrink-0 px-6 py-4 bg-white border-b border-gray-200 shadow-sm">
-                <div className="flex items-center justify-center max-w-4xl mx-auto">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brigade-gold to-yellow-600 flex items-center justify-center shadow-lg">
-                            <Sparkles className="w-5 h-5 text-white" />
-                        </div>
-                        <div>
-                            <h1 className="text-lg font-bold text-brigade-dark">Brigade Sales Assistant</h1>
-                            <p className="text-xs text-gray-500">AI-powered property information</p>
-                        </div>
-                    </div>
+        <div className="flex flex-col h-full bg-white relative">
+            {/* Minimal Header */}
+            <div className="flex justify-center items-center py-4 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
+                <div className="flex items-center gap-2">
+                    <span className="text-xl font-semibold text-gray-800 tracking-tight">Pinclick Genie</span>
+                    <Sparkles className="w-5 h-5 text-pinclick-red" />
                 </div>
             </div>
 
-            {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto px-6 py-6">
-                <div className="max-w-4xl mx-auto space-y-6">
-                    {messages.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-center">
-                            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-brigade-gold/20 to-brigade-gold/5 flex items-center justify-center mb-6">
-                                <Bot className="w-10 h-10 text-brigade-gold" />
-                            </div>
-                            <h2 className="text-2xl font-bold text-brigade-dark mb-2">
-                                Welcome to Brigade Sales Assistant
-                            </h2>
-                            <p className="text-gray-500 mb-8 max-w-md">
-                                Ask me anything about Brigade Citrine or Avalon properties.
-                                I provide accurate, source-backed information.
-                            </p>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-2xl">
-                                {suggestedQueries.map((query, index) => (
-                                    <button
-                                        key={index}
-                                        onClick={() => setInput(query)}
-                                        className="flex items-center gap-3 px-4 py-3 bg-white rounded-xl border border-gray-200 hover:border-brigade-gold hover:shadow-md transition-all text-left group"
-                                    >
-                                        <MessageSquare className="w-5 h-5 text-gray-400 group-hover:text-brigade-gold transition-colors" />
-                                        <span className="text-sm text-gray-700">{query}</span>
-                                    </button>
-                                ))}
-                            </div>
+            {/* Chat Area */}
+            <div className="flex-1 overflow-y-auto w-full max-w-3xl mx-auto px-4 pb-32">
+                {messages.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6 animate-fade-in">
+                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-red-500 to-pink-600 flex items-center justify-center shadow-xl shadow-red-200">
+                            <Sparkles className="w-8 h-8 text-white" />
                         </div>
-                    ) : (
-                        <>
-                            {messages.map((message) => (
-                                <div
-                                    key={message.id}
-                                    className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-slide-up`}
-                                >
-                                    <div
-                                        className={`max-w-[85%] ${message.role === 'user'
-                                            ? 'bg-gradient-to-r from-brigade-dark to-brigade-accent text-white rounded-2xl rounded-tr-md px-5 py-3'
-                                            : 'w-full'
-                                            }`}
-                                    >
-                                        {message.role === 'user' ? (
-                                            <p className="text-sm">{message.content}</p>
-                                        ) : message.isLoading ? (
-                                            <div className="flex items-center gap-3 p-4">
-                                                <Loader2 className="w-5 h-5 animate-spin text-brigade-gold" />
-                                                <span className="text-gray-500">Analyzing your query...</span>
-                                            </div>
-                                        ) : (
-                                            <ResponseCard
-                                                content={message.content}
-                                                confidence={message.confidence}
-                                                sources={message.sources}
-                                                isRefusal={message.isRefusal}
-                                                refusalReason={message.refusalReason}
-                                            />
-                                        )}
+                        <h1 className="text-3xl font-bold text-gray-900">How can I help you today?</h1>
+                    </div>
+                ) : (
+                    <div className="space-y-6 py-6">
+                        {messages.map((message) => (
+                            <div
+                                key={message.id}
+                                className={`flex gap-4 ${message.role === 'user' ? 'justify-end' : ''} animate-slide-up`}
+                            >
+                                {/* Bot Icon */}
+                                {message.role === 'assistant' && (
+                                    <div className="w-8 h-8 flex-shrink-0 rounded-full bg-red-100 flex items-center justify-center mt-1">
+                                        <Sparkles className="w-4 h-4 text-pinclick-red" />
                                     </div>
+                                )}
+
+                                <div
+                                    className={`max-w-[85%] ${message.role === 'user'
+                                        ? 'bg-gray-100 text-gray-900 rounded-2xl px-5 py-3'
+                                        : 'w-full'
+                                        }`}
+                                >
+                                    {message.role === 'user' ? (
+                                        <p className="text-sm leading-relaxed">{message.content}</p>
+                                    ) : message.isLoading ? (
+                                        <div className="flex items-center gap-2 text-gray-400">
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            <span className="text-sm">Thinking...</span>
+                                        </div>
+                                    ) : (
+                                        <ResponseCard
+                                            content={message.content}
+                                            confidence={message.confidence}
+                                            sources={message.sources}
+                                            isRefusal={message.isRefusal}
+                                            refusalReason={message.refusalReason}
+                                        />
+                                    )}
                                 </div>
-                            ))}
-                            <div ref={messagesEndRef} />
-                        </>
-                    )}
-                </div>
+                            </div>
+                        ))}
+                        <div ref={messagesEndRef} />
+                    </div>
+                )}
             </div>
 
-            {/* Error Message */}
-            {error && (
-                <div className="px-6">
-                    <div className="max-w-4xl mx-auto">
-                        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-                            {error}
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Input Area */}
-            <div className="flex-shrink-0 px-6 py-4 bg-white border-t border-gray-200">
-                <form onSubmit={handleSubmit} className="max-w-4xl mx-auto">
-                    <div className="relative flex items-end gap-3">
-                        <div className="flex-1 relative">
-                            <textarea
-                                ref={inputRef}
-                                value={input}
-                                onChange={(e) => setInput(e.target.value)}
-                                onKeyDown={handleKeyDown}
-                                placeholder="Ask about Brigade properties..."
-                                disabled={isLoading}
-                                rows={1}
-                                className="w-full resize-none rounded-xl border border-gray-300 px-4 py-3 pr-12 text-sm focus:outline-none focus:ring-2 focus:ring-brigade-gold focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400"
-                                style={{ minHeight: '48px', maxHeight: '120px' }}
-                            />
-                        </div>
+            {/* Floating Input Area */}
+            <div className="fixed bottom-0 left-0 w-full bg-gradient-to-t from-white via-white to-transparent pb-6 pt-10 px-4">
+                <div className="max-w-3xl mx-auto relative shadow-2xl rounded-3xl bg-white border border-gray-100">
+                    <form onSubmit={handleSubmit} className="relative flex items-end p-2">
+                        <textarea
+                            ref={inputRef}
+                            value={input}
+                            onChange={(e) => setInput(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            placeholder="Message Pinclick Genie..."
+                            className="w-full resize-none bg-transparent border-0 focus:ring-0 text-gray-800 placeholder-gray-400 py-3 pl-4 pr-12 max-h-48"
+                            rows={1}
+                            style={{ minHeight: '52px' }}
+                        />
                         <button
                             type="submit"
                             disabled={!input.trim() || isLoading}
-                            className="flex-shrink-0 w-12 h-12 rounded-xl bg-gradient-to-r from-brigade-gold to-yellow-600 text-white flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg transition-all"
+                            className={`absolute right-3 bottom-3 p-2 rounded-xl transition-all ${input.trim()
+                                ? 'bg-pinclick-red text-white hover:bg-red-600 shadow-md'
+                                : 'bg-gray-100 text-gray-400'
+                                }`}
                         >
-                            {isLoading ? (
-                                <Loader2 className="w-5 h-5 animate-spin" />
-                            ) : (
-                                <Send className="w-5 h-5" />
-                            )}
+                            {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                         </button>
+                    </form>
+                </div>
+                {error && (
+                    <div className="text-center mt-2 flex items-center justify-center gap-2 text-red-500 text-xs">
+                        <AlertCircle className="w-3 h-3" />
+                        {error}
                     </div>
-                    <p className="text-xs text-gray-400 mt-2 text-center">
-                        Responses are grounded in official Brigade documents only. No external information used.
-                    </p>
-                </form>
+                )}
+                <p className="text-center text-[10px] text-gray-400 mt-2">
+                    Pinclick Genie can make mistakes. Consider checking important information.
+                </p>
             </div>
         </div>
     );

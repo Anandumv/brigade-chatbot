@@ -10,6 +10,9 @@ psycopg2-binary==2.9.9
 # OpenAI
 openai==1.10.0
 
+# Web Search
+tavily-python==0.3.3
+
 # Document Processing
 PyPDF2==3.0.1
 pdfplumber==0.10.4

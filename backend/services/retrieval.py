@@ -20,6 +20,22 @@ class RetrievalService:
         self.similarity_threshold = settings.similarity_threshold
         self.top_k = settings.top_k_results
 
+        # Sales query expansion mappings
+        self.sales_expansions = {
+            "1bhk": "1 bedroom 1bhk apartment flat studio",
+            "2bhk": "2 bedroom 2bhk apartment flat",
+            "3bhk": "3 bedroom 3bhk apartment flat",
+            "4bhk": "4 bedroom 4bhk apartment flat",
+            "5bhk": "5 bedroom 5bhk apartment flat penthouse",
+            "sqft": "square feet area size carpet built-up super",
+            "amenities": "amenities facilities features clubhouse gym pool",
+            "price": "price cost pricing rate per sqft total",
+            "location": "location connectivity address near distance",
+            "ready": "ready possession move-in completion delivery",
+            "under construction": "under construction ongoing project timeline",
+            "rera": "rera registration approval license",
+        }
+
     def generate_query_embedding(self, query: str) -> List[float]:
         """
         Generate embedding for user query.
@@ -40,6 +56,28 @@ class RetrievalService:
         except Exception as e:
             logger.error(f"Error generating query embedding: {e}")
             raise
+
+    def expand_sales_query(self, query: str) -> str:
+        """
+        Expand common sales abbreviations and terms for better matching.
+
+        Args:
+            query: Original user query
+
+        Returns:
+            Expanded query with additional keywords
+        """
+        expanded_query = query
+        query_lower = query.lower()
+
+        # Check for each expansion term and add synonyms
+        for term, expansion in self.sales_expansions.items():
+            if term in query_lower:
+                # Add expansion to query without replacing original term
+                expanded_query = f"{expanded_query} {expansion}"
+                logger.debug(f"Expanded '{term}' with: {expansion}")
+
+        return expanded_query
 
     async def retrieve_similar_chunks(
         self,
@@ -62,8 +100,14 @@ class RetrievalService:
         Returns:
             List of similar chunks with metadata and similarity scores
         """
-        # Generate query embedding
-        query_embedding = self.generate_query_embedding(query)
+        # Expand query for better matching
+        expanded_query = self.expand_sales_query(query)
+        logger.info(f"Original query: {query}")
+        if expanded_query != query:
+            logger.info(f"Expanded query: {expanded_query}")
+
+        # Generate query embedding from expanded query
+        query_embedding = self.generate_query_embedding(expanded_query)
 
         # Use provided or default parameters
         threshold = similarity_threshold or self.similarity_threshold

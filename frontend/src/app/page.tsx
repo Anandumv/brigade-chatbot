@@ -43,8 +43,8 @@ export default function Home() {
         return (
             <div className="flex items-center justify-center min-h-screen bg-gradient-to-b from-gray-50 to-white">
                 <div className="text-center">
-                    <Loader2 className="w-12 h-12 animate-spin text-brigade-gold mx-auto mb-4" />
-                    <p className="text-gray-600">Loading Brigade Sales Assistant...</p>
+                    <Loader2 className="w-12 h-12 animate-spin text-pinclick-red mx-auto mb-4" />
+                    <p className="text-gray-600">Loading Pinclick Genie...</p>
                 </div>
             </div>
         );

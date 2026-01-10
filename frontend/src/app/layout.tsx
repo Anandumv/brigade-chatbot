@@ -5,13 +5,13 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-    title: 'Brigade Sales Assistant | AI-Powered Property Information',
-    description: 'Get accurate, source-backed information about Brigade Group properties. Ask about amenities, pricing, configurations, and more.',
-    keywords: ['Brigade Group', 'real estate', 'property', 'sales assistant', 'AI chatbot', 'Bangalore', 'Brigade Citrine', 'Brigade Avalon'],
-    authors: [{ name: 'Brigade Group' }],
+    title: 'Pinclick Genie | Your Real Estate Assistant',
+    description: 'Pinclick Genie - Expert AI assistant for property information.',
+    keywords: ['Pinclick', 'real estate', 'property', 'genie', 'AI chatbot', 'Bangalore'],
+    authors: [{ name: 'Pinclick' }],
     openGraph: {
-        title: 'Brigade Sales Assistant',
-        description: 'AI-powered property information for Brigade Group projects',
+        title: 'Pinclick Genie',
+        description: 'Your expert AI real estate assistant',
         type: 'website',
     },
 };
