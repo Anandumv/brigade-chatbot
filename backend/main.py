@@ -18,6 +18,7 @@ from services.refusal_handler import refusal_handler
 from services.answer_generator import answer_generator
 from services.multi_project_retrieval import multi_project_retrieval
 from services.persona_pitch import persona_pitch_generator
+from services.web_search import web_search_service
 from database.supabase_client import supabase_client
 
 # Configure logging
@@ -178,13 +179,46 @@ async def chat_query(request: ChatQueryRequest):
         confidence = confidence_scorer.score_confidence(chunks)
         logger.info(f"Confidence: {confidence}")
 
-        # Step 5: Refusal logic
+        # Step 5: Refusal logic - but with web search fallback
         should_refuse, refusal_reason = refusal_handler.should_refuse(
             intent=intent,
             chunks=chunks,
             confidence=confidence
         )
 
+        # If we should refuse due to no relevant info, try web search fallback
+        if should_refuse and refusal_reason == "no_relevant_info":
+            logger.info("No internal docs found, trying web search fallback")
+            web_result = web_search_service.search_and_answer(
+                query=request.query,
+                topic_hint="Brigade Group real estate"
+            )
+            
+            if web_result.get("answer") and web_result.get("is_external", False):
+                response_time_ms = int((time.time() - start_time) * 1000)
+                
+                # Log as answered with external source
+                if request.user_id:
+                    await supabase_client.log_query(
+                        user_id=request.user_id,
+                        query=request.query,
+                        intent=intent,
+                        answered=True,
+                        confidence_score="Low (External)",
+                        response_time_ms=response_time_ms,
+                        project_id=request.project_id
+                    )
+                
+                return ChatQueryResponse(
+                    answer=web_result["answer"],
+                    sources=[SourceInfo(**s) for s in web_result.get("sources", [])],
+                    confidence=web_result.get("confidence", "Low"),
+                    intent=intent,
+                    refusal_reason=None,
+                    response_time_ms=response_time_ms
+                )
+
+        # Original refusal logic for other reasons
         if should_refuse:
             refusal_response = refusal_handler.get_refusal_response(
                 refusal_reason=refusal_reason,
