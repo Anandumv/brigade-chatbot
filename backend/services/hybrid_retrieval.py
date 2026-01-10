@@ -86,13 +86,8 @@ class HybridRetrievalService:
         matching_units = await self._sql_filter_units(filters)
 
         if not matching_units:
-            logger.info("No units match structured filters")
-            return {
-                "projects": [],
-                "total_matching_projects": 0,
-                "filters_used": filters.dict(exclude_none=True),
-                "search_method": "hybrid"
-            }
+            logger.info("No units match SQL filters, falling back to vector search")
+            return await self._vector_only_search(query)
 
         logger.info(f"SQL filter found {len(matching_units)} matching units")
 
@@ -225,7 +220,7 @@ class HybridRetrievalService:
                 query = query.gte("base_price_inr", filters.min_price_inr)
 
             if filters.city:
-                query = query.ilike("city", filters.city)
+                query = query.ilike("city", f"%{filters.city}%")
 
             if filters.locality:
                 query = query.ilike("locality", filters.locality)
