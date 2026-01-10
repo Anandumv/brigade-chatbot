@@ -100,7 +100,7 @@ export function ResponseCard({
                                 >
                                     <div className="flex items-start justify-between">
                                         <div className="flex items-center gap-2">
-                                            <FileText className="w-4 h-4 text-brigade-gold" />
+                                            <FileText className="w-4 h-4 text-red-500" />
                                             <span className="font-medium text-sm text-gray-800">
                                                 {source.document_name}
                                             </span>

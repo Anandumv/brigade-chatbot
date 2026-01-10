@@ -19,6 +19,8 @@ from services.answer_generator import answer_generator
 from services.multi_project_retrieval import multi_project_retrieval
 from services.persona_pitch import persona_pitch_generator
 from services.web_search import web_search_service
+from services.hybrid_retrieval import hybrid_retrieval
+from services.filter_extractor import filter_extractor
 from database.supabase_client import supabase_client
 
 # Configure logging
@@ -460,6 +462,138 @@ async def compare_projects(
 
     except Exception as e:
         logger.error(f"Error in comparison: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/chat/filtered-search")
+async def filtered_search(request: ChatQueryRequest):
+    """
+    Natural language property search across all projects with structured filtering.
+
+    Handles queries like:
+    - "2bhk under 3cr in Bangalore"
+    - "3bhk ready to move whitefield under 5cr"
+    - "affordable 2bhk possession 2027"
+    - "show me brigade 3bhk options"
+
+    This endpoint:
+    1. Extracts structured filters from natural language
+    2. Performs SQL filtering to narrow down projects
+    3. Executes vector search within filtered subset
+    4. Groups results by project with expandable units
+    5. Falls back to web search if no matches found
+
+    Args:
+        request: Chat query request with natural language query
+
+    Returns:
+        Multiple matching projects with unit details
+    """
+    start_time = time.time()
+
+    try:
+        logger.info(f"Filtered search query: {request.query}")
+
+        # Step 1: Extract filters from query
+        filters = filter_extractor.extract_filters(request.query)
+        logger.info(f"Extracted filters: {filters.dict(exclude_none=True)}")
+
+        # Step 2: Hybrid retrieval (SQL + vector search)
+        search_results = await hybrid_retrieval.search_with_filters(
+            query=request.query,
+            filters=filters
+        )
+
+        # Step 3: Check if any results found
+        if not search_results["projects"]:
+            # Fallback to web search
+            logger.info("No matching projects found, falling back to web search")
+            web_result = web_search_service.search_and_answer(
+                query=request.query,
+                topic_hint="Real estate properties Bangalore"
+            )
+
+            response_time_ms = int((time.time() - start_time) * 1000)
+
+            # Log query
+            if request.user_id:
+                await supabase_client.log_query(
+                    user_id=request.user_id,
+                    query=request.query,
+                    intent="structured_search",
+                    answered=True,
+                    confidence_score="Low (External)",
+                    response_time_ms=response_time_ms
+                )
+
+            return {
+                "query": request.query,
+                "filters": filters.dict(exclude_none=True),
+                "matching_projects": 0,
+                "projects": [],
+                "web_fallback": {
+                    "answer": web_result.get("answer"),
+                    "sources": web_result.get("sources", [])
+                },
+                "search_method": "web_fallback",
+                "response_time_ms": response_time_ms
+            }
+
+        # Step 4: Format projects for response
+        formatted_projects = []
+        for project in search_results["projects"]:
+            formatted_projects.append({
+                "project_id": project["project_id"],
+                "project_name": project["project_name"],
+                "developer_name": project.get("developer_name"),
+                "location": f"{project.get('locality', '')}, {project.get('city', '')}".strip(", "),
+                "full_address": project.get("location"),
+                "rera_number": project.get("rera_number"),
+                "status": project.get("status"),
+                "matching_unit_count": project["unit_count"],
+                "price_range": {
+                    "min_inr": project["price_range"]["min"],
+                    "max_inr": project["price_range"]["max"],
+                    "min_display": project["price_range"]["min_display"],
+                    "max_display": project["price_range"]["max_display"]
+                },
+                "sample_units": project["matching_units"][:3],  # Show first 3
+                "all_units": project["matching_units"] if project["unit_count"] <= 10 else None,
+                "can_expand": project.get("can_expand", False),
+                "relevant_info": [
+                    {
+                        "content": chunk.get("content", "")[:200] + "...",
+                        "section": chunk.get("section", ""),
+                        "similarity": chunk.get("similarity", 0)
+                    }
+                    for chunk in project.get("relevant_chunks", [])[:2]
+                ]
+            })
+
+        response_time_ms = int((time.time() - start_time) * 1000)
+
+        # Log query
+        if request.user_id:
+            await supabase_client.log_query(
+                user_id=request.user_id,
+                query=request.query,
+                intent="structured_search",
+                answered=True,
+                confidence_score="High" if search_results["search_method"] == "hybrid" else "Medium",
+                response_time_ms=response_time_ms
+            )
+
+        return {
+            "query": request.query,
+            "filters": search_results["filters_used"],
+            "matching_projects": search_results["total_matching_projects"],
+            "projects": formatted_projects,
+            "search_method": search_results["search_method"],
+            "response_time_ms": response_time_ms
+        }
+
+    except Exception as e:
+        logger.error(f"Error in filtered search: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
