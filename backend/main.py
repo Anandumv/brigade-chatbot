@@ -142,29 +142,37 @@ async def chat_query(request: ChatQueryRequest):
         intent = intent_classifier.classify_intent(request.query)
         logger.info(f"Classified intent: {intent}")
 
-        # Step 2: Early refusal for unsupported intents
+        # Step 2: For unsupported intents, try web search fallback instead of refusing
         if intent == "unsupported":
-            refusal_response = refusal_handler.get_refusal_response(
-                refusal_reason="unsupported_intent",
-                query=request.query
+            logger.info("Unsupported intent, trying web search fallback")
+            web_result = web_search_service.search_and_answer(
+                query=request.query,
+                topic_hint="Brigade Group real estate Bangalore"
             )
-
-            # Log query
-            if request.user_id:
-                await supabase_client.log_query(
-                    user_id=request.user_id,
-                    query=request.query,
+            
+            if web_result.get("answer") and web_result.get("is_external", False):
+                response_time_ms = int((time.time() - start_time) * 1000)
+                
+                # Log as answered with external source
+                if request.user_id:
+                    await supabase_client.log_query(
+                        user_id=request.user_id,
+                        query=request.query,
+                        intent=intent,
+                        answered=True,
+                        confidence_score="Low (External)",
+                        response_time_ms=response_time_ms,
+                        project_id=request.project_id
+                    )
+                
+                return ChatQueryResponse(
+                    answer=web_result["answer"],
+                    sources=[SourceInfo(**s) for s in web_result.get("sources", [])],
+                    confidence=web_result.get("confidence", "Low"),
                     intent=intent,
-                    answered=False,
-                    refusal_reason="unsupported_intent",
-                    response_time_ms=int((time.time() - start_time) * 1000),
-                    project_id=request.project_id
+                    refusal_reason=None,
+                    response_time_ms=response_time_ms
                 )
-
-            return ChatQueryResponse(
-                **refusal_response,
-                response_time_ms=int((time.time() - start_time) * 1000)
-            )
 
         # Step 3: Retrieve similar document chunks
         chunks = await retrieval_service.retrieve_similar_chunks(
