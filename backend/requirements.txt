@@ -1,0 +1,46 @@
+# Web Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+
+# Database
+supabase==2.3.0
+psycopg2-binary==2.9.9
+
+# OpenAI
+openai==1.10.0
+
+# Document Processing
+PyPDF2==3.0.1
+pdfplumber==0.10.4
+openpyxl==3.1.2
+pandas==2.1.4
+
+# Vector Operations
+numpy==1.26.3
+
+# Environment Variables
+python-dotenv==1.0.0
+
+# HTTP Client
+httpx==0.26.0
+
+# Data Validation
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# Utilities
+tenacity==8.2.3  # Retry logic
+python-json-logger==2.0.7
+
+# Testing
+pytest==7.4.4
+pytest-asyncio==0.23.3
+pytest-cov==4.1.0
+
+# Type Checking
+mypy==1.8.0
+
+# Code Quality
+black==24.1.0
+ruff==0.1.13

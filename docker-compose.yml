@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: chatbot-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - SIMILARITY_THRESHOLD=${SIMILARITY_THRESHOLD:-0.75}
+      - TOP_K_RESULTS=${TOP_K_RESULTS:-5}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
+      - GPT_MODEL=${GPT_MODEL:-gpt-4-turbo-preview}
+      - TEMPERATURE=${TEMPERATURE:-0.1}
+    volumes:
+      - ./backend:/app
+      - ./Brigade Citrine E_Brochure 01-1.pdf:/data/Brigade Citrine E_Brochure 01-1.pdf:ro
+      - ./E Brochure - Avalon.pdf:/data/E Brochure - Avalon.pdf:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Future: Add frontend service in Phase 2
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   container_name: chatbot-frontend
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - REACT_APP_API_URL=http://localhost:8000
+  #   depends_on:
+  #     - backend
+  #   restart: unless-stopped

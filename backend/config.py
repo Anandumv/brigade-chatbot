@@ -1,0 +1,92 @@
+"""
+Configuration management for the Real Estate Sales Intelligence Chatbot.
+Loads environment variables and provides typed configuration objects.
+"""
+
+from pydantic_settings import BaseSettings
+from typing import Optional
+
+
+class Settings(BaseSettings):
+    """Application settings loaded from environment variables."""
+
+    # OpenAI Configuration
+    openai_api_key: str
+
+    # Supabase Configuration
+    supabase_url: str
+    supabase_key: str
+    supabase_service_key: Optional[str] = None
+
+    # Application Configuration
+    environment: str = "development"
+    api_host: str = "0.0.0.0"
+    api_port: int = 8000
+
+    # Vector Search Configuration
+    similarity_threshold: float = 0.75
+    top_k_results: int = 5
+    embedding_model: str = "text-embedding-3-small"
+    embedding_dimensions: int = 1536
+
+    # LLM Configuration
+    gpt_model: str = "gpt-4-turbo-preview"
+    max_tokens: int = 1500
+    temperature: float = 0.1  # Low temperature for factual responses
+
+    # Response Time Configuration
+    target_response_time: int = 3000  # milliseconds
+
+    class Config:
+        env_file = ".env"
+        case_sensitive = False
+
+
+# Global settings instance
+settings = Settings()
+
+
+# Confidence thresholds
+CONFIDENCE_THRESHOLDS = {
+    "high": 0.85,      # Top chunk similarity >= 0.85 AND multiple chunks agree
+    "medium": 0.75,    # Similarity 0.75-0.84 OR synthesis from 2+ chunks
+    "low": 0.60        # Below 0.75 = refusal
+}
+
+# Intent classification examples for few-shot learning
+INTENT_EXAMPLES = {
+    "project_fact": [
+        "What is the RERA number for Brigade Citrine?",
+        "How many units are in the project?",
+        "What is the location of the project?",
+        "What are the unit sizes available?",
+    ],
+    "sales_pitch": [
+        "Why should I buy here?",
+        "What makes this project unique?",
+        "Tell me about the amenities",
+        "What are the sustainability features?",
+    ],
+    "comparison": [
+        "Compare Brigade Citrine and Avalon",
+        "Which project has better amenities?",
+        "Difference between the two projects",
+    ],
+    "unsupported": [
+        "What will be the property value in 5 years?",
+        "Is this a good investment?",
+        "Will prices go up?",
+        "What ROI can I expect?",
+        "Give me legal advice",
+        "Should I take a loan?",
+    ]
+}
+
+# Refusal messages
+REFUSAL_MESSAGES = {
+    "no_relevant_info": "This information is not available in the project documents or approved sources.",
+    "future_prediction": "I cannot provide predictions about future property values, ROI, or market trends.",
+    "legal_advice": "I cannot provide legal or financial advice. Please consult with appropriate professionals.",
+    "conflicting_info": "I found conflicting information in the sources. Please contact our sales team for clarification.",
+    "insufficient_confidence": "I cannot provide a confident answer based on the available information.",
+}
