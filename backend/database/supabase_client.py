@@ -101,6 +101,74 @@ class SupabaseClient:
             logger.error(f"Error searching similar chunks: {e}")
             return []
 
+    async def search_chunks_by_text(
+        self,
+        query: str,
+        limit: int = 5,
+        filter_project_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Fallback text search for document chunks.
+
+        Args:
+            query: Search query text
+            limit: Maximum number of results
+            filter_project_id: Optional project ID filter
+
+        Returns:
+            List of matching chunks with metadata
+        """
+        try:
+            # Extract keywords from query
+            keywords = [w for w in query.lower().split() if len(w) > 3]
+            
+            # Build query
+            q = self.client.table("document_chunks").select(
+                "id, content, section, project_id, metadata, confidence_weight"
+            )
+            
+            if filter_project_id:
+                q = q.eq("project_id", filter_project_id)
+            
+            # Search for any keyword match
+            if keywords:
+                # Use first keyword for ilike search
+                q = q.ilike("content", f"%{keywords[0]}%")
+            
+            response = q.limit(limit).execute()
+            
+            if not response.data:
+                return []
+            
+            # Get project and document info for each chunk
+            results = []
+            for chunk in response.data:
+                # Get project name
+                project_resp = self.client.table("projects").select("name").eq("id", chunk["project_id"]).execute()
+                project_name = project_resp.data[0]["name"] if project_resp.data else "Unknown"
+                
+                # Get document title
+                doc_resp = self.client.table("documents").select("title").execute()
+                doc_title = doc_resp.data[0]["title"] if doc_resp.data else "Unknown"
+                
+                results.append({
+                    "chunk_id": chunk["id"],
+                    "content": chunk["content"],
+                    "section": chunk.get("section", ""),
+                    "similarity": 0.8,  # Default similarity for text matches
+                    "project_name": project_name,
+                    "document_title": doc_title,
+                    "metadata": chunk.get("metadata", {}),
+                    "confidence_weight": chunk.get("confidence_weight", 1.0)
+                })
+            
+            logger.info(f"Text search found {len(results)} chunks for query: {query}")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Error in text search: {e}")
+            return []
+
     async def log_query(
         self,
         user_id: str,

@@ -69,7 +69,7 @@ class RetrievalService:
         threshold = similarity_threshold or self.similarity_threshold
         limit = top_k or self.top_k
 
-        # Retrieve similar chunks from Supabase
+        # Try vector similarity search first
         chunks = await supabase_client.search_similar_chunks(
             query_embedding=query_embedding,
             match_threshold=threshold,
@@ -77,6 +77,15 @@ class RetrievalService:
             filter_project_id=project_id,
             filter_source_type=source_type
         )
+
+        # Fallback to text search if vector search returns no results
+        if not chunks:
+            logger.warning("Vector search returned no results, falling back to text search")
+            chunks = await supabase_client.search_chunks_by_text(
+                query=query,
+                limit=limit,
+                filter_project_id=project_id
+            )
 
         logger.info(f"Retrieved {len(chunks)} chunks with similarity >= {threshold}")
 
