@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     api_port: int = 8000
 
     # Vector Search Configuration
-    similarity_threshold: float = 0.75
+    similarity_threshold: float = 0.5
     top_k_results: int = 5
     embedding_model: str = "text-embedding-3-small"
     embedding_dimensions: int = 1536
@@ -52,9 +52,9 @@ settings = Settings()
 
 # Confidence thresholds
 CONFIDENCE_THRESHOLDS = {
-    "high": 0.85,      # Top chunk similarity >= 0.85 AND multiple chunks agree
-    "medium": 0.75,    # Similarity 0.75-0.84 OR synthesis from 2+ chunks
-    "low": 0.60        # Below 0.75 = refusal
+    "high": 0.65,      # Top chunk similarity >= 0.65 AND multiple chunks agree
+    "medium": 0.50,    # Similarity 0.50-0.64 OR synthesis from 2+ chunks
+    "low": 0.35        # Below 0.50 = refusal
 }
 
 # Intent classification examples for few-shot learning
