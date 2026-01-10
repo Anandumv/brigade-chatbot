@@ -1,0 +1,15 @@
+{
+    "version": 2,
+    "rewrites": [
+        {
+            "source": "/path/to/backend/:path*",
+            "destination": "https://brigade-chatbot.onrender.com/api/:path*"
+        }
+    ],
+    "builds": [
+        {
+            "src": "frontend/package.json",
+            "use": "@vercel/next"
+        }
+    ]
+}
