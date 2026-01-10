@@ -23,7 +23,7 @@ numpy==1.26.3
 python-dotenv==1.0.0
 
 # HTTP Client
-httpx==0.26.0
+httpx==0.24.1
 
 # Data Validation
 pydantic==2.5.3
