@@ -4,8 +4,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Message, ProjectInfo, PersonaInfo, ChatQueryResponse } from '@/types';
 import { apiService } from '@/services/api';
 import { ResponseCard } from './ResponseCard';
-import { ProjectSelector } from './ProjectSelector';
-import { PersonaSelector } from './PersonaSelector';
 import { Send, Loader2, Sparkles, MessageSquare, Bot } from 'lucide-react';
 
 interface ChatInterfaceProps {
@@ -17,8 +15,6 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const [selectedProject, setSelectedProject] = useState<ProjectInfo | null>(null);
-    const [selectedPersona, setSelectedPersona] = useState<PersonaInfo | null>(null);
     const [error, setError] = useState<string | null>(null);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -63,8 +59,8 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
         try {
             const response: ChatQueryResponse = await apiService.sendQuery({
                 query: userMessage.content,
-                project_id: selectedProject?.id,
-                persona: selectedPersona?.id,
+                project_id: undefined, // Always search all projects
+                persona: undefined,
             });
 
             const assistantMessage: Message = {
@@ -107,9 +103,9 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
 
     return (
         <div className="flex flex-col h-full bg-gradient-to-b from-gray-50 to-white">
-            {/* Header with Selectors */}
+            {/* Header - Clean and simple */}
             <div className="flex-shrink-0 px-6 py-4 bg-white border-b border-gray-200 shadow-sm">
-                <div className="flex items-center justify-between max-w-4xl mx-auto">
+                <div className="flex items-center justify-center max-w-4xl mx-auto">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brigade-gold to-yellow-600 flex items-center justify-center shadow-lg">
                             <Sparkles className="w-5 h-5 text-white" />
@@ -118,21 +114,6 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                             <h1 className="text-lg font-bold text-brigade-dark">Brigade Sales Assistant</h1>
                             <p className="text-xs text-gray-500">AI-powered property information</p>
                         </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                        <ProjectSelector
-                            projects={projects}
-                            selectedProject={selectedProject}
-                            onSelectProject={setSelectedProject}
-                            disabled={isLoading}
-                        />
-                        <PersonaSelector
-                            personas={personas}
-                            selectedPersona={selectedPersona}
-                            onSelectPersona={setSelectedPersona}
-                            disabled={isLoading}
-                        />
                     </div>
                 </div>
             </div>
@@ -175,8 +156,8 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                                 >
                                     <div
                                         className={`max-w-[85%] ${message.role === 'user'
-                                                ? 'bg-gradient-to-r from-brigade-dark to-brigade-accent text-white rounded-2xl rounded-tr-md px-5 py-3'
-                                                : 'w-full'
+                                            ? 'bg-gradient-to-r from-brigade-dark to-brigade-accent text-white rounded-2xl rounded-tr-md px-5 py-3'
+                                            : 'w-full'
                                             }`}
                                     >
                                         {message.role === 'user' ? (

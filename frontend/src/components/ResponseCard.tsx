@@ -4,6 +4,8 @@ import React from 'react';
 import { ConfidenceLevel, SourceInfo } from '@/types';
 import { CheckCircle, AlertCircle, XCircle, FileText, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
 
+import ReactMarkdown from 'react-markdown';
+
 interface ResponseCardProps {
     content: string;
     confidence?: ConfidenceLevel;
@@ -58,8 +60,8 @@ export function ResponseCard({
                     </div>
                 )}
 
-                <div className="prose prose-sm max-w-none text-gray-800 whitespace-pre-wrap">
-                    {content}
+                <div className="prose prose-sm max-w-none text-gray-800">
+                    <ReactMarkdown>{content}</ReactMarkdown>
                 </div>
 
                 {/* Confidence Badge */}

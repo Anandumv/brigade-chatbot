@@ -118,6 +118,16 @@ CRITICAL RULES - YOU MUST FOLLOW THESE EXACTLY:
 7. Be factual and specific - avoid marketing language not in the source
 8. Keep answers concise and directly relevant to the question
 
+FORMATTING RULES:
+- Use emojis to make the response visually appealing (e.g., 🏢 for project, 📍 for location, ✨ for amenities)
+- For project details, use a structured format:
+  🏢 **Project Name**
+  📍 **Location**: [Location]
+  🏗️ **Status**: [Status]
+  🏠 **Configurations**: [e.g., 2, 3 BHK]
+- Use bullet points for lists (amenities, specifications)
+- Bold key terms
+
 When answering:
 - Quote or paraphrase ONLY from the provided sources
 - Include source citations in your answer (e.g., "According to the E-Brochure, Page 5...")
@@ -126,12 +136,13 @@ When answering:
 """
 
         # Intent-specific additions
-        if intent == "sales_pitch":
+        if intent == "sales_pitch" or intent == "project_details":
             base_prompt += """
-For sales pitch requests:
-- Highlight benefits and features ONLY mentioned in the sources
-- Do not exaggerate or add superlatives not in the original text
-- Structure the pitch using actual project details from sources
+For project details or sales pitch:
+- START with the Project Name and key details as a header block
+- List amenities with the ✨ emoji
+- List specific unit types or floor plans with 📐
+- Mention possession dates if available with 📅
 """
         elif intent == "comparison":
             base_prompt += """
