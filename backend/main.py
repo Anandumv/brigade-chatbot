@@ -21,6 +21,8 @@ from services.persona_pitch import persona_pitch_generator
 from services.web_search import web_search_service
 from services.hybrid_retrieval import hybrid_retrieval
 from services.filter_extractor import filter_extractor
+from services.response_formatter import response_formatter
+from services.query_preprocessor import query_preprocessor
 from database.supabase_client import supabase_client
 
 # Configure logging
@@ -120,19 +122,6 @@ async def health_check():
 @app.post("/api/chat/query", response_model=ChatQueryResponse)
 async def chat_query(request: ChatQueryRequest):
     """
-    Main chat endpoint - processes user query and returns grounded answer.
-
-    This endpoint implements the core RAG pipeline with anti-hallucination safeguards:
-    1. Intent classification
-    2. Vector similarity retrieval
-    3. Confidence scoring
-    4. Refusal logic
-    5. Answer generation with strict grounding
-
-    Args:
-        request: Chat query request with query text and optional filters
-
-    Returns:
         ChatQueryResponse with answer, sources, and metadata
     """
     start_time = time.time()
@@ -140,11 +129,92 @@ async def chat_query(request: ChatQueryRequest):
     try:
         logger.info(f"Processing query: {request.query[:100]}...")
 
+        # Step 0: Preprocess Query
+        original_query = request.query
+        normalized_query = query_preprocessor.preprocess(request.query)
+        request.query = normalized_query
+        logger.info(f"Normalized query: '{original_query}' -> '{normalized_query}'")
+
         # Step 1: Intent Classification
         intent = intent_classifier.classify_intent(request.query)
         logger.info(f"Classified intent: {intent}")
 
-        # Step 2: For unsupported intents, try web search fallback instead of refusing
+        # Step 2: Route property_search to hybrid filtering (NEW FLOW)
+        if intent == "property_search":
+            logger.info("Routing to property search with hybrid filtering")
+
+            # Extract filters from query
+            filters = filter_extractor.extract_filters(request.query)
+            logger.info(f"Extracted filters: {filters.dict(exclude_none=True)}")
+
+            # Hybrid retrieval (SQL + vector search)
+            search_results = await hybrid_retrieval.search_with_filters(
+                query=request.query,
+                filters=filters
+            )
+
+            if not search_results["projects"]:
+                # No matches - fall back to web search
+                logger.info("No matching properties found, falling back to web search")
+                web_result = web_search_service.search_and_answer(
+                    query=request.query,
+                    topic_hint="Real estate properties Bangalore"
+                )
+
+                response_time_ms = int((time.time() - start_time) * 1000)
+
+                if request.user_id:
+                    await supabase_client.log_query(
+                        user_id=request.user_id,
+                        query=request.query,
+                        intent=intent,
+                        answered=True,
+                        confidence_score="Low (External)",
+                        response_time_ms=response_time_ms,
+                        project_id=request.project_id
+                    )
+
+                return ChatQueryResponse(
+                    answer=web_result["answer"],
+                    sources=[SourceInfo(**s) for s in web_result.get("sources", [])],
+                    confidence=web_result.get("confidence", "Low"),
+                    intent=intent,
+                    refusal_reason=None,
+                    response_time_ms=response_time_ms
+                )
+
+            # Format structured response
+            formatted = response_formatter.format_property_search_results(
+                projects=search_results["projects"],
+                query=request.query,
+                filters=filters.dict(exclude_none=True)
+            )
+
+            response_time_ms = int((time.time() - start_time) * 1000)
+
+            if request.user_id:
+                await supabase_client.log_query(
+                    user_id=request.user_id,
+                    query=request.query,
+                    intent=intent,
+                    answered=True,
+                    confidence_score=formatted.confidence,
+                    response_time_ms=response_time_ms,
+                    project_id=request.project_id
+                )
+
+            logger.info(f"Property search completed in {response_time_ms}ms with {len(search_results['projects'])} matches")
+
+            return ChatQueryResponse(
+                answer=formatted.answer,
+                sources=[],  # Property searches don't use chunk sources
+                confidence=formatted.confidence,
+                intent=intent,
+                refusal_reason=None,
+                response_time_ms=response_time_ms
+            )
+
+        # Step 3: For unsupported intents, try web search fallback instead of refusing
         if intent == "unsupported":
             logger.info("Unsupported intent, trying web search fallback")
             web_result = web_search_service.search_and_answer(

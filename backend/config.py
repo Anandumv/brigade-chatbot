@@ -59,17 +59,30 @@ CONFIDENCE_THRESHOLDS = {
 
 # Intent classification examples for few-shot learning
 INTENT_EXAMPLES = {
+    "property_search": [
+        "show me 2bhk options",
+        "2bhk under 3cr in Bangalore",
+        "3bhk ready to move",
+        "affordable flats possession 2027",
+        "what are the available configurations",
+        "list all 2bhk units",
+        "properties in whitefield under 5cr",
+        "budget 2bhk in East Bangalore",
+    ],
     "project_fact": [
         "What is the RERA number for Brigade Citrine?",
         "How many units are in the project?",
         "What is the location of the project?",
-        "What are the unit sizes available?",
+        "What amenities does Brigade Citrine have?",
+        "Is Brigade Citrine IGBC certified?",
+        "What is the possession date?",
     ],
     "sales_pitch": [
         "Why should I buy here?",
         "What makes this project unique?",
-        "Tell me about the amenities",
-        "What are the sustainability features?",
+        "Tell me about the sustainability features",
+        "What are the advantages of this location?",
+        "Why invest in Brigade Citrine?",
     ],
     "comparison": [
         "Compare Brigade Citrine and Avalon",
@@ -85,6 +98,14 @@ INTENT_EXAMPLES = {
         "Should I take a loan?",
     ]
 }
+
+# Property search detection keywords
+PROPERTY_SEARCH_KEYWORDS = [
+    "show me", "list", "available", "options", "configurations",
+    "bhk", "bedroom", "units", "flats", "apartments",
+    "under", "budget", "price range", "affordable",
+    "ready to move", "possession", "immediate"
+]
 
 # Refusal messages
 REFUSAL_MESSAGES = {
