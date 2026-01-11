@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     openai_base_url: Optional[str] = "https://openrouter.ai/api/v1"  # OpenRouter by default
 
     # Tavily Configuration (for web search)
-    tavily_api_key: Optional[str] = None
+    tavily_api_key: Optional[str] = "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"
 
     # Supabase Configuration
     supabase_url: str
