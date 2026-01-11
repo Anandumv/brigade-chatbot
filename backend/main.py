@@ -140,6 +140,30 @@ async def chat_query(request: ChatQueryRequest):
         intent = intent_classifier.classify_intent(request.query)
         logger.info(f"Classified intent: {intent}")
 
+        # Step 1.5: Handle greetings immediately without RAG
+        greeting_words = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'howdy', 'hola']
+        query_lower = request.query.lower().strip().rstrip('!')
+        if query_lower in greeting_words:
+            response_time_ms = int((time.time() - start_time) * 1000)
+            greeting_response = """👋 **Hello!** Welcome to Pinclick Genie!
+
+I'm your AI-powered real estate assistant. I can help you with:
+
+🏠 **Property Search** - "Show me 2BHK in Bangalore under 2 Cr"
+🏢 **Project Details** - "Tell me about Brigade Citrine amenities"
+💰 **Pricing Info** - "What's the price of 3BHK at Brigade Avalon?"
+📍 **Location Info** - "Projects near Whitefield"
+
+How can I assist you today?"""
+            return ChatQueryResponse(
+                answer=greeting_response,
+                sources=[],
+                confidence="High",
+                intent="greeting",
+                refusal_reason=None,
+                response_time_ms=response_time_ms
+            )
+
         # Step 2: Route property_search to hybrid filtering (NEW FLOW)
         if intent == "property_search":
             logger.info("Routing to property search with hybrid filtering")

@@ -31,7 +31,13 @@ class IntentClassifier:
         Returns:
             Intent category: 'property_search', 'project_fact', 'sales_pitch', 'comparison', or 'unsupported'
         """
-        query_lower = query.lower()
+        query_lower = query.lower().strip()
+
+        # Priority 0: Handle greetings - treat as project_fact so it uses RAG intro
+        greeting_words = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'howdy', 'hola']
+        if query_lower in greeting_words or query_lower.rstrip('!') in greeting_words:
+            logger.info(f"Detected greeting: {query}")
+            return "project_fact"  # Will use RAG to find intro/greeting response
 
         # Priority 1: Fast keyword-based detection for property searches
         if self._is_property_search(query_lower):
