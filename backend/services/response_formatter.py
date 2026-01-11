@@ -76,20 +76,22 @@ class ResponseFormatter:
             answer += "\n"
 
             # Location
-            if project.get('location'):
-                answer += f"📍 {project['location']}\n"
+            if project.get('location') or project.get('city'):
+                loc = project.get('location') or project.get('city')
+                answer += f"📍 {loc}\n"
 
             # Price range
             if project.get('price_range'):
                 answer += f"💰 {project['price_range']['min_display']} - {project['price_range']['max_display']}\n"
 
-            # Unit count
-            answer += f"🏗️ {project['matching_unit_count']} matching unit{'s' if project['matching_unit_count'] != 1 else ''}\n"
+            # Unit count - use unit_count field
+            unit_count = project.get('unit_count', project.get('matching_unit_count', 0))
+            answer += f"🏗️ {unit_count} matching unit{'s' if unit_count != 1 else ''}\n"
 
-            # Show sample units
-            sample_units = project.get('sample_units', [])
+            # Show sample units - use matching_units field
+            sample_units = project.get('matching_units', project.get('sample_units', []))
             for unit in sample_units[:2]:
-                unit_line = f"  • {unit['bedrooms']}BHK"
+                unit_line = f"  • {unit.get('bedrooms', '?')}BHK"
                 if unit.get('price_display'):
                     unit_line += f": {unit['price_display']}"
                 if unit.get('carpet_area_sqft'):
@@ -98,8 +100,8 @@ class ResponseFormatter:
                     unit_line += f" | {unit['possession']}"
                 answer += unit_line + "\n"
 
-            if project.get('can_expand') and project['matching_unit_count'] > 2:
-                remaining = project['matching_unit_count'] - 2
+            if project.get('can_expand') and unit_count > 2:
+                remaining = unit_count - 2
                 answer += f"  ➕ *+{remaining} more unit{'s' if remaining != 1 else ''} available*\n"
 
             # RERA number if available
