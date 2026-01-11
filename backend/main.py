@@ -36,10 +36,11 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown events."""
-    logger.info("Starting Real Estate Sales Intelligence Chatbot API...")
+    logger.info("Starting Real Estate Sales Intelligence Chatbot API v1.1...")
     logger.info(f"Environment: {settings.environment}")
     logger.info(f"Similarity threshold: {settings.similarity_threshold}")
     logger.info(f"Embedding model: {settings.embedding_model}")
+    logger.info("Vector fallback enabled for property search")
     yield
     logger.info("Shutting down API...")
 
