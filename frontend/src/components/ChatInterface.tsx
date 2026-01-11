@@ -104,13 +104,43 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
             {/* Chat Area */}
             <div className="flex-1 overflow-y-auto w-full max-w-3xl mx-auto px-4 pb-36">
                 {messages.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6 animate-fade-in px-4">
-                        <div className="w-16 h-16 rounded-full bg-gray-50 flex items-center justify-center">
-                            <Sparkles className="w-8 h-8 text-red-500" />
+                    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-8 animate-fade-in px-4">
+                        <div className="space-y-4">
+                            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-red-500 to-orange-400 flex items-center justify-center shadow-lg">
+                                <Sparkles className="w-10 h-10 text-white" />
+                            </div>
+                            <h1 className="text-3xl font-bold text-gray-800">
+                                Pinclick Genie
+                            </h1>
+                            <p className="text-gray-500 max-w-md">
+                                Your AI-powered real estate assistant. Ask me about properties, prices, amenities, and more.
+                            </p>
                         </div>
-                        <h1 className="text-2xl font-semibold text-gray-800">
-                            How can I help you today?
-                        </h1>
+
+                        {/* Quick Suggestions */}
+                        <div className="w-full max-w-2xl">
+                            <p className="text-xs text-gray-400 mb-3 uppercase tracking-wider">Try asking</p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {[
+                                    { icon: '🏠', text: '2BHK apartments in Bangalore' },
+                                    { icon: '💰', text: 'Show me properties under 2 Crores' },
+                                    { icon: '🏢', text: 'Tell me about Brigade Citrine' },
+                                    { icon: '✨', text: 'What amenities are available?' },
+                                ].map((suggestion, idx) => (
+                                    <button
+                                        key={idx}
+                                        onClick={() => {
+                                            setInput(suggestion.text);
+                                            inputRef.current?.focus();
+                                        }}
+                                        className="flex items-center gap-3 p-4 bg-gray-50 hover:bg-gray-100 rounded-xl text-left transition-all hover:shadow-md group"
+                                    >
+                                        <span className="text-2xl">{suggestion.icon}</span>
+                                        <span className="text-gray-700 group-hover:text-gray-900 text-sm font-medium">{suggestion.text}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
                     </div>
                 ) : (
                     <div className="space-y-6 py-6">
