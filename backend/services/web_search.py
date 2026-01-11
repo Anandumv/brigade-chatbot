@@ -57,8 +57,9 @@ class WebSearchService:
         if self.tavily_client:
             return self._tavily_search(query, context, topic_hint)
         else:
-            # Fall back to LLM knowledge
-            return self._llm_fallback(query, context, topic_hint)
+            # No generic LLM answers - only Tavily or refusal
+            logger.warning("Tavily not available, returning refusal instead of generic answer")
+            return self._refusal_response(query)
 
     def _tavily_search(
         self,
@@ -83,10 +84,10 @@ class WebSearchService:
                 include_domains=["brigade.co.in", "rera.karnataka.gov.in", "magicbricks.com", "99acres.com", "housing.com"]
             )
 
-            # If no results, return fallback
+            # If no results, return refusal instead of generic LLM
             if not search_results.get("results"):
-                logger.warning("No Tavily results, falling back to LLM")
-                return self._llm_fallback(query, context, topic_hint)
+                logger.warning("No Tavily results, returning refusal")
+                return self._refusal_response(query)
 
             # Use Tavily's generated answer if available, otherwise synthesize
             if search_results.get("answer"):
@@ -125,8 +126,8 @@ class WebSearchService:
 
         except Exception as e:
             logger.error(f"Tavily search error: {e}", exc_info=True)
-            # Fall back to LLM knowledge on error
-            return self._llm_fallback(query, context, topic_hint)
+            # Return refusal instead of generic LLM answer
+            return self._refusal_response(query)
 
     def _synthesize_answer(self, query: str, results: List[Dict]) -> str:
         """Synthesize answer from web search results using GPT-4."""
@@ -235,7 +236,23 @@ Please provide helpful general information that would be useful for a real estat
     def _fallback_response(self) -> Dict[str, Any]:
         """Return when all search methods fail."""
         return {
-            "answer": "I couldn't find information about this online. Please contact our sales team for assistance with your specific query.",
+            "answer": "I couldn't find specific information about this. Please contact our sales team for accurate details.",
+            "sources": [],
+            "confidence": "Not Available",
+            "is_external": False
+        }
+
+    def _refusal_response(self, query: str) -> Dict[str, Any]:
+        """Politely refuse to answer without giving generic info."""
+        return {
+            "answer": f"""🔍 I don't have specific information about "{query}" in my database.
+
+**What I can help with:**
+• Properties we have: Brigade Citrine, Brigade Avalon, Prestige Raintree Park, Birla Evara
+• Price and configuration details
+• Amenities and locations
+
+Please ask about one of our listed projects, or contact our sales team at **1800-102-9977** for other queries.""",
             "sources": [],
             "confidence": "Not Available",
             "is_external": False
