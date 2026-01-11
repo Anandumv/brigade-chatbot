@@ -101,31 +101,31 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                 <span className="font-semibold text-gray-700 tracking-tight">Pinclick Genie</span>
             </div>
 
-            {/* Chat Area */}
-            <div className="flex-1 overflow-y-auto w-full max-w-3xl mx-auto px-4 pb-36">
+            {/* Chat Area - Mobile optimized with safe areas */}
+            <div className="flex-1 overflow-y-auto w-full max-w-3xl mx-auto px-3 sm:px-4 pb-32 sm:pb-36">
                 {messages.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-8 animate-fade-in px-4">
-                        <div className="space-y-4">
-                            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-red-500 to-orange-400 flex items-center justify-center shadow-lg">
-                                <Sparkles className="w-10 h-10 text-white" />
+                    <div className="flex flex-col items-center justify-center min-h-[50vh] sm:min-h-[60vh] text-center space-y-6 sm:space-y-8 animate-fade-in px-2 sm:px-4 pt-8">
+                        <div className="space-y-3 sm:space-y-4">
+                            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-red-500 to-orange-400 flex items-center justify-center shadow-lg mx-auto">
+                                <Sparkles className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
                             </div>
-                            <h1 className="text-3xl font-bold text-gray-800">
+                            <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">
                                 Pinclick Genie
                             </h1>
-                            <p className="text-gray-500 max-w-md">
-                                Your AI-powered real estate assistant. Ask me about properties, prices, amenities, and more.
+                            <p className="text-gray-500 max-w-sm sm:max-w-md text-sm sm:text-base px-4">
+                                Your AI-powered real estate assistant. Ask about properties, prices & amenities.
                             </p>
                         </div>
 
-                        {/* Quick Suggestions */}
-                        <div className="w-full max-w-2xl">
-                            <p className="text-xs text-gray-400 mb-3 uppercase tracking-wider">Try asking</p>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {/* Quick Suggestions - Mobile optimized */}
+                        <div className="w-full max-w-2xl px-2">
+                            <p className="text-xs text-gray-400 mb-2 sm:mb-3 uppercase tracking-wider">Try asking</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                                 {[
-                                    { icon: '🏠', text: '2BHK apartments in Bangalore' },
-                                    { icon: '💰', text: 'Show me properties under 2 Crores' },
-                                    { icon: '🏢', text: 'Tell me about Brigade Citrine' },
-                                    { icon: '✨', text: 'What amenities are available?' },
+                                    { icon: '🏠', text: '2BHK in Bangalore' },
+                                    { icon: '💰', text: 'Properties under 2 Cr' },
+                                    { icon: '🏢', text: 'About Brigade Citrine' },
+                                    { icon: '✨', text: 'Available amenities' },
                                 ].map((suggestion, idx) => (
                                     <button
                                         key={idx}
@@ -133,10 +133,10 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                                             setInput(suggestion.text);
                                             inputRef.current?.focus();
                                         }}
-                                        className="flex items-center gap-3 p-4 bg-gray-50 hover:bg-gray-100 rounded-xl text-left transition-all hover:shadow-md group"
+                                        className="flex items-center gap-2 sm:gap-3 p-3 sm:p-4 bg-gray-50 hover:bg-gray-100 active:bg-gray-200 rounded-xl text-left transition-all hover:shadow-md group touch-manipulation"
                                     >
-                                        <span className="text-2xl">{suggestion.icon}</span>
-                                        <span className="text-gray-700 group-hover:text-gray-900 text-sm font-medium">{suggestion.text}</span>
+                                        <span className="text-xl sm:text-2xl">{suggestion.icon}</span>
+                                        <span className="text-gray-700 group-hover:text-gray-900 text-xs sm:text-sm font-medium">{suggestion.text}</span>
                                     </button>
                                 ))}
                             </div>
@@ -194,8 +194,8 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                 )}
             </div>
 
-            {/* Input Area - Clean & Simple */}
-            <div className="fixed bottom-0 left-0 w-full bg-gradient-to-t from-white via-white to-transparent pb-6 pt-10 px-4 z-20">
+            {/* Input Area - Mobile optimized with safe areas */}
+            <div className="fixed bottom-0 left-0 w-full bg-gradient-to-t from-white via-white to-transparent pb-4 sm:pb-6 pt-8 sm:pt-10 px-3 sm:px-4 z-20 safe-area-bottom">
                 <div className="max-w-3xl mx-auto">
                     {error && (
                         <div className="mb-2 mx-auto w-fit flex items-center gap-2 text-red-600 text-xs font-medium">
