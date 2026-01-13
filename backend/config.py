@@ -123,10 +123,11 @@ INTENT_EXAMPLES = {
 }
 
 # Sales FAQ keywords for quick detection
+# Note: Removed "under construction", "ready to move", "possession" to prevent overlap with objections
 SALES_FAQ_KEYWORDS = [
     "stretch budget", "extend budget", "increase budget",
     "other location", "different location", "alternate location",
-    "under construction", "ready to move", "possession",
+    "why under construction", "benefits of under construction",
     "face to face", "meet in person", "schedule meeting",
     "site visit", "visit site", "see property",
     "pinclick value", "why pinclick", "about pinclick",
