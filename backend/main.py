@@ -23,6 +23,8 @@ from services.hybrid_retrieval import hybrid_retrieval
 from services.filter_extractor import filter_extractor
 from services.response_formatter import response_formatter
 from services.query_preprocessor import query_preprocessor
+from services.sales_conversation import sales_conversation, get_filter_options, SalesIntent
+from services.intelligent_sales import intelligent_sales, SalesIntent as AISalesIntent
 from database.supabase_client import supabase_client
 
 # Configure logging
@@ -141,9 +143,7 @@ async def chat_query(request: ChatQueryRequest):
         logger.info(f"Classified intent: {intent}")
 
         # Step 1.5: Handle greetings immediately without RAG
-        greeting_words = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'howdy', 'hola']
-        query_lower = request.query.lower().strip().rstrip('!')
-        if query_lower in greeting_words:
+        if intent == "greeting":
             response_time_ms = int((time.time() - start_time) * 1000)
             greeting_response = """👋 **Hello!** Welcome to Pinclick Genie!
 
@@ -153,6 +153,7 @@ I'm your AI-powered real estate assistant. I can help you with:
 🏢 **Project Details** - "Tell me about Brigade Citrine amenities"
 💰 **Pricing Info** - "What's the price of 3BHK at Brigade Avalon?"
 📍 **Location Info** - "Projects near Whitefield"
+🤝 **Sales Support** - "Schedule a site visit" or "Arrange a meeting"
 
 How can I assist you today?"""
             return ChatQueryResponse(
@@ -163,6 +164,67 @@ How can I assist you today?"""
                 refusal_reason=None,
                 response_time_ms=response_time_ms
             )
+
+        # Step 1.6: Handle sales FAQ intents with intelligent GPT-4 handler
+        if intent == "sales_faq":
+            logger.info("Routing to intelligent sales FAQ handler")
+            response_text, sales_intent, should_fallback = await intelligent_sales.handle_query(
+                query=request.query
+            )
+            
+            if not should_fallback and response_text:
+                response_time_ms = int((time.time() - start_time) * 1000)
+                
+                if request.user_id:
+                    await supabase_client.log_query(
+                        user_id=request.user_id,
+                        query=request.query,
+                        intent=f"intelligent_faq_{sales_intent.value}",
+                        answered=True,
+                        confidence_score="High",
+                        response_time_ms=response_time_ms,
+                        project_id=request.project_id
+                    )
+                
+                return ChatQueryResponse(
+                    answer=response_text,
+                    sources=[],
+                    confidence="High",
+                    intent="intelligent_sales_faq",
+                    refusal_reason=None,
+                    response_time_ms=response_time_ms
+                )
+
+        # Step 1.7: Handle sales objection intents with intelligent handler
+        if intent == "sales_objection":
+            logger.info("Routing to intelligent sales objection handler")
+            response_text, sales_intent, should_fallback = await intelligent_sales.handle_query(
+                query=request.query
+            )
+            
+            if not should_fallback and response_text:
+                response_time_ms = int((time.time() - start_time) * 1000)
+                
+                if request.user_id:
+                    await supabase_client.log_query(
+                        user_id=request.user_id,
+                        query=request.query,
+                        intent=f"intelligent_objection_{sales_intent.value}",
+                        answered=True,
+                        confidence_score="High",
+                        response_time_ms=response_time_ms,
+                        project_id=request.project_id
+                    )
+                
+                return ChatQueryResponse(
+                    answer=response_text,
+                    sources=[],
+                    confidence="High",
+                    intent="intelligent_sales_objection",
+                    refusal_reason=None,
+                    response_time_ms=response_time_ms
+                )
+
 
         # Step 2: Route property_search to hybrid filtering (NEW FLOW)
         if intent == "property_search":
@@ -496,6 +558,84 @@ async def get_personas():
     except Exception as e:
         logger.error(f"Error fetching personas: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/filters/options")
+async def get_filter_options_endpoint():
+    """
+    Get all available filter options for frontend dropdowns.
+    
+    Returns:
+        - configurations: List of BHK options (1-6)
+        - locations: Grouped by area (North/East Bangalore)
+        - budget_ranges: Price ranges in INR
+        - possession_years: Available possession years (2024-2030 + Ready)
+    """
+    try:
+        return get_filter_options()
+    except Exception as e:
+        logger.error(f"Error fetching filter options: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/chat/sales")
+async def sales_chat_query(request: ChatQueryRequest):
+    """
+    Intelligent sales-focused chat endpoint powered by GPT-4.
+    
+    Provides:
+    - Highly intelligent, context-aware responses
+    - Natural language understanding for sales queries
+    - Intelligent objection handling
+    - Dynamic response generation
+    - Falls back to RAG for property-specific queries
+    """
+    start_time = time.time()
+    
+    try:
+        logger.info(f"Intelligent sales chat query: {request.query[:100]}...")
+        
+        # Use the intelligent GPT-4 powered handler
+        response_text, sales_intent, should_fallback = await intelligent_sales.handle_query(
+            query=request.query
+        )
+        
+        if not should_fallback and response_text:
+            response_time_ms = int((time.time() - start_time) * 1000)
+            
+            if request.user_id:
+                await supabase_client.log_query(
+                    user_id=request.user_id,
+                    query=request.query,
+                    intent=f"intelligent_sales_{sales_intent.value}",
+                    answered=True,
+                    confidence_score="High",
+                    response_time_ms=response_time_ms,
+                    project_id=request.project_id
+                )
+            
+            logger.info(f"Intelligent sales response generated in {response_time_ms}ms")
+            
+            return ChatQueryResponse(
+                answer=response_text,
+                sources=[],
+                confidence="High",
+                intent=f"intelligent_sales_{sales_intent.value}",
+                refusal_reason=None,
+                response_time_ms=response_time_ms
+            )
+        
+        # Fall back to regular chat endpoint for property queries
+        logger.info("Falling back to regular chat processing for property/unknown query")
+        return await chat_query(request)
+        
+    except Exception as e:
+        logger.error(f"Error in intelligent sales chat: {e}", exc_info=True)
+        # Fallback to regular handler on error
+        try:
+            return await chat_query(request)
+        except:
+            raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/chat/compare")

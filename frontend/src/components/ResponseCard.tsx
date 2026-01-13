@@ -1,10 +1,15 @@
 'use client';
 
 import React from 'react';
+import dynamic from 'next/dynamic';
 import { ConfidenceLevel, SourceInfo } from '@/types';
-import { CheckCircle, AlertCircle, XCircle, FileText, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
+import { CheckCircle, AlertCircle, XCircle, FileText, ExternalLink, ChevronDown, ChevronUp } from '@/components/icons';
 
-import ReactMarkdown from 'react-markdown';
+// Lazy load ReactMarkdown for better initial bundle size
+const ReactMarkdown = dynamic(() => import('react-markdown'), {
+    loading: () => <div className="animate-pulse bg-gray-100 h-20 rounded" />,
+    ssr: true, // Keep SSR for markdown content
+});
 
 interface ResponseCardProps {
     content: string;

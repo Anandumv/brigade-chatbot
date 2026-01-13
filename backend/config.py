@@ -96,8 +96,50 @@ INTENT_EXAMPLES = {
         "What ROI can I expect?",
         "Give me legal advice",
         "Should I take a loan?",
-    ]
+    ],
+    # New sales FAQ intents
+    "sales_faq": [
+        "how to stretch my budget",
+        "how to convince for other location",
+        "why under construction",
+        "ready to move vs under construction",
+        "why face to face meeting",
+        "what does pinclick do",
+        "why pinclick",
+        "schedule site visit",
+        "arrange meeting",
+    ],
+    # Objection handling intents
+    "sales_objection": [
+        "too expensive",
+        "can't afford this",
+        "out of my budget",
+        "don't like this location",
+        "area is too far",
+        "possession is too late",
+        "don't want under construction",
+        "want ready to move only",
+    ],
 }
+
+# Sales FAQ keywords for quick detection
+SALES_FAQ_KEYWORDS = [
+    "stretch budget", "extend budget", "increase budget",
+    "other location", "different location", "alternate location",
+    "under construction", "ready to move", "possession",
+    "face to face", "meet in person", "schedule meeting",
+    "site visit", "visit site", "see property",
+    "pinclick value", "why pinclick", "about pinclick",
+]
+
+# Objection keywords for detection
+SALES_OBJECTION_KEYWORDS = [
+    "too expensive", "costly", "high price", "can't afford",
+    "out of budget", "beyond budget", "budget is less",
+    "too far", "far from", "wrong location", "different area",
+    "can't wait", "need immediately", "urgent", "too late",
+    "don't trust", "scared of delay", "construction risk",
+]
 
 # Property search detection keywords
 PROPERTY_SEARCH_KEYWORDS = [

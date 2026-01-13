@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { PersonaInfo } from '@/types';
-import { User, Home, TrendingUp, Heart, Users, ChevronDown } from 'lucide-react';
+import { User, Home, TrendingUp, Heart, Users, ChevronDown } from '@/components/icons';
 
 interface PersonaSelectorProps {
     personas: PersonaInfo[];

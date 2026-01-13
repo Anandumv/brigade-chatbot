@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { ProjectInfo } from '@/types';
-import { Building2, MapPin, ChevronDown } from 'lucide-react';
+import { Building2, MapPin, ChevronDown } from '@/components/icons';
 
 interface ProjectSelectorProps {
     projects: ProjectInfo[];

@@ -1,8 +1,23 @@
-'use client';
-
-import { AdminDashboard } from '@/components/AdminDashboard';
-import { Sparkles, ArrowLeft } from 'lucide-react';
+import dynamic from 'next/dynamic';
+import { Suspense } from 'react';
+import { Sparkles, ArrowLeft, Loader2 } from '@/components/icons';
 import Link from 'next/link';
+
+// Lazy load the AdminDashboard component
+const AdminDashboard = dynamic(
+    () => import('@/components/AdminDashboard').then((mod) => ({ default: mod.AdminDashboard })),
+    {
+        loading: () => (
+            <div className="flex items-center justify-center p-12">
+                <div className="text-center">
+                    <Loader2 className="w-12 h-12 animate-spin text-brigade-gold mx-auto mb-4" />
+                    <p className="text-gray-600">Loading dashboard...</p>
+                </div>
+            </div>
+        ),
+        ssr: false, // Skip SSR for admin dashboard (heavy client component)
+    }
+);
 
 export default function AdminPage() {
     return (
@@ -31,8 +46,24 @@ export default function AdminPage() {
                 </div>
             </header>
 
-            {/* Dashboard Content */}
-            <AdminDashboard />
+            {/* Dashboard Content - Lazy Loaded */}
+            <Suspense
+                fallback={
+                    <div className="flex items-center justify-center p-12">
+                        <div className="text-center">
+                            <Loader2 className="w-12 h-12 animate-spin text-brigade-gold mx-auto mb-4" />
+                            <p className="text-gray-600">Loading dashboard...</p>
+                        </div>
+                    </div>
+                }
+            >
+                <AdminDashboard />
+            </Suspense>
         </div>
     );
 }
+
+export const metadata = {
+    title: 'Admin Dashboard - Pinclick Genie',
+    description: 'Analytics and management for Pinclick Genie',
+};

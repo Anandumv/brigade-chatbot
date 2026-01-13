@@ -12,7 +12,7 @@ import {
     AlertTriangle,
     Loader2,
     RefreshCw
-} from 'lucide-react';
+} from '@/components/icons';
 
 interface StatCardProps {
     title: string;

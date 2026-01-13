@@ -182,12 +182,22 @@ class FilterExtractor:
             'calcutta': 'Kolkata'
         }
 
-        # Known localities (expandable)
+        # Known localities (expanded from flowchart)
+        # North Bangalore areas
         self.localities = {
+            # Original areas
             'whitefield', 'koramangala', 'indiranagar', 'hsr layout',
             'electronic city', 'marathahalli', 'jp nagar', 'btm layout',
             'jayanagar', 'rajajinagar', 'yeshwanthpur', 'hebbal',
-            'old madras road', 'sarjapur road', 'bannerghatta road'
+            'old madras road', 'sarjapur road', 'bannerghatta road',
+            # North Bangalore from flowchart
+            'budigere cross', 'harlur', 'devanahalli', 'banjara',
+            'helicopter road', 'khandike road', 'thanisandra', 'tumkur road',
+            # East Bangalore from flowchart
+            'sarjapur', 'jakkur', 'jalahalli', 'bagar', 'yelahanka',
+            # Additional common areas
+            'kr puram', 'mahadevpura', 'bellandur', 'varthur',
+            'hennur', 'kundanhalli', 'brookefield', 'kadugodi',
         }
 
         # Status keywords

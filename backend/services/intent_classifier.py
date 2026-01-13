@@ -4,14 +4,24 @@ Uses keyword detection + GPT-4 classification for intelligent routing.
 """
 
 from openai import OpenAI
-from config import settings, INTENT_EXAMPLES, PROPERTY_SEARCH_KEYWORDS
+from config import settings, INTENT_EXAMPLES, PROPERTY_SEARCH_KEYWORDS, SALES_FAQ_KEYWORDS, SALES_OBJECTION_KEYWORDS
 from typing import Literal
 import logging
 import re
 
 logger = logging.getLogger(__name__)
 
-IntentType = Literal["property_search", "project_fact", "sales_pitch", "comparison", "unsupported"]
+# Extended intent types including sales-specific intents
+IntentType = Literal[
+    "property_search", 
+    "project_fact", 
+    "sales_pitch", 
+    "comparison", 
+    "unsupported",
+    "sales_faq",
+    "sales_objection",
+    "greeting"
+]
 
 
 class IntentClassifier:
@@ -29,22 +39,32 @@ class IntentClassifier:
             query: User's question
 
         Returns:
-            Intent category: 'property_search', 'project_fact', 'sales_pitch', 'comparison', or 'unsupported'
+            Intent category including sales_faq and sales_objection
         """
         query_lower = query.lower().strip()
 
-        # Priority 0: Handle greetings - treat as project_fact so it uses RAG intro
+        # Priority 0: Handle greetings - return greeting intent
         greeting_words = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'howdy', 'hola']
         if query_lower in greeting_words or query_lower.rstrip('!') in greeting_words:
             logger.info(f"Detected greeting: {query}")
-            return "project_fact"  # Will use RAG to find intro/greeting response
+            return "greeting"
 
         # Priority 1: Fast keyword-based detection for property searches
         if self._is_property_search(query_lower):
             logger.info(f"Detected property_search intent via keywords: {query[:50]}...")
             return "property_search"
+        
+        # Priority 2: Detect sales FAQ queries (fast keyword match)
+        if self._is_sales_faq(query_lower):
+            logger.info(f"Detected sales_faq intent via keywords: {query[:50]}...")
+            return "sales_faq"
+        
+        # Priority 3: Detect sales objection queries (fast keyword match)
+        if self._is_sales_objection(query_lower):
+            logger.info(f"Detected sales_objection intent via keywords: {query[:50]}...")
+            return "sales_objection"
 
-        # Priority 2: Fall back to GPT-4 classification for other intents
+        # Priority 4: Fall back to GPT-4 classification for other intents
         try:
             system_prompt = self._build_system_prompt()
             user_message = f"Classify this query: {query}"
@@ -109,6 +129,69 @@ class IntentClassifier:
                 return True
 
         return False
+
+    def _is_sales_faq(self, query_lower: str) -> bool:
+        """
+        Detect sales FAQ queries using keyword matching.
+        
+        Matches queries about:
+        - Budget stretching
+        - Location alternatives
+        - Under-construction vs ready-to-move
+        - Meeting/site visit requests
+        - Pinclick value proposition
+        """
+        # Check for sales FAQ keywords
+        for keyword in SALES_FAQ_KEYWORDS:
+            if keyword in query_lower:
+                return True
+        
+        # Additional pattern checks
+        faq_patterns = [
+            r'why\s+(?:should|would|do)\s+.*(?:meet|visit|pinclick)',
+            r'(?:schedule|arrange|book)\s+(?:a\s+)?(?:meeting|visit|call)',
+            r'(?:can|want|need)\s+(?:to\s+)?(?:meet|visit|see)',
+            r'(?:stretch|increase|extend)\s+(?:my\s+)?budget',
+            r'(?:other|different|alternate)\s+(?:location|area)',
+            r'(?:ready\s+to\s+move|under\s+construction)',
+        ]
+        
+        for pattern in faq_patterns:
+            if re.search(pattern, query_lower):
+                return True
+        
+        return False
+    
+    def _is_sales_objection(self, query_lower: str) -> bool:
+        """
+        Detect sales objection queries using keyword matching.
+        
+        Matches queries about:
+        - Budget concerns (too expensive, can't afford)
+        - Location concerns (too far, wrong area)
+        - Possession concerns (too late, need immediately)
+        - Trust concerns (construction risk, delays)
+        """
+        # Check for sales objection keywords
+        for keyword in SALES_OBJECTION_KEYWORDS:
+            if keyword in query_lower:
+                return True
+        
+        # Additional objection patterns
+        objection_patterns = [
+            r'(?:too|very)\s+(?:expensive|costly|high|far)',
+            r"(?:can't|cannot|won't|don't|do not)\s+(?:afford|wait|trust)",
+            r'(?:out\s+of|beyond|exceeds?)\s+(?:my\s+)?budget',
+            r'(?:not|don\'t)\s+(?:like|want|prefer)\s+(?:this|that)\s+(?:location|area|project)',
+            r'(?:scared|worried|concerned)\s+(?:about|of)\s+(?:delay|construction)',
+        ]
+        
+        for pattern in objection_patterns:
+            if re.search(pattern, query_lower):
+                return True
+        
+        return False
+
 
     def _build_system_prompt(self) -> str:
         """Build few-shot system prompt for intent classification."""

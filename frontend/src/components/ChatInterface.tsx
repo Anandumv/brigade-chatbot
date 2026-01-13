@@ -2,9 +2,11 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Message, ProjectInfo, PersonaInfo, ChatQueryResponse } from '@/types';
+import { SelectedFilters } from '@/types/filters';
 import { apiService } from '@/services/api';
 import { ResponseCard } from './ResponseCard';
-import { Send, Loader2, Sparkles, User, AlertCircle, Zap } from 'lucide-react';
+import { FilterPanel } from './FilterPanel';
+import { Send, Loader2, Sparkles, User, AlertCircle, Zap } from '@/components/icons';
 
 interface ChatInterfaceProps {
     projects: ProjectInfo[];
@@ -16,6 +18,8 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [selectedFilters, setSelectedFilters] = useState<SelectedFilters>({});
+    const [isFilterCollapsed, setIsFilterCollapsed] = useState(true);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -57,11 +61,24 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
         setMessages((prev) => [...prev, loadingMessage]);
 
         try {
-            const response: ChatQueryResponse = await apiService.sendQuery({
-                query: userMessage.content,
-                project_id: undefined,
-                persona: undefined,
-            });
+            // Use filter-aware query if filters are selected
+            const hasFilters = Object.keys(selectedFilters).some(
+                (key) => !key.includes('Min') && !key.includes('Max') && selectedFilters[key as keyof SelectedFilters]
+            );
+
+            let response: ChatQueryResponse;
+            if (hasFilters) {
+                response = await apiService.sendQueryWithFilters(
+                    userMessage.content,
+                    selectedFilters
+                );
+            } else {
+                response = await apiService.sendQuery({
+                    query: userMessage.content,
+                    project_id: undefined,
+                    persona: undefined,
+                });
+            }
 
             const assistantMessage: Message = {
                 id: generateId(),
@@ -117,15 +134,25 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                             </p>
                         </div>
 
+                        {/* Filter Panel - Collapsible */}
+                        <div className="w-full max-w-2xl px-2">
+                            <FilterPanel
+                                selectedFilters={selectedFilters}
+                                onFiltersChange={setSelectedFilters}
+                                isCollapsed={isFilterCollapsed}
+                                onToggleCollapse={() => setIsFilterCollapsed(!isFilterCollapsed)}
+                            />
+                        </div>
+
                         {/* Quick Suggestions - Mobile optimized */}
                         <div className="w-full max-w-2xl px-2">
                             <p className="text-xs text-gray-400 mb-2 sm:mb-3 uppercase tracking-wider">Try asking</p>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                                 {[
-                                    { icon: '🏠', text: '2BHK in Bangalore' },
+                                    { icon: '🏠', text: '2BHK in Whitefield' },
                                     { icon: '💰', text: 'Properties under 2 Cr' },
-                                    { icon: '🏢', text: 'About Brigade Citrine' },
-                                    { icon: '✨', text: 'Available amenities' },
+                                    { icon: '🤝', text: 'Schedule a site visit' },
+                                    { icon: '💡', text: 'How to stretch my budget?' },
                                 ].map((suggestion, idx) => (
                                     <button
                                         key={idx}

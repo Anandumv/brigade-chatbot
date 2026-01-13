@@ -47,4 +47,11 @@ module.exports = {
         },
     },
     plugins: [],
+
+    // Production optimization
+    ...(process.env.NODE_ENV === 'production' && {
+        experimental: {
+            optimizeUniversalDefaults: true,
+        },
+    }),
 };
