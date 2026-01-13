@@ -349,10 +349,7 @@ class SalesConversationHandler:
                 "different area", "location change"
             ],
             SalesIntent.FAQ_UNDER_CONSTRUCTION: [
-                "under construction", "not ready", "still building",
-                "ready to move", "immediate possession", "want ready",
                 "construction project", "ongoing project", "not completed",
-                "prefer ready", "ready flat"
             ],
             SalesIntent.FAQ_FACE_TO_FACE_MEETING: [
                 "face to face", "meet in person", "personal meeting",
