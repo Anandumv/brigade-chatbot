@@ -27,6 +27,9 @@ from services.sales_conversation import sales_conversation, get_filter_options, 
 from services.intelligent_sales import intelligent_sales, SalesIntent as AISalesIntent
 from database.supabase_client import supabase_client
 
+# Force reload triggers
+# Last updated: fixes applied for mock retrieval
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
