@@ -34,7 +34,7 @@ logging.info("Imports completed. Initializing FastAPI app...")
 
 from config import settings
 from services.flow_engine import FlowEngine, flow_engine
-# from services.retrieval import retrieval_service # Deferred import to prevent hang
+from services.retrieval import retrieval_service # Deferred import to prevent hang
 
 from services.confidence_scorer import confidence_scorer
 from services.refusal_handler import refusal_handler
