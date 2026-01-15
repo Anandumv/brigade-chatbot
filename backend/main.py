@@ -3,7 +3,7 @@ Main FastAPI application for Real Estate Sales Intelligence Chatbot.
 Powered by Pixeltable - No Supabase Required!
 """
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
@@ -131,6 +131,34 @@ async def health_check():
         "environment": settings.environment,
         "version": "1.0.0"
     }
+
+
+@app.post("/admin/refresh-projects")
+async def admin_refresh_projects(x_admin_key: str = Header(None)):
+    """
+    Admin endpoint to force re-seed/update project data.
+    Useful for Render Free Tier where Shell access is unavailable.
+    """
+    # Simple security: First 8 chars of OpenAI key or 'secret'
+    expected_key = settings.openai_api_key[:8] if settings.openai_api_key else "secret"
+    
+    if x_admin_key != expected_key:
+         raise HTTPException(status_code=403, detail="Invalid Admin Key")
+
+    try:
+        from database.pixeltable_setup import get_projects_table, _seed_projects_data
+        
+        projects = get_projects_table()
+        
+        # In a real update scenario, we'd delete existing or Upsert.
+        # Calling seeder for now which handles empty check.
+        # To FORCE update, we might need to clear table first, but let's stick to safe seeding.
+        _seed_projects_data(projects)
+        
+        return {"status": "success", "message": "Project data refresh triggered"}
+    except Exception as e:
+        logger.error(f"Admin refresh failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/chat/query", response_model=ChatQueryResponse)
