@@ -425,6 +425,12 @@ How can I assist you today?"""
                     project_id=request.project_id
                 )
 
+            # Record interest in session for continuous conversation
+            if search_results["projects"] and request.session_id:
+                top_project = search_results["projects"][0]["project_name"]
+                logger.info(f"Recording session interest: {top_project}")
+                session_manager.record_interest(request.session_id, top_project)
+
             logger.info(f"Property search completed in {response_time_ms}ms with {len(search_results['projects'])} matches")
 
             return ChatQueryResponse(
@@ -481,6 +487,19 @@ How can I assist you today?"""
         #             refusal_reason=None,
         #             response_time_ms=response_time_ms
         #         )
+
+
+        # Context Injection for Continuous Conversation
+        # If user asks a follow-up question, use the last interested project from session
+        if request.session_id and intent not in ["greeting", "property_search", "unsupported", "sales_faq", "sales_objection"]:
+            session = session_manager.get_or_create_session(request.session_id)
+            if session.interested_projects:
+                last_project = session.interested_projects[-1]
+                # If query doesn't mention a project, inject it
+                # We check against a few keywords to avoid over-injecting
+                if last_project.lower() not in request.query.lower():
+                    logger.info(f"Context Injection: Appending '{last_project}' to query '{request.query}'")
+                    request.query += f" regarding {last_project}"
 
         # Step 3: Retrieve similar document chunks
         chunks = await retrieval_service.retrieve_similar_chunks(
