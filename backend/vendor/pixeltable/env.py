@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-import pixeltable_pgserver
+# import pixeltable_pgserver  <-- Removed to avoid dependency
 import sqlalchemy as sql
 import toml
 from tqdm import TqdmWarning
@@ -50,7 +50,7 @@ class Env:
     _sa_engine: Optional[sql.engine.base.Engine]
     _pgdata_dir: Optional[Path]
     _db_name: Optional[str]
-    _db_server: Optional[pixeltable_pgserver.PostgresServer]
+    _db_server: Any # Optional[pixeltable_pgserver.PostgresServer]
     _db_url: Optional[str]
     _default_time_zone: Optional[ZoneInfo]
 
@@ -245,9 +245,6 @@ class Env:
             # we don't have our logger set up yet, so print to stdout
             print(f'Creating a Pixeltable instance at: {self._home}')
             self._home.mkdir()
-            # TODO (aaron-siegel) This is the existing behavior, but it seems scary. If something happens to
-            # self._home, it will cause the DB to be destroyed even if pgdata is in an alternate location.
-            # PROPOSAL: require `reinit_db` to be set explicitly to destroy the DB.
             reinit_db = True
 
         if not self._media_dir.exists():
@@ -312,13 +309,17 @@ class Env:
         self._db_name = os.environ.get('PIXELTABLE_DB', 'pixeltable')
         self._pgdata_dir = Path(os.environ.get('PIXELTABLE_PGDATA', str(self._home / 'pgdata')))
 
-        # cleanup_mode=None will leave the postgres process running after Python exits
-        # cleanup_mode='stop' will terminate the postgres process when Python exits
-        # On Windows, we need cleanup_mode='stop' because child processes are killed automatically when the parent
-        # process (such as Terminal or VSCode) exits, potentially leaving it in an unusable state.
-        cleanup_mode = 'stop' if platform.system() == 'Windows' else None
-        self._db_server = pixeltable_pgserver.get_server(self._pgdata_dir, cleanup_mode=cleanup_mode)
-        self._db_url = self._db_server.get_uri(database=self._db_name, driver='psycopg')
+        # PATCH: Bypass local pixeltable_pgserver and use external DB URL
+        external_db_url = os.environ.get('PIXELTABLE_DB_URL')
+        if external_db_url:
+            self._logger.info(f"Using external PIXELTABLE_DB_URL: {external_db_url}")
+            self._db_url = external_db_url
+            self._db_server = None # No local server
+        else:
+            raise excs.Error("PIXELTABLE_DB_URL environment variable must be set (local pgserver is disabled in this patched version).")
+            # cleanup_mode = 'stop' if platform.system() == 'Windows' else None
+            # self._db_server = pixeltable_pgserver.get_server(self._pgdata_dir, cleanup_mode=cleanup_mode)
+            # self._db_url = self._db_server.get_uri(database=self._db_name, driver='psycopg')
 
         tz_name = self.config.get_string_value('time_zone')
         if tz_name is not None:
@@ -373,65 +374,85 @@ class Env:
             self._default_time_zone = ZoneInfo(tz_name)
 
     def _store_db_exists(self) -> bool:
-        assert self._db_name is not None
-        # don't try to connect to self.db_name, it may not exist
-        db_url = self._db_server.get_uri(database='postgres', driver='psycopg')
-        engine = sql.create_engine(db_url, future=True)
+        # With external DB, we assume it exists if we can connect, but _store_db_exists checks 'pg_database'.
+        # For external DB (Supabase), we might not have access to 'postgres' db to check specific db existence via 'pg_database'.
+        # However, PIXELTABLE_DB_URL points to the specific DB.
+        
+        # Simplified check for external DB: Try to connect to the target DB directly.
+        # If we can connect, it exists.
         try:
-            with engine.begin() as conn:
-                stmt = f"SELECT COUNT(*) FROM pg_database WHERE datname = '{self._db_name}'"
-                result = conn.scalar(sql.text(stmt))
-                assert result <= 1
-                return result == 1
-        finally:
-            engine.dispose()
+           engine = sql.create_engine(self.db_url, future=True)
+           with engine.connect() as conn:
+               pass
+           return True
+        except Exception:
+           return False
+
+        # Original logic was checking via 'postgres' admin db which we might not have access to or don't want to use.
+        # assert self._db_name is not None
+        # # don't try to connect to self.db_name, it may not exist
+        # db_url = self._db_server.get_uri(database='postgres', driver='psycopg')
+        # engine = sql.create_engine(db_url, future=True)
+        # try:
+        #     with engine.begin() as conn:
+        #         stmt = f"SELECT COUNT(*) FROM pg_database WHERE datname = '{self._db_name}'"
+        #         result = conn.scalar(sql.text(stmt))
+        #         assert result <= 1
+        #         return result == 1
+        # finally:
+        #     engine.dispose()
 
     def _create_store_db(self) -> None:
-        assert self._db_name is not None
-        # create the db
-        pg_db_url = self._db_server.get_uri(database='postgres', driver='psycopg')
-        engine = sql.create_engine(pg_db_url, future=True, isolation_level='AUTOCOMMIT')
-        preparer = engine.dialect.identifier_preparer
-        try:
-            with engine.begin() as conn:
-                # use C collation to get standard C/Python-style sorting
-                stmt = (
-                    f"CREATE DATABASE {preparer.quote(self._db_name)} "
-                    "ENCODING 'utf-8' LC_COLLATE 'C' LC_CTYPE 'C' TEMPLATE template0"
-                )
-                conn.execute(sql.text(stmt))
-        finally:
-            engine.dispose()
-
-        # enable pgvector
-        store_db_url = self._db_server.get_uri(database=self._db_name, driver='psycopg')
-        engine = sql.create_engine(store_db_url, future=True, isolation_level='AUTOCOMMIT')
-        try:
-            with engine.begin() as conn:
-                conn.execute(sql.text('CREATE EXTENSION vector'))
-        finally:
-            engine.dispose()
+        pass # external DB should be created manually or we assume it exists. 
+             # The PIXELTABLE_DB_URL points to an existing DB usually. 
+             # If we need to create metadata tables, that happens later.
+             
+        # assert self._db_name is not None
+        # # create the db
+        # pg_db_url = self._db_server.get_uri(database='postgres', driver='psycopg')
+        # engine = sql.create_engine(pg_db_url, future=True, isolation_level='AUTOCOMMIT')
+        # preparer = engine.dialect.identifier_preparer
+        # try:
+        #     with engine.begin() as conn:
+        #         # use C collation to get standard C/Python-style sorting
+        #         stmt = (
+        #             f"CREATE DATABASE {preparer.quote(self._db_name)} "
+        #             "ENCODING 'utf-8' LC_COLLATE 'C' LC_CTYPE 'C' TEMPLATE template0"
+        #         )
+        #         conn.execute(sql.text(stmt))
+        # finally:
+        #     engine.dispose()
+        #
+        # # enable pgvector
+        # store_db_url = self._db_server.get_uri(database=self._db_name, driver='psycopg')
+        # engine = sql.create_engine(store_db_url, future=True, isolation_level='AUTOCOMMIT')
+        # try:
+        #     with engine.begin() as conn:
+        #         conn.execute(sql.text('CREATE EXTENSION vector'))
+        # finally:
+        #     engine.dispose()
 
     def _drop_store_db(self) -> None:
-        assert self._db_name is not None
-        db_url = self._db_server.get_uri(database='postgres', driver='psycopg')
-        engine = sql.create_engine(db_url, future=True, isolation_level='AUTOCOMMIT')
-        preparer = engine.dialect.identifier_preparer
-        try:
-            with engine.begin() as conn:
-                # terminate active connections
-                stmt = (f"""
-                    SELECT pg_terminate_backend(pg_stat_activity.pid)
-                    FROM pg_stat_activity
-                    WHERE pg_stat_activity.datname = '{self._db_name}'
-                    AND pid <> pg_backend_pid()
-                """)
-                conn.execute(sql.text(stmt))
-                # drop db
-                stmt = f'DROP DATABASE {preparer.quote(self._db_name)}'
-                conn.execute(sql.text(stmt))
-        finally:
-            engine.dispose()
+        raise NotImplementedError("Cannot drop external DB via pixeltable env in this patched mode.")
+        # assert self._db_name is not None
+        # db_url = self._db_server.get_uri(database='postgres', driver='psycopg')
+        # engine = sql.create_engine(db_url, future=True, isolation_level='AUTOCOMMIT')
+        # preparer = engine.dialect.identifier_preparer
+        # try:
+        #     with engine.begin() as conn:
+        #         # terminate active connections
+        #         stmt = (f"""
+        #             SELECT pg_terminate_backend(pg_stat_activity.pid)
+        #             FROM pg_stat_activity
+        #             WHERE pg_stat_activity.datname = '{self._db_name}'
+        #             AND pid <> pg_backend_pid()
+        #         """)
+        #         conn.execute(sql.text(stmt))
+        #         # drop db
+        #         stmt = f'DROP DATABASE {preparer.quote(self._db_name)}'
+        #         conn.execute(sql.text(stmt))
+        # finally:
+        #     engine.dispose()
 
     def _upgrade_metadata(self) -> None:
         metadata.upgrade_md(self._sa_engine)
