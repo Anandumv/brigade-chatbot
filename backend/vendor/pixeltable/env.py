@@ -374,63 +374,28 @@ class Env:
             self._default_time_zone = ZoneInfo(tz_name)
 
     def _store_db_exists(self) -> bool:
-        # With external DB, we assume it exists if we can connect, but _store_db_exists checks 'pg_database'.
-        # For external DB (Supabase), we might not have access to 'postgres' db to check specific db existence via 'pg_database'.
-        # However, PIXELTABLE_DB_URL points to the specific DB.
-        
-        # Simplified check for external DB: Try to connect to the target DB directly.
-        # If we can connect, it exists.
+        # With external DB, check if Pixeltable schema tables exist (not just if DB exists).
+        # If systeminfo table exists, Pixeltable has been initialized.
         try:
-           engine = sql.create_engine(self.db_url, future=True)
-           with engine.connect() as conn:
-               pass
-           return True
+            engine = sql.create_engine(self.db_url, future=True)
+            with engine.connect() as conn:
+                # Check if systeminfo table exists
+                result = conn.execute(sql.text(
+                    "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'systeminfo')"
+                )).scalar()
+                return result
         except Exception:
-           return False
-
-        # Original logic was checking via 'postgres' admin db which we might not have access to or don't want to use.
-        # assert self._db_name is not None
-        # # don't try to connect to self.db_name, it may not exist
-        # db_url = self._db_server.get_uri(database='postgres', driver='psycopg')
-        # engine = sql.create_engine(db_url, future=True)
-        # try:
-        #     with engine.begin() as conn:
-        #         stmt = f"SELECT COUNT(*) FROM pg_database WHERE datname = '{self._db_name}'"
-        #         result = conn.scalar(sql.text(stmt))
-        #         assert result <= 1
-        #         return result == 1
-        # finally:
-        #     engine.dispose()
+            return False
 
     def _create_store_db(self) -> None:
-        pass # external DB should be created manually or we assume it exists. 
-             # The PIXELTABLE_DB_URL points to an existing DB usually. 
-             # If we need to create metadata tables, that happens later.
-             
-        # assert self._db_name is not None
-        # # create the db
-        # pg_db_url = self._db_server.get_uri(database='postgres', driver='psycopg')
-        # engine = sql.create_engine(pg_db_url, future=True, isolation_level='AUTOCOMMIT')
-        # preparer = engine.dialect.identifier_preparer
-        # try:
-        #     with engine.begin() as conn:
-        #         # use C collation to get standard C/Python-style sorting
-        #         stmt = (
-        #             f"CREATE DATABASE {preparer.quote(self._db_name)} "
-        #             "ENCODING 'utf-8' LC_COLLATE 'C' LC_CTYPE 'C' TEMPLATE template0"
-        #         )
-        #         conn.execute(sql.text(stmt))
-        # finally:
-        #     engine.dispose()
-        #
-        # # enable pgvector
-        # store_db_url = self._db_server.get_uri(database=self._db_name, driver='psycopg')
-        # engine = sql.create_engine(store_db_url, future=True, isolation_level='AUTOCOMMIT')
-        # try:
-        #     with engine.begin() as conn:
-        #         conn.execute(sql.text('CREATE EXTENSION vector'))
-        # finally:
-        #     engine.dispose()
+        # For external DB, try to enable pgvector extension
+        try:
+            engine = sql.create_engine(self.db_url, future=True, isolation_level='AUTOCOMMIT')
+            with engine.begin() as conn:
+                conn.execute(sql.text('CREATE EXTENSION IF NOT EXISTS vector'))
+                self._logger.info('Enabled pgvector extension')
+        except Exception as e:
+            self._logger.warning(f'Could not enable pgvector extension: {e}')
 
     def _drop_store_db(self) -> None:
         raise NotImplementedError("Cannot drop external DB via pixeltable env in this patched mode.")

@@ -49,6 +49,7 @@ from services.query_preprocessor import query_preprocessor
 from services.sales_conversation import sales_conversation, get_filter_options, SalesIntent
 from services.intelligent_sales import intelligent_sales, ConversationContext, SalesIntent as AISalesIntent
 from services.sales_intelligence import sales_intelligence
+from services.intent_classifier import intent_classifier
 
 # Pixeltable-only mode - replacing Supabase
 from database.pixeltable_client import pixeltable_client
