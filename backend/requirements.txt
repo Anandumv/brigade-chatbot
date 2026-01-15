@@ -33,6 +33,7 @@ pydantic>=2.8.0  # Upgraded for Pixeltable compatibility
 pydantic-settings>=2.3.0
 
 # Utilities
+nest_asyncio>=1.6.0
 tenacity==8.2.3  # Retry logic
 python-json-logger==2.0.7
 

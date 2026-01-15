@@ -10,6 +10,10 @@ from typing import Optional, List, Dict, Any
 import time
 import logging
 from contextlib import asynccontextmanager
+import nest_asyncio
+
+# Apply nest_asyncio to allow re-entrant event loops (fixes Pixeltable inside FastAPI)
+nest_asyncio.apply()
 
 from config import settings
 from services.intent_classifier import intent_classifier
