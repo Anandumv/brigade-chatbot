@@ -10,7 +10,14 @@ from typing import Optional, List, Dict, Any
 import time
 import logging
 from contextlib import asynccontextmanager
+import sys
+import os
+# Add the vendor directory to sys.path to allow importing local packages (e.g. patched pixeltable)
+# We add it at the BEGINNING of sys.path to ensure local versions take precedence
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'vendor')))
+
 import nest_asyncio
+
 
 # Apply nest_asyncio to allow re-entrant event loops
 # Wrap in try-except because it fails with 'uvloop' (default on Render)
