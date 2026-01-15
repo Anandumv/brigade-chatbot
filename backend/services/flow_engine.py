@@ -330,3 +330,29 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
         system_action=action,
         next_redirection=next_node
     )
+
+
+class FlowEngine:
+    """Wrapper class for flowchart-driven conversation logic."""
+    
+    def __init__(self):
+        self.sessions: Dict[str, FlowState] = {}
+    
+    def get_or_create_session(self, session_id: str) -> FlowState:
+        """Get existing session or create new one."""
+        if session_id not in self.sessions:
+            self.sessions[session_id] = FlowState()
+        return self.sessions[session_id]
+    
+    def process(self, session_id: str, user_input: str) -> FlowResponse:
+        """Process user input and return flow response."""
+        state = self.get_or_create_session(session_id)
+        response = execute_flow(state, user_input)
+        # Update session state
+        state.current_node = response.next_redirection
+        return response
+    
+    def reset_session(self, session_id: str) -> None:
+        """Reset a session to initial state."""
+        if session_id in self.sessions:
+            del self.sessions[session_id]
