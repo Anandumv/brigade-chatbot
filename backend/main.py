@@ -173,9 +173,12 @@ async def health_check():
 @app.post("/admin/refresh-projects")
 async def admin_refresh_projects(x_admin_key: str = Header(None)):
     """
-    Admin endpoint to force re-seed/update project data.
-    Useful for Render Free Tier where Shell access is unavailable.
+    Admin endpoint to force re-seed/update project data from seed_projects.json.
     """
+    import json
+    import os
+    import pixeltable as pxt
+    
     # Simple security: First 8 chars of OpenAI key or 'secret'
     expected_key = settings.openai_api_key[:8] if settings.openai_api_key else "secret"
     
@@ -183,16 +186,45 @@ async def admin_refresh_projects(x_admin_key: str = Header(None)):
          raise HTTPException(status_code=403, detail="Invalid Admin Key")
 
     try:
-        from database.pixeltable_setup import get_projects_table, _seed_projects_data
+        # Drop existing and recreate with fresh data
+        try:
+            pxt.drop_table('brigade.projects', force=True)
+            logger.info("Dropped existing projects table")
+        except Exception as e:
+            logger.warning(f"Could not drop table: {e}")
         
-        projects = get_projects_table()
+        # Create fresh table with schema
+        schema = {
+            'project_id': pxt.String,
+            'name': pxt.String,
+            'developer': pxt.String,
+            'location': pxt.String,
+            'zone': pxt.String,
+            'configuration': pxt.String,
+            'budget_min': pxt.Int,
+            'budget_max': pxt.Int,
+            'possession_year': pxt.Int,
+            'possession_quarter': pxt.String,
+            'status': pxt.String,
+            'rera_number': pxt.String,
+            'description': pxt.String,
+            'amenities': pxt.String,
+            'usp': pxt.String,
+        }
         
-        # In a real update scenario, we'd delete existing or Upsert.
-        # Calling seeder for now which handles empty check.
-        # To FORCE update, we might need to clear table first, but let's stick to safe seeding.
-        _seed_projects_data(projects)
+        projects = pxt.create_table('brigade.projects', schema)
+        logger.info("Created fresh projects table")
         
-        return {"status": "success", "message": "Project data refresh triggered"}
+        # Load from JSON
+        seed_file = os.path.join(os.path.dirname(__file__), 'data', 'seed_projects.json')
+        if os.path.exists(seed_file):
+            with open(seed_file, 'r') as f:
+                seed_data = json.load(f)
+            projects.insert(seed_data)
+            return {"status": "success", "message": f"Loaded {len(seed_data)} projects"}
+        else:
+            return {"status": "error", "message": f"Seed file not found: {seed_file}"}
+            
     except Exception as e:
         logger.error(f"Admin refresh failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
