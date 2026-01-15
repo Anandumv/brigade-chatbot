@@ -12,8 +12,14 @@ import logging
 from contextlib import asynccontextmanager
 import nest_asyncio
 
-# Apply nest_asyncio to allow re-entrant event loops (fixes Pixeltable inside FastAPI)
-nest_asyncio.apply()
+# Apply nest_asyncio to allow re-entrant event loops
+# Wrap in try-except because it fails with 'uvloop' (default on Render)
+try:
+    nest_asyncio.apply()
+except ValueError:
+    print("WARNING: Could not patch event loop (likely uvloop). Pixeltable sync might flak.")
+except Exception as e:
+    print(f"WARNING: nest_asyncio failed: {e}")
 
 from config import settings
 from services.intent_classifier import intent_classifier
