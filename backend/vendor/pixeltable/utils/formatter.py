@@ -6,7 +6,7 @@ import logging
 import mimetypes
 from typing import Any, Callable, Optional
 
-import av  # type: ignore[import-untyped]
+# import av  # type: ignore[import-untyped]
 import numpy as np
 import PIL
 import PIL.Image as Image
@@ -52,12 +52,47 @@ class Formatter:
         if col_type.is_image_type():
             return self.format_img
         if col_type.is_video_type():
-            return self.format_video
+            return None # self.format_video  <-- Disabled video formatting
         if col_type.is_audio_type():
             return self.format_audio
         if col_type.is_document_type():
             return self.format_document
         return None
+
+# ... (methods omitted) ...
+
+    def format_video(self, file_path: str) -> str:
+        # Video formatting disabled to avoid av dependency
+        return f"Video: {file_path}"
+        # thumb_tag = ''
+        # # Attempt to extract the first frame of the video to use as a thumbnail,
+        # # so that the notebook can be exported as HTML and viewed in contexts where
+        # # the video itself is not accessible.
+        # # TODO(aaron-siegel): If the video is backed by a concrete external URL,
+        # # should we link to that instead?
+        # with av.open(file_path) as container:
+        #     try:
+        #         thumb = next(container.decode(video=0)).to_image()
+        #         assert isinstance(thumb, Image.Image)
+        #         with io.BytesIO() as buffer:
+        #             thumb.save(buffer, 'jpeg')
+        #             thumb_base64 = base64.b64encode(buffer.getvalue()).decode()
+        #             thumb_tag = f'poster="data:image/jpeg;base64,{thumb_base64}"'
+        #     except Exception:
+        #         pass
+        # if self.__num_rows > 1:
+        #     width = 320
+        # elif self.__num_cols > 1:
+        #     width = 480
+        # else:
+        #     width = 800
+        # return f"""
+        # <div class="pxt_video" style="width:{width}px;">
+        #     <video controls width="{width}" {thumb_tag}>
+        #         {self.__create_source_tag(self.__http_address, file_path)}
+        #     </video>
+        # </div>
+        # """
 
     @classmethod
     def format_string(cls, val: str) -> str:
