@@ -12,9 +12,10 @@ logger = logging.getLogger(__name__)
 # --- SYSTEM PROMPT ---
 STRICT_SYSTEM_PROMPT = """
 ROLE
-You are Antigravity, an internal sales-assistant AI used by real-estate sales agents only.
-You do not speak to customers.
-You enforce a deterministic flowchart and return what the agent should do next.
+ROLE
+You are an AI Sales Agent for Pinclick.
+You speak directly to the customer.
+You enforce a deterministic flowchart to guide the customer to a site visit.
 
 AUTHORITY HIERARCHY (STRICT)
 1. Flowchart logic — absolute authority
@@ -110,7 +111,7 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
     # --- NODE 1: Normalization Gate ---
     if node == "NODE 1":
         if not (merged_reqs.configuration and merged_reqs.location and merged_reqs.budget_max):
-            action = f"Missing fields: {[k for k,v in merged_reqs.dict().items() if v is None]}. Instruct agent to ask specific questions."
+            action = f"I'd love to help! To find the best options, could you please share your preferred Configuration (e.g., 2BHK), Location, and Max Budget?"
             next_node = "NODE 1"
         else:
             next_node = "NODE 2"
@@ -159,7 +160,7 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
                 upsell_matches.append(f"{p['name']} ({p['budget_min']/100} Cr)")
 
         if matches:
-            action = f"Display Facts: {', '.join(matches[:5])}. (No persuasive language)."
+            action = f"I found these excellent matches: {', '.join(matches[:5])}."
             # Create a simplified list for the agent
             state.last_system_action = f"shown_matches:{len(matches)}"
             next_node = "NODE 2A"
@@ -193,7 +194,7 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
 
     # --- NODE 3: Budget Flexibility ---
     elif node == "NODE 3":
-        action = "Instruct Agent: 'Ask customer if they can stretch budget by 10-20%?'"
+        action = "Would you be comfortable stretching your budget by 10-20%? It could open up significantly better options with higher appreciation potential."
         # Logic to detect Yes/No from user_input would happen in next turn
         if "yes" in user_input.lower() or "ok" in user_input.lower():
             next_node = "NODE 4"
@@ -219,7 +220,7 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
                  upsell_list.append(f"{p['name']} (Start: {p['budget_min']/100} Cr)")
                  
         if upsell_list:
-            action = f"Present Upsell Options: {', '.join(upsell_list[:4])}. Ask for Face-to-Face meeting."
+            action = f"I found these premium options slightly above your range: {', '.join(upsell_list[:4])}. Shall we schedule a site visit to see the value they offer?"
             state.current_node = "END" # Or special ending
             next_node = "Face-to-Face Push"
         else:
@@ -229,7 +230,7 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
     # --- NODE 5: Budget Justification ---
     elif node == "NODE 5":
         persuasion = generate_persuasion_text("Budget Stretch", f"Client wants {merged_reqs.location} under {merged_reqs.budget_max}Cr. Market price is usually higher per sqft in this premium area.")
-        action = f"Agent Script: {persuasion}\nCheck: Does client agree?"
+        action = f"{persuasion}\n\nDoes that sound reasonable to you?"
         if "agree" in user_input.lower() or "ok" in user_input.lower():
             next_node = "NODE 4"
         elif "no" in user_input.lower():
@@ -239,7 +240,7 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
 
     # --- NODE 6: Location Flexibility ---
     elif node == "NODE 6":
-        action = "Instruct Agent: 'Ask if open to nearby locations (Radius 10km)?'"
+        action = "Would you be open to exploring similar premium projects in nearby locations (within a 10km radius)?"
         if "yes" in user_input.lower():
             next_node = "NODE 7"
         elif "no" in user_input.lower():
@@ -299,7 +300,7 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
 
     # --- NODE 8: Possession Check ---
     elif node == "NODE 8":
-        action = "Agent Check: Does client object to Possession Date?"
+        action = "Does the possession timeline work for you?"
         if "yes" in user_input.lower():
             # Classify objection: Needs earlier or later?
             action = "Is client asking for Earlier (Ready to move) or Later?"
@@ -316,7 +317,7 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
     # --- NODE 9: Under Construction Pitch ---
     elif node == "NODE 9":
         pitch = generate_persuasion_text("Invest in Under Construction", "Client wants Ready to Move, but we only have Under Construction. Explain Lower Entry Price, High Appreciation, Linked Payment Plan.")
-        action = f"Agent Script: {pitch}\nGoal: Close Meeting."
+        action = f"{pitch}\n\nGiven these benefits, shall we schedule a meeting to discuss the payment plan?"
         next_node = "Face-to-Face Push"
 
     # ... Defaults ...
@@ -356,3 +357,7 @@ class FlowEngine:
         """Reset a session to initial state."""
         if session_id in self.sessions:
             del self.sessions[session_id]
+
+
+# Global instance
+flow_engine = FlowEngine()

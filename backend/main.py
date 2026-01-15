@@ -33,7 +33,7 @@ except Exception as e:
 logging.info("Imports completed. Initializing FastAPI app...")
 
 from config import settings
-from services.flow_engine import FlowEngine
+from services.flow_engine import FlowEngine, flow_engine
 # from services.retrieval import retrieval_service # Deferred import to prevent hang
 
 from services.confidence_scorer import confidence_scorer
@@ -366,80 +366,41 @@ How can I assist you today?"""
                 )
 
 
-        # Step 2: Route property_search to hybrid filtering (NEW FLOW)
+        # Step 2: Route property_search to Flow Engine (Strict Flowchart Logic)
         if intent == "property_search":
-            logger.info("Routing to property search with hybrid filtering")
-            logger.info(f"Using merged filters: {filters.dict(exclude_none=True)}")
-
-            # Hybrid retrieval (SQL + vector search)
-            # Use the filters we extracted/merged earlier
-            search_results = await hybrid_retrieval.search_with_filters(
-                query=request.query,
-                filters=filters
+            logger.info("Routing to Flow Engine for property search")
+            
+            # Use Flow Engine to process the request
+            # This handles: Requirement Extraction -> Node Logic -> Pixeltable Query -> Negotiation
+            flow_response = flow_engine.process(
+                session_id=request.session_id or "default_session",
+                user_input=request.query
             )
-
-            if not search_results["projects"]:
-                # No matches - strict mode refusal (no web search)
-                logger.info("No matching properties found in internal database.")
-                
-                response_time_ms = int((time.time() - start_time) * 1000)
-                
-                # Log refusal
-                if request.user_id:
-                    await pixeltable_client.log_query(
-                        user_id=request.user_id,
-                        query=request.query,
-                        intent=intent,
-                        answered=False,
-                        refusal_reason="no_relevant_info",
-                        response_time_ms=response_time_ms,
-                        project_id=request.project_id
-                    )
-
-                return ChatQueryResponse(
-                    answer="I apologize, but I don't have information about any projects matching your criteria in my database. I can only provide details on our specific portfolio of projects.",
-                    sources=[],
-                    confidence="Low",
-                    intent=intent,
-                    refusal_reason="no_relevant_info",
-                    response_time_ms=response_time_ms
-                )
-
-            # Format structured response
-            formatted = response_formatter.format_property_search_results(
-                projects=search_results["projects"],
-                query=request.query,
-                filters=filters.dict(exclude_none=True)
-            )
-
+            
             response_time_ms = int((time.time() - start_time) * 1000)
-
+            
+            # Log the interaction
             if request.user_id:
                 await pixeltable_client.log_query(
                     user_id=request.user_id,
                     query=request.query,
-                    intent=intent,
+                    intent=f"flow_{flow_response.current_node}",
                     answered=True,
-                    confidence_score=formatted.confidence,
+                    confidence_score="High", # Flow logic is deterministic
                     response_time_ms=response_time_ms,
                     project_id=request.project_id
                 )
-
-            # Record interest in session for continuous conversation
-            if search_results["projects"] and request.session_id:
-                top_project = search_results["projects"][0]["project_name"]
-                logger.info(f"Recording session interest: {top_project}")
-                session_manager.record_interest(request.session_id, top_project)
-
-            logger.info(f"Property search completed in {response_time_ms}ms with {len(search_results['projects'])} matches")
-
+            
+            # Map FlowResponse to ChatQueryResponse
             return ChatQueryResponse(
-                answer=formatted.answer,
-                sources=[],  # Property searches don't use chunk sources
-                confidence=formatted.confidence,
-                intent=intent,
+                answer=flow_response.system_action,
+                sources=[],
+                confidence="High",
+                intent=f"flow_{flow_response.current_node}",
                 refusal_reason=None,
-                response_time_ms=response_time_ms
+                response_time_ms=response_time_ms,
+                # Create suggested actions based on the response text to help the user?
+                suggested_actions=[] 
             )
 
         # Step 3: For unsupported intents, refuse instead of web search
