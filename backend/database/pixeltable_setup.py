@@ -87,6 +87,10 @@ def _create_projects_table():
     })
     
     logger.info("Created brigade.projects table")
+    
+    # Seed verification data
+    _seed_projects_data(projects)
+    
     return projects
 
 
@@ -230,6 +234,86 @@ def _seed_faq_data(faq_table):
     
     faq_table.insert(core_faqs)
     logger.info(f"Seeded {len(core_faqs)} core FAQs into brigade.faq table")
+
+
+def _seed_projects_data(projects_table):
+    """Seed projects table with verified Brigade properties."""
+    
+    # Check if table is empty
+    count = projects_table.count()
+    if count > 0:
+        logger.info(f"Projects table already has {count} entries, skipping seed.")
+        return
+
+    seed_projects = [
+        {
+            "project_id": "brigade-citrine",
+            "name": "Brigade Citrine",
+            "developer": "Brigade Group",
+            "location": "Budigere Cross",
+            "configuration": "2BHK, 3BHK, 4BHK",
+            "budget_min": 120,
+            "budget_max": 250,
+            "possession_year": 2027,
+            "possession_quarter": "Q4",
+            "status": "Under Construction",
+            "rera_number": "PRM/KA/RERA/1251/446/PR/230522/006437",
+            "description": "Luxury apartments in Budigere Cross with forest views.",
+            "amenities": "['Clubhouse', 'Swimming Pool', 'Gym', 'Forest Trail']",
+            "usp": "Forest themed luxury living"
+        },
+        {
+            "project_id": "brigade-avalon",
+            "name": "Brigade Avalon",
+            "developer": "Brigade Group",
+            "location": "Devanahalli",
+            "configuration": "1BHK, 2BHK, 3BHK",
+            "budget_min": 65,
+            "budget_max": 150,
+            "possession_year": 2026,
+            "possession_quarter": "Q2",
+            "status": "Under Construction",
+            "rera_number": "PRM/KA/RERA/1250/303/PR/200618/003456",
+            "description": "Apartments within Brigade Orchards integrated township.",
+            "amenities": "['Sports Arena', 'School', 'Hospital', 'Retail']",
+            "usp": "Integrated township living near Airport"
+        },
+        {
+            "project_id": "brigade-oasis",
+            "name": "Brigade Oasis",
+            "developer": "Brigade Group",
+            "location": "Devenahalli",
+            "configuration": "Plots",
+            "budget_min": 80,
+            "budget_max": 200,
+            "possession_year": 2024,
+            "possession_quarter": "Ready",
+            "status": "Ready to Move",
+            "rera_number": "PRM/KA/RERA/1250/303/PR/220928/005280",
+            "description": "Premium plotted development near Airport.",
+            "amenities": "['Landscaped Gardens', 'Underground Utilities', 'Clubhouse']",
+            "usp": "Premium plots with great appreciation potential"
+        },
+        {
+            "project_id": "brigade-calista",
+            "name": "Brigade Calista",
+            "developer": "Brigade Group",
+            "location": "Budigere Cross",
+            "configuration": "1.5BHK, 2BHK, 3BHK",
+            "budget_min": 75,
+            "budget_max": 140,
+            "possession_year": 2027,
+            "possession_quarter": "Q1",
+            "status": "Under Construction",
+            "rera_number": "PRM/KA/RERA/1251/446/PR/230302/005763",
+            "description": "Vibrant community living with focus on green spaces.",
+            "amenities": "['Grand Central Courtyard', 'Eco-friendly features', 'Sports']",
+            "usp": "Green living with central courtyard"
+        }
+    ]
+    
+    projects_table.insert(seed_projects)
+    logger.info(f"Seeded {len(seed_projects)} projects into brigade.projects table")
 
 
 def get_projects_table():
