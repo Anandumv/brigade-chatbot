@@ -124,26 +124,23 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
     if node == "NODE 2":
         # Query Pixeltable
         t = projects_table
-        
+
         # Build Query logic (same as before)
-        budget_limit = (merged_reqs.budget_max or 100) * 100 
-        
+        budget_limit = (merged_reqs.budget_max or 100) * 100
+
         matches = []
+        match_details = []
         upsell_matches = []
-        
-        # ... (reuse existing query logic, abbreviated for diff brevity) ...
-        # logic to populate matches/upsell_matches
-        # Note: I am not listing the full query code again to save tokens, assuming it remains similar
-        # But for 'replace_file_content' I must provide full replacement for the range.
-        # So I will re-implement the query logic here effectively.
-        
+
         all_projects = t.select(
-            t.project_id, t.name, t.location, t.budget_min, t.budget_max, t.configuration, t.status, t.possession_year
+            t.project_id, t.name, t.location, t.budget_min, t.budget_max,
+            t.configuration, t.status, t.possession_year, t.possession_quarter,
+            t.rera_number, t.amenities, t.usp, t.description
         ).collect()
-        
+
         loc_term = (merged_reqs.location or "").lower()
         conf_term = (merged_reqs.configuration or "").lower()
-        
+
         for p in all_projects:
             # Filter Location
             p_loc = p['location'].lower()
@@ -156,12 +153,40 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
 
             if p['budget_min'] <= budget_limit:
                 matches.append(f"{p['name']} ({p['status']})")
+                match_details.append(p)
             elif p['budget_min'] <= budget_limit * 1.2:
                 upsell_matches.append(f"{p['name']} ({p['budget_min']/100} Cr)")
 
         if matches:
-            action = f"I found these excellent matches: {', '.join(matches[:5])}."
-            # Create a simplified list for the agent
+            # Build detailed response with property information
+            response_parts = ["I found these excellent matches:\n"]
+
+            for i, proj in enumerate(match_details[:3], 1):  # Show top 3 in detail
+                response_parts.append(f"\n{i}. **{proj['name']}** ({proj['status']})")
+                response_parts.append(f"   📍 Location: {proj['location']}")
+                response_parts.append(f"   💰 Price Range: ₹{proj['budget_min']/100:.2f} - ₹{proj['budget_max']/100:.2f} Cr")
+                response_parts.append(f"   🏠 Configuration: {proj['configuration']}")
+                response_parts.append(f"   📅 Possession: {proj['possession_quarter']} {proj['possession_year']}")
+
+                if proj.get('usp'):
+                    response_parts.append(f"   ✨ USP: {proj['usp']}")
+
+                # Parse and show key amenities (first 3-4)
+                if proj.get('amenities'):
+                    amenities = proj['amenities'].replace("['", "").replace("']", "").replace("'", "")
+                    amenities_list = amenities.split(", ")[:4]
+                    response_parts.append(f"   🎯 Amenities: {', '.join(amenities_list)}")
+
+                if proj.get('rera_number'):
+                    response_parts.append(f"   📋 RERA: {proj['rera_number']}")
+
+            # If more than 3 matches, mention them
+            if len(matches) > 3:
+                response_parts.append(f"\n\nPlus {len(matches) - 3} more options available!")
+
+            response_parts.append("\n\nWould you like to schedule a site visit to see these properties? 🏡")
+
+            action = "\n".join(response_parts)
             state.last_system_action = f"shown_matches:{len(matches)}"
             next_node = "NODE 2A"
         else:
@@ -209,19 +234,42 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
         # For simplicity, re-run query with higher budget
         t = projects_table
         budget_limit = (merged_reqs.budget_max or 100) * 100 * 1.25 # 25% stretch
-        
+
         # Similar logic as Node 2 but strict on location/config
-        all_projects = t.select(t.name, t.budget_min, t.location, t.configuration).collect()
+        all_projects = t.select(
+            t.name, t.budget_min, t.budget_max, t.location, t.configuration,
+            t.status, t.possession_year, t.possession_quarter, t.amenities, t.usp
+        ).collect()
         upsell_list = []
+        upsell_details = []
         loc_term = (merged_reqs.location or "").lower()
-        
+        conf_term = (merged_reqs.configuration or "").lower()
+
         for p in all_projects:
-             if loc_term in p['location'].lower() and p['budget_min'] <= budget_limit:
-                 upsell_list.append(f"{p['name']} (Start: {p['budget_min']/100} Cr)")
-                 
+            if loc_term in p['location'].lower() and p['budget_min'] <= budget_limit:
+                # Also check configuration if specified
+                if conf_term and conf_term not in p['configuration'].lower():
+                    continue
+                upsell_list.append(f"{p['name']} (Start: {p['budget_min']/100} Cr)")
+                upsell_details.append(p)
+
         if upsell_list:
-            action = f"I found these premium options slightly above your range: {', '.join(upsell_list[:4])}. Shall we schedule a site visit to see the value they offer?"
-            state.current_node = "END" # Or special ending
+            response_parts = ["I found these premium options slightly above your range:\n"]
+
+            for i, proj in enumerate(upsell_details[:3], 1):
+                response_parts.append(f"\n{i}. **{proj['name']}** ({proj['status']})")
+                response_parts.append(f"   📍 Location: {proj['location']}")
+                response_parts.append(f"   💰 Price Range: ₹{proj['budget_min']/100:.2f} - ₹{proj['budget_max']/100:.2f} Cr")
+                response_parts.append(f"   🏠 Configuration: {proj['configuration']}")
+                response_parts.append(f"   📅 Possession: {proj['possession_quarter']} {proj['possession_year']}")
+
+                if proj.get('usp'):
+                    response_parts.append(f"   ✨ USP: {proj['usp']}")
+
+            response_parts.append("\n\nThese properties offer exceptional value and higher appreciation potential. Shall we schedule a site visit to see what makes them worth the investment? 🏡")
+
+            action = "\n".join(response_parts)
+            state.current_node = "END"
             next_node = "Face-to-Face Push"
         else:
             action = "Even with stretch, no options found."
@@ -251,48 +299,78 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
 
     # --- NODE 7: Alternate Location ---
     elif node == "NODE 7":
-        action = f"Searching wider zone around {merged_reqs.location}..."
-        
         t = projects_table
         budget_limit = (merged_reqs.budget_max or 100) * 100
         matches = []
-        
-        # 1. Try to identify the zone of the requested location
-        # Heuristic: Find any project that matches the requested location string, and get its 'zone'.
-        # If not found, fall back to simple text search or all zones.
-        
+        match_details = []
+
         loc_term = (merged_reqs.location or "").lower()
-        
+        conf_term = (merged_reqs.configuration or "").lower()
+
         # Get all projects to find zone context (small dataset)
-        all_projects = t.select(t.name, t.location, t.zone, t.budget_min).collect()
-        
+        all_projects = t.select(
+            t.name, t.location, t.zone, t.budget_min, t.budget_max,
+            t.configuration, t.status, t.possession_year, t.possession_quarter,
+            t.amenities, t.usp
+        ).collect()
+
         target_zone = None
         for p in all_projects:
             if loc_term in p['location'].lower():
                 target_zone = p['zone']
                 break
-        
+
         if not target_zone:
              # Fallback: Assume the input IS the zone (e.g. "East Bangalore") or just search all
              target_zone = "" # Search all
-        
+
         # Search for projects in the target zone (or all) that meet budget
         for p in all_projects:
              if p['budget_min'] <= budget_limit:
                  # If we have a target zone, enforce it.
                  if target_zone and (target_zone.lower() not in (p['zone'] or "").lower()):
                      continue
-                 
-                 # Don't show the same location user rejected (if they did)? 
+
+                 # Check configuration if specified
+                 if conf_term and conf_term not in p['configuration'].lower():
+                     continue
+
+                 # Don't show the same location user rejected (if they did)?
                  # Flowchart says "Alternate micro-locations".
                  # If original query was "Whitefield", and p['location'] is "Whitefield", maybe skip?
                  # For now, just show best options in zone.
                  matches.append(f"{p['name']} ({p['location']})")
-        
-        matches = list(set(matches))[:4] # Unique & Limit 4
-        
-        if matches:
-            action += f"\nFound nearby options in {target_zone or 'region'}: {', '.join(matches)}.\nCheck: Possession okay?"
+                 match_details.append(p)
+
+        # Remove duplicates and limit
+        unique_matches = []
+        unique_details = []
+        seen = set()
+        for i, m in enumerate(matches):
+            if m not in seen:
+                seen.add(m)
+                unique_matches.append(m)
+                unique_details.append(match_details[i])
+
+        unique_matches = unique_matches[:3]
+        unique_details = unique_details[:3]
+
+        if unique_matches:
+            response_parts = [f"I found excellent alternate options in {target_zone or 'nearby areas'}:\n"]
+
+            for i, proj in enumerate(unique_details, 1):
+                response_parts.append(f"\n{i}. **{proj['name']}** ({proj['status']})")
+                response_parts.append(f"   📍 Location: {proj['location']}")
+                response_parts.append(f"   💰 Price Range: ₹{proj['budget_min']/100:.2f} - ₹{proj['budget_max']/100:.2f} Cr")
+                response_parts.append(f"   🏠 Configuration: {proj['configuration']}")
+                response_parts.append(f"   📅 Possession: {proj['possession_quarter']} {proj['possession_year']}")
+
+                if proj.get('usp'):
+                    response_parts.append(f"   ✨ USP: {proj['usp']}")
+
+            response_parts.append("\n\nThese locations offer similar connectivity and amenities. Does the possession timeline work for you?")
+
+            action = "\n".join(response_parts)
             next_node = "NODE 8"
         else:
             action = "No alternate options found even in wider zone."
