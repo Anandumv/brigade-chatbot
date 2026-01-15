@@ -17,6 +17,7 @@ lxml>=5.0
 more-itertools>=10.2
 toml>=0.10
 pyarrow>=13.0.0,<18.0.0  # Pin to avoid source build
+jsonschema>=4.0.0
 # Pixeltable itself (installed with --no-deps in build command)
 # pixeltable>=0.2.0,<0.3.0
 
