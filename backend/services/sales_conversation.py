@@ -314,6 +314,27 @@ I've shared quite a bit of information here. This decision is important and dese
 👉 **When would be a good time for a quick call?** Even 15-20 minutes would help!
 """
 }
+# ============================================================================
+# SUGGESTED ACTIONS (Dynamic Chips)
+# ============================================================================
+
+SUGGESTED_ACTIONS = {
+    SalesIntent.FAQ_BUDGET_STRETCH: ["Show slightly higher options", "Stick to my budget"],
+    SalesIntent.FAQ_OTHER_LOCATION: ["Show nearby areas", "Why this location?", "Stick to my location"],
+    SalesIntent.FAQ_UNDER_CONSTRUCTION: ["Show RERA details", "Show ready options", "Explain payment plan"],
+    SalesIntent.FAQ_FACE_TO_FACE_MEETING: ["Schedule Meeting", "Video Call", "Not now"],
+    SalesIntent.FAQ_SITE_VISIT: ["Schedule Visit", "Send Location", "Not now"],
+    SalesIntent.FAQ_PINCLICK_VALUE: ["Show Customer Reviews", "Talk to an Expert"],
+    
+    SalesIntent.OBJECTION_BUDGET: ["Show slightly higher", "Show smaller units", "Stick to budget"],
+    SalesIntent.OBJECTION_LOCATION: ["Show nearby options", "Why is this better?", "Stick to my location"],
+    SalesIntent.OBJECTION_POSSESSION: ["Show ready to move", "Explain benefits", "Stick to timeline"],
+    SalesIntent.OBJECTION_UNDER_CONSTRUCTION: ["Show RERA Proof", "Show Ready Options"],
+    
+    SalesIntent.REQUEST_MEETING: ["Book for Tomorrow", "Book for Weekend", "Call me instead"],
+    SalesIntent.REQUEST_SITE_VISIT: ["Book for Tomorrow", "Book for Weekend", "Send details"],
+    "meeting_push": ["Schedule 15min Call", "Chat is fine"]
+}
 
 
 # ============================================================================
@@ -460,7 +481,7 @@ class SalesConversationHandler:
         self,
         query: str,
         state: Optional[ConversationState] = None
-    ) -> Tuple[str, SalesIntent, bool]:
+    ) -> Tuple[str, SalesIntent, bool, List[str]]:
         """
         Process sales-specific query and return appropriate response.
         
@@ -469,40 +490,42 @@ class SalesConversationHandler:
             state: Current conversation state (optional)
             
         Returns:
-            (response_text, intent, should_fallback_to_rag)
+            (response_text, intent, should_fallback_to_rag, suggested_actions)
         """
         intent = self.classify_sales_intent(query)
         
         logger.info(f"Sales intent classified: {intent.value} for query: {query[:50]}...")
         
+        actions = SUGGESTED_ACTIONS.get(intent, [])
+        
         # Handle FAQ intents
         if intent in FAQ_RESPONSES:
-            return FAQ_RESPONSES[intent], intent, False
+            return FAQ_RESPONSES[intent], intent, False, actions
         
         # Handle objection intents
         if intent in OBJECTION_RESPONSES:
-            return OBJECTION_RESPONSES[intent], intent, False
+            return OBJECTION_RESPONSES[intent], intent, False, actions
         
         # Handle meeting/visit requests
         if intent == SalesIntent.REQUEST_MEETING:
-            return MEETING_RESPONSES["schedule_meeting"], intent, False
+            return MEETING_RESPONSES["schedule_meeting"], intent, False, actions
             
         if intent == SalesIntent.REQUEST_SITE_VISIT:
-            return MEETING_RESPONSES["schedule_site_visit"], intent, False
+            return MEETING_RESPONSES["schedule_site_visit"], intent, False, actions
         
         # Handle agreement - suggest meeting
         if intent == SalesIntent.AGREEMENT:
             if state and state.awaiting_response:
                 # Context-aware response based on what we're waiting for
                 if "meeting" in state.awaiting_response.lower():
-                    return MEETING_RESPONSES["schedule_meeting"], intent, False
+                    return MEETING_RESPONSES["schedule_meeting"], intent, False, SUGGESTED_ACTIONS.get(SalesIntent.REQUEST_MEETING, [])
                 elif "visit" in state.awaiting_response.lower():
-                    return MEETING_RESPONSES["schedule_site_visit"], intent, False
+                    return MEETING_RESPONSES["schedule_site_visit"], intent, False, SUGGESTED_ACTIONS.get(SalesIntent.REQUEST_SITE_VISIT, [])
             # Default agreement response - push for meeting
-            return MEETING_RESPONSES["gentle_meeting_push"], intent, False
+            return MEETING_RESPONSES["gentle_meeting_push"], intent, False, SUGGESTED_ACTIONS.get("meeting_push", [])
         
         # Unknown intent - fallback to RAG/GPT
-        return "", intent, True
+        return "", intent, True, []
     
     def should_handle(self, query: str) -> bool:
         """

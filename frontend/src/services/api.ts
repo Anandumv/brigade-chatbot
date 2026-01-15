@@ -107,34 +107,16 @@ class ApiService {
         };
     }
 
-    // Send query with filters
+    // Send query with filters (Updated to use structured payload)
     async sendQueryWithFilters(
         query: string,
         filters: SelectedFilters,
         userId?: string
     ): Promise<ChatQueryResponse> {
-        // Build enhanced query based on filters
-        let enhancedQuery = query;
-
-        if (filters.configuration) {
-            enhancedQuery += ` ${filters.configuration}bhk`;
-        }
-        if (filters.location) {
-            enhancedQuery += ` in ${filters.location}`;
-        }
-        if (filters.budgetMax) {
-            const maxCr = filters.budgetMax / 10000000;
-            enhancedQuery += ` under ${maxCr}cr`;
-        }
-        if (filters.possessionYear && filters.possessionYear !== 'READY') {
-            enhancedQuery += ` possession ${filters.possessionYear}`;
-        } else if (filters.possessionYear === 'READY') {
-            enhancedQuery += ' ready to move';
-        }
-
         return this.sendQuery({
-            query: enhancedQuery.trim(),
+            query: query.trim(),
             user_id: userId,
+            filters: filters,
         });
     }
 

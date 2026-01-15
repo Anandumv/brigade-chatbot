@@ -6,6 +6,7 @@ import { SelectedFilters } from '@/types/filters';
 import { apiService } from '@/services/api';
 import { ResponseCard } from './ResponseCard';
 import { FilterPanel } from './FilterPanel';
+import { QuickReplies, getQuickRepliesForIntent } from './QuickReplies';
 import { Send, Loader2, Sparkles, User, AlertCircle, Zap } from '@/components/icons';
 
 interface ChatInterfaceProps {
@@ -89,7 +90,10 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                 sources: response.sources,
                 intent: response.intent,
                 isRefusal: response.is_refusal,
+                intent: response.intent,
+                isRefusal: response.is_refusal,
                 refusalReason: response.refusal_reason,
+                suggested_actions: response.suggested_actions,
             };
 
             setMessages((prev) =>
@@ -112,25 +116,28 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
     };
 
     return (
-        <div className="flex flex-col h-full bg-white font-sans text-gray-800">
+        <div className="flex flex-col h-full bg-gray-50 font-sans text-gray-800">
             {/* Minimal Header */}
-            <div className="flex-shrink-0 py-3 bg-white border-b border-gray-100 flex justify-center items-center z-10 sticky top-0">
-                <span className="font-semibold text-gray-700 tracking-tight">Pinclick Genie</span>
+            <div className="flex-shrink-0 py-4 bg-white/80 backdrop-blur-md border-b border-gray-200 flex justify-center items-center z-10 sticky top-0">
+                <span className="font-semibold text-gray-800 tracking-tight flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-orange-500" />
+                    Pinclick Genie
+                </span>
             </div>
 
             {/* Chat Area - Mobile optimized with safe areas */}
-            <div className="flex-1 overflow-y-auto w-full max-w-3xl mx-auto px-3 sm:px-4 pb-32 sm:pb-36">
+            <div className="flex-1 overflow-y-auto w-full max-w-3xl mx-auto px-4 sm:px-6 pb-32 sm:pb-36">
                 {messages.length === 0 ? (
                     <div className="flex flex-col items-center justify-center min-h-[50vh] sm:min-h-[60vh] text-center space-y-6 sm:space-y-8 animate-fade-in px-2 sm:px-4 pt-8">
                         <div className="space-y-3 sm:space-y-4">
-                            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-red-500 to-orange-400 flex items-center justify-center shadow-lg mx-auto">
+                            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-gradient-to-br from-gray-900 to-gray-800 flex items-center justify-center shadow-xl mx-auto ring-4 ring-white">
                                 <Sparkles className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
                             </div>
-                            <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">
+                            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">
                                 Pinclick Genie
                             </h1>
-                            <p className="text-gray-500 max-w-sm sm:max-w-md text-sm sm:text-base px-4">
-                                Your AI-powered real estate assistant. Ask about properties, prices & amenities.
+                            <p className="text-gray-500 max-w-sm sm:max-w-md text-sm sm:text-base px-4 leading-relaxed">
+                                Your AI sales assistant. Ask about properties, prices, or schedule visits instantly.
                             </p>
                         </div>
 
@@ -146,13 +153,13 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
 
                         {/* Quick Suggestions - Mobile optimized */}
                         <div className="w-full max-w-2xl px-2">
-                            <p className="text-xs text-gray-400 mb-2 sm:mb-3 uppercase tracking-wider">Try asking</p>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+                            <p className="text-[10px] text-gray-400 mb-3 uppercase tracking-widest font-semibold ml-1">Suggested Queries</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 {[
-                                    { icon: '🏠', text: '2BHK in Whitefield' },
-                                    { icon: '💰', text: 'Properties under 2 Cr' },
-                                    { icon: '🤝', text: 'Schedule a site visit' },
-                                    { icon: '💡', text: 'How to stretch my budget?' },
+                                    { icon: '🏠', text: '3BHK in Whitefield under 1.5 Cr' },
+                                    { icon: '💰', text: 'How to stretch my budget?' },
+                                    { icon: '🏗️', text: 'Why buy Under Construction?' },
+                                    { icon: '🤝', text: 'Schedule site visit' },
                                 ].map((suggestion, idx) => (
                                     <button
                                         key={idx}
@@ -160,17 +167,17 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                                             setInput(suggestion.text);
                                             inputRef.current?.focus();
                                         }}
-                                        className="flex items-center gap-2 sm:gap-3 p-3 sm:p-4 bg-gray-50 hover:bg-gray-100 active:bg-gray-200 rounded-xl text-left transition-all hover:shadow-md group touch-manipulation"
+                                        className="flex items-center gap-3 p-4 bg-white border border-gray-100/50 hover:border-gray-200 hover:shadow-md active:scale-[0.98] rounded-2xl text-left transition-all group duration-200"
                                     >
-                                        <span className="text-xl sm:text-2xl">{suggestion.icon}</span>
-                                        <span className="text-gray-700 group-hover:text-gray-900 text-xs sm:text-sm font-medium">{suggestion.text}</span>
+                                        <span className="text-xl group-hover:scale-110 transition-transform duration-200">{suggestion.icon}</span>
+                                        <span className="text-gray-600 group-hover:text-gray-900 text-sm font-medium">{suggestion.text}</span>
                                     </button>
                                 ))}
                             </div>
                         </div>
                     </div>
                 ) : (
-                    <div className="space-y-6 py-6">
+                    <div className="space-y-8 py-8">
                         {messages.map((message) => (
                             <div
                                 key={message.id}
@@ -178,15 +185,15 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                             >
                                 {/* Bot Icon */}
                                 {message.role === 'assistant' && (
-                                    <div className="w-8 h-8 flex-shrink-0 rounded-full bg-green-100 flex items-center justify-center mt-0.5">
-                                        <Sparkles className="w-4 h-4 text-green-600" />
+                                    <div className="w-8 h-8 flex-shrink-0 rounded-full bg-gradient-to-br from-gray-900 to-gray-800 flex items-center justify-center mt-1 shadow-sm ring-2 ring-white">
+                                        <Sparkles className="w-4 h-4 text-white" />
                                     </div>
                                 )}
 
                                 <div
-                                    className={`max-w-[85%] ${message.role === 'user'
-                                        ? 'bg-gray-100 text-gray-900 rounded-3xl px-5 py-3'
-                                        : 'w-full'
+                                    className={`relative ${message.role === 'user'
+                                        ? 'bg-gray-900 text-white rounded-2xl rounded-tr-sm px-6 py-4 shadow-sm max-w-[85%]'
+                                        : 'w-full max-w-[90%]'
                                         }`}
                                 >
                                     {message.role === 'user' ? (
@@ -198,13 +205,33 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                                             <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                                         </div>
                                     ) : (
-                                        <ResponseCard
-                                            content={message.content}
-                                            confidence={message.confidence}
-                                            sources={message.sources}
-                                            isRefusal={message.isRefusal}
-                                            refusalReason={message.refusalReason}
-                                        />
+                                        <>
+                                            <ResponseCard
+                                                content={message.content}
+                                                confidence={message.confidence}
+                                                sources={message.sources}
+                                                isRefusal={message.isRefusal}
+                                                refusalReason={message.refusalReason}
+                                            />
+                                            {messages.indexOf(message) === messages.length - 1 && (
+                                                <QuickReplies
+                                                    replies={
+                                                        message.suggested_actions
+                                                            ? message.suggested_actions.map(action => ({
+                                                                label: action,
+                                                                value: action,
+                                                                variant: 'primary'
+                                                            }))
+                                                            : (message.intent ? getQuickRepliesForIntent(message.intent as string) : [])
+                                                    }
+                                                    onSelect={(value) => {
+                                                        setInput(value);
+                                                        inputRef.current?.focus();
+                                                    }}
+                                                    disabled={isLoading}
+                                                />
+                                            )}
+                                        </>
                                     )}
                                 </div>
 

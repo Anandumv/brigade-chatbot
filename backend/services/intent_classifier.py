@@ -44,8 +44,10 @@ class IntentClassifier:
         query_lower = query.lower().strip()
 
         # Priority 0: Handle greetings - return greeting intent
-        greeting_words = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'howdy', 'hola']
-        if query_lower in greeting_words or query_lower.rstrip('!') in greeting_words:
+        greeting_words = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'howdy', 'hola', 'namaste']
+        # Check if query starts with a greeting or is just a greeting
+        cleaned_query = re.sub(r'[^\w\s]', '', query_lower)  # Remove punctuation
+        if any(cleaned_query.startswith(w) for w in greeting_words) and len(cleaned_query.split()) <= 4:
             logger.info(f"Detected greeting: {query}")
             return "greeting"
 
@@ -54,15 +56,16 @@ class IntentClassifier:
             logger.info(f"Detected property_search intent via keywords: {query[:50]}...")
             return "property_search"
         
-        # Priority 2: Detect sales FAQ queries (fast keyword match)
-        if self._is_sales_faq(query_lower):
-            logger.info(f"Detected sales_faq intent via keywords: {query[:50]}...")
-            return "sales_faq"
-        
-        # Priority 3: Detect sales objection queries (fast keyword match)
+        # Priority 2: Detect sales objection queries (fast keyword match)
+        # CHECK THIS BEFORE FAQ to capture negations like "I don't want"
         if self._is_sales_objection(query_lower):
             logger.info(f"Detected sales_objection intent via keywords: {query[:50]}...")
             return "sales_objection"
+        
+        # Priority 3: Detect sales FAQ queries (fast keyword match)
+        if self._is_sales_faq(query_lower):
+            logger.info(f"Detected sales_faq intent via keywords: {query[:50]}...")
+            return "sales_faq"
 
         # Priority 4: Fall back to GPT-4 classification for other intents
         try:
@@ -179,11 +182,14 @@ class IntentClassifier:
         
         # Additional objection patterns
         objection_patterns = [
-            r'(?:too|very)\s+(?:expensive|costly|high|far)',
+            r'(?:too|very)\s+(?:\w+\s+)*(?:expensive|costly|high|far)',
             r"(?:can't|cannot|won't|don't|do not)\s+(?:afford|wait|trust)",
-            r'(?:out\s+of|beyond|exceeds?)\s+(?:my\s+)?budget',
+            r'(?:out\s+of|beyond|exceeds?|above|more\s+than)\s+(?:my\s+)?budget',
+            r'\b(?:broke|cheap|poor|money|funds)\b',  # Slang triggers
             r'(?:not|don\'t)\s+(?:like|want|prefer)\s+(?:this|that)\s+(?:location|area|project)',
             r'(?:scared|worried|concerned)\s+(?:about|of)\s+(?:delay|construction)',
+            r'(?:congested|traffic|crowded|pollution)',
+            r"(?:do not|don't|not)\s+(?:want|like|prefer|need)\s+(?:under|uc|construction|waiting|ready)",
         ]
         
         for pattern in objection_patterns:
@@ -203,16 +209,20 @@ Classify user queries into exactly ONE of these categories:
 
 2. **project_fact** - Factual questions about specific project details (RERA number, amenities, specifications, sustainability features, etc.)
 
-3. **sales_pitch** - Requests for persuasive information or benefits (why buy here, what makes it unique, advantages, etc.)
+3. **sales_faq** - Questions about budget stretching, location switching, under-construction benefits, face-to-face meetings, site visits, or Pinclick value.
 
-4. **comparison** - Comparing multiple projects
+4. **sales_objection** - Objections related to price ("too expensive"), location ("too far"), possession time ("need ready to move"), or trust ("construction risk").
 
-5. **unsupported** - Questions we CANNOT answer (future predictions, ROI estimates, investment advice, legal advice, pricing trends, market forecasts, personal recommendations)
+5. **comparison** - Comparing multiple projects
+
+6. **unsupported** - Questions we CANNOT answer (future predictions, ROI estimates, investment advice, legal advice, pricing trends, market forecasts, personal recommendations)
 
 CRITICAL DISTINCTIONS:
 - "show me 2bhk options" = property_search (listing/filtering)
 - "what amenities does Brigade Citrine have?" = project_fact (specific project question)
-- "why should I invest?" = sales_pitch (persuasive)
+- "how can I stretch my budget?" = sales_faq
+- "this is too expensive" = sales_objection
+- "why should I invest?" = sales_faq (persuasive)
 
 CRITICAL: Classify as 'unsupported' if the query asks about:
 - Future property values or market trends

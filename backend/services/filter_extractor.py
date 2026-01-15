@@ -45,6 +45,9 @@ class PropertyFilters(BaseModel):
 
     # Developer
     developer_name: Optional[str] = Field(None, description="Developer/company name")
+    
+    # Property Type (From flowchart)
+    property_type: Optional[List[str]] = Field(None, description="['apartment', 'villa', 'plot', 'row house']")
 
     # Amenities (for future use)
     required_amenities: Optional[List[str]] = Field(None, description="Required amenities")
@@ -64,19 +67,13 @@ class PropertyFilters(BaseModel):
             self.min_area_sqft,
             self.max_area_sqft,
             self.status,
-            self.developer_name
+            self.developer_name,
+            self.property_type
         ])
 
     def to_sql_conditions(self) -> tuple[List[str], Dict[str, Any]]:
         """
         Convert filters to SQL WHERE conditions and parameters.
-
-        Returns:
-            (conditions_list, parameters_dict)
-
-        Example:
-            conditions = ["bedrooms = ANY(:bedrooms)", "base_price_inr <= :max_price"]
-            params = {"bedrooms": [2], "max_price": 30000000}
         """
         conditions = []
         params = {}
@@ -144,6 +141,18 @@ class PropertyFilters(BaseModel):
         if self.developer_name:
             conditions.append("LOWER(developer_name) LIKE LOWER(:developer)")
             params["developer"] = f"%{self.developer_name}%"
+            
+        # Property Type filter (New)
+        if self.property_type:
+            # Check config_summary for type keywords
+            type_conditions = []
+            for i, p_type in enumerate(self.property_type):
+                param_name = f"ptype_{i}"
+                type_conditions.append(f"LOWER(config_summary) LIKE :{param_name}")
+                params[param_name] = f"%{p_type}%"
+            
+            if type_conditions:
+                conditions.append(f"({' OR '.join(type_conditions)})")
 
         return conditions, params
 
@@ -182,28 +191,29 @@ class FilterExtractor:
             'calcutta': 'Kolkata'
         }
 
-        # Known localities (expanded from flowchart)
-        # North Bangalore areas
+        # Known localities (exact match from flowchart)
         self.localities = {
-            # Original areas
-            'whitefield', 'koramangala', 'indiranagar', 'hsr layout',
-            'electronic city', 'marathahalli', 'jp nagar', 'btm layout',
-            'jayanagar', 'rajajinagar', 'yeshwanthpur', 'hebbal',
-            'old madras road', 'sarjapur road', 'bannerghatta road',
-            # North Bangalore from flowchart
-            'budigere cross', 'harlur', 'devanahalli', 'banjara',
-            'helicopter road', 'khandike road', 'thanisandra', 'tumkur road',
-            # East Bangalore from flowchart
-            'sarjapur', 'jakkur', 'jalahalli', 'bagar', 'yelahanka',
-            # Additional common areas
-            'kr puram', 'mahadevpura', 'bellandur', 'varthur',
-            'hennur', 'kundanhalli', 'brookefield', 'kadugodi',
+            # East Bangalore (From flowchart)
+            'whitefield', 'budigere cross', 'varthur', 'gunjur', 
+            'sarjapur road', 'panathur road', 'kadugodi',
+            
+            # North Bangalore (From flowchart)
+            'thanisandra', 'jakkur', 'baglur', 'yelahanka', 'devanahalli',
+            'airport', 'kempegowda international airport', 'bial',
+            
+            # Other common areas
+            'koramangala', 'indiranagar', 'hsr layout', 'electronic city',
+            'marathahalli', 'jp nagar', 'btm layout', 'jayanagar', 
+            'rajajinagar', 'yeshwanthpur', 'hebbal', 'old madras road',
+            'bannerghatta road', 'kr puram', 'mahadevpura', 'bellandur',
+            'hennur', 'kundanhalli', 'brookefield',
         }
 
         # Status keywords
         self.status_keywords = {
             'ready': ['completed'],
             'ready to move': ['completed'],
+            'rtmi': ['completed'],  # Added from flowchart
             'immediate possession': ['completed'],
             'under construction': ['ongoing'],
             'ongoing': ['ongoing'],
@@ -224,12 +234,6 @@ class FilterExtractor:
     def extract_filters(self, query: str) -> PropertyFilters:
         """
         Extract structured filters from natural language query using regex patterns.
-
-        Examples:
-        - "2bhk under 3cr in Bangalore" → {bedrooms:[2], max_price:30000000, city:"Bangalore"}
-        - "3bhk ready to move whitefield" → {bedrooms:[3], status:["completed"], locality:"Whitefield"}
-        - "affordable 2bhk possession 2027" → {bedrooms:[2], possession_year:2027}
-        - "show me brigade 2bhk" → {bedrooms:[2], developer_name:"Brigade Group"}
         """
         query_lower = query.lower()
         filters = PropertyFilters()
@@ -259,6 +263,9 @@ class FilterExtractor:
 
         # Extract developer
         filters.developer_name = self._extract_developer(query_lower)
+        
+        # Extract property type
+        filters.property_type = self._extract_property_type(query_lower)
 
         logger.info(f"Extracted filters: {filters.dict(exclude_none=True)}")
 
@@ -281,18 +288,27 @@ class FilterExtractor:
                     bedrooms.add(bedroom_count)
 
         return sorted(list(bedrooms)) if bedrooms else None
+        
+    def _extract_property_type(self, query: str) -> Optional[List[str]]:
+        """Extract property type: 'villa', 'plot', 'row house'"""
+        types = set()
+        
+        if 'villa' in query:
+            types.add('villa')
+        if 'plot' in query or 'land' in query:
+            types.add('plot')
+        if 'row house' in query or 'rowhouse' in query:
+            types.add('row house')
+        if 'apartment' in query or 'flat' in query:
+            types.add('apartment')
+            
+        return list(types) if types else None
 
     def _extract_price(self, query: str) -> tuple[Optional[int], Optional[int], Optional[int]]:
         """
         Extract price range from query.
 
         Returns: (min_price, max_price, budget)
-
-        Examples:
-        - "under 3cr" → (None, 30000000, None)
-        - "above 2cr" → (20000000, None, None)
-        - "between 2cr and 5cr" → (20000000, 50000000, None)
-        - "around 3cr" → (None, None, 30000000)
         """
         min_price = None
         max_price = None
@@ -424,6 +440,7 @@ Available fields:
 - possession_year: integer (2027, 2028, etc.)
 - status: list of strings ["completed", "ongoing", "upcoming"]
 - developer_name: string (Brigade Group, Prestige Group, etc.)
+- property_type: list of strings ["apartment", "villa", "plot"]
 
 Price conversion:
 - 1 crore (cr) = 10,000,000 INR
@@ -463,6 +480,79 @@ Return ONLY valid JSON with extracted filters. If a field cannot be determined, 
             # Fall back to regex extraction
             return self.extract_filters(query)
 
+    def merge_filters(self, nlp_filters: PropertyFilters, ui_filters: Dict[str, Any]) -> PropertyFilters:
+        """
+        Merge explicit UI filters into NLP-extracted filters.
+        UI filters take precedence.
+        """
+        if not ui_filters:
+            return nlp_filters
+            
+        merged = nlp_filters.copy()
+        
+        # Merge logic
+        # 1. Configuration (BHK)
+        if ui_filters.get('configuration'):
+            try:
+                # "2" -> [2], "2.5" -> [2, 3] logic or strictly follows UI?
+                # Converting UI string to bedroom list
+                conf = ui_filters['configuration']
+                if conf == 'plots':
+                    merged.property_type = ['plot']
+                    merged.bedrooms = None
+                elif conf == 'villa':
+                    merged.property_type = ['villa']
+                else:
+                    # '2', '2.5', '3'
+                    val = float(conf)
+                    if val.is_integer():
+                        merged.bedrooms = [int(val)]
+                    else:
+                        # Handle .5 (e.g. 2.5 BHK) -> maybe map to closest or explicit field?
+                        # For now mapping 2.5 -> [2, 3] or just keep as is if downstream handler supports it
+                        # Since PropertyFilters uses List[int], we might need to broaden it or round
+                        merged.bedrooms = [int(val), int(val)+1] # 2.5 -> [2, 3]
+            except ValueError:
+                pass
+                
+        # 2. Location
+        if ui_filters.get('location'):
+            # UI sends "whitefield", "north_bangalore", etc.
+            loc = ui_filters['location']
+            # Check if it's an area or locality
+            if 'bangalore' in loc: 
+                merged.area = loc.replace('_', ' ').title() # north_bangalore -> North Bangalore
+            else:
+                merged.locality = loc.replace('_', ' ').title() # whitefield -> Whitefield
+                
+        # 3. Budget (Range sent as min/max usually, but check API)
+        # Frontend sends budgetMin / budgetMax in payload usually?
+        # Checking api.ts: it sends the whole 'SelectedFilters' object which has budgetMin/Max
+        
+        if ui_filters.get('budgetMin'):
+            merged.min_price_inr = int(ui_filters['budgetMin'])
+            merged.budget_inr = None # Clear vague budget if explicit range set
+            
+        if ui_filters.get('budgetMax'):
+            merged.max_price_inr = int(ui_filters['budgetMax'])
+            if not ui_filters.get('budgetMin'):
+                 merged.budget_inr = None
+
+        # 4. Possession
+        if ui_filters.get('possessionYear'):
+            val = ui_filters['possessionYear']
+            if val == 'READY':
+                merged.status = ['completed']
+                merged.possession_year = None
+            else:
+                try:
+                    merged.possession_year = int(val)
+                except:
+                    pass
+                    
+        return merged
+
 
 # Global instance
 filter_extractor = FilterExtractor()
+

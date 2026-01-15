@@ -1,6 +1,6 @@
 """
 Response formatting service for sales-optimized output.
-Formats property search results as structured lists vs general answers as formatted text.
+Formats property search results with EMI, pitch points, and sales tools.
 """
 
 from typing import Dict, List, Any, Literal, Optional
@@ -8,6 +8,12 @@ from pydantic import BaseModel
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Import sales intelligence for EMI calculation
+try:
+    from services.sales_intelligence import sales_intelligence
+except ImportError:
+    sales_intelligence = None
 
 ResponseFormat = Literal["structured_list", "formatted_text", "comparison_table"]
 
@@ -32,15 +38,8 @@ class ResponseFormatter:
         filters: Dict
     ) -> FormattedResponse:
         """
-        Format property search results as structured cards.
-
-        Args:
-            projects: List of matching projects with units
-            query: Original user query
-            filters: Extracted filters used for search
-
-        Returns:
-            FormattedResponse with structured list format
+        Format property search results as rich sales cards.
+        Includes amenities, highlights, possession, and CTA.
         """
         project_count = len(projects)
         filter_desc = self._describe_filters(filters)
@@ -68,51 +67,90 @@ class ResponseFormatter:
             answer += f" {filter_desc}"
         answer += ":**\n\n"
 
-        # Format each project as a card
+        # Format each project as a rich sales card
         for idx, project in enumerate(projects[:3], 1):
             answer += f"**{idx}. {project['project_name']}**"
             if project.get('developer_name'):
                 answer += f" by {project['developer_name']}"
             answer += "\n"
 
-            # Location
-            if project.get('location') or project.get('city'):
-                loc = project.get('location') or project.get('city')
-                answer += f"📍 {loc}\n"
+            # Location with link if available
+            loc = project.get('location') or project.get('city', '')
+            if loc:
+                answer += f"📍 {loc}"
+                if project.get('total_land_area'):
+                    answer += f" | {project['total_land_area']}"
+                answer += "\n"
 
-            # Price range
+            # Price range with EMI
             if project.get('price_range'):
-                answer += f"💰 {project['price_range']['min_display']} - {project['price_range']['max_display']}\n"
+                price_range = project['price_range']
+                answer += f"💰 {price_range['min_display']} - {price_range['max_display']}"
+                
+                # Calculate EMI for minimum price
+                min_price = price_range.get('min', 0)
+                if min_price and min_price > 0 and sales_intelligence:
+                    try:
+                        emi_info = sales_intelligence.calculate_emi(int(min_price * 10000000))
+                        answer += f" | EMI: **{emi_info['emi_display']}**"
+                    except:
+                        pass
+                answer += "\n"
 
-            # Unit count - use unit_count field
-            unit_count = project.get('unit_count', project.get('matching_unit_count', 0))
-            answer += f"🏗️ {unit_count} matching unit{'s' if unit_count != 1 else ''}\n"
+            # Possession timeline
+            if project.get('possession_year'):
+                answer += f"📅 Possession: {project['possession_year']}\n"
 
-            # Show sample units - use matching_units field
-            sample_units = project.get('matching_units', project.get('sample_units', []))
+            # Config & status
+            if project.get('config_summary'):
+                answer += f"🏗️ {project['config_summary']}"
+                if project.get('status'):
+                    answer += f" | {project['status']}"
+                answer += "\n"
+
+            # Show sample units
+            sample_units = project.get('matching_units', [])
+            unit_count = project.get('unit_count', len(sample_units))
             for unit in sample_units[:2]:
-                unit_line = f"  • {unit.get('bedrooms', '?')}BHK"
+                unit_line = f"  • {unit.get('type_name', str(unit.get('bedrooms', '?')) + 'BHK')}"
                 if unit.get('price_display'):
                     unit_line += f": {unit['price_display']}"
-                if unit.get('carpet_area_sqft'):
-                    unit_line += f" | {unit['carpet_area_sqft']} sqft"
-                if unit.get('possession'):
-                    unit_line += f" | {unit['possession']}"
+                if unit.get('carpet_area_sqft') or unit.get('area_display'):
+                    area = unit.get('area_display') or f"{unit.get('carpet_area_sqft')} sqft"
+                    unit_line += f" | {area}"
                 answer += unit_line + "\n"
 
-            if project.get('can_expand') and unit_count > 2:
-                remaining = unit_count - 2
-                answer += f"  ➕ *+{remaining} more unit{'s' if remaining != 1 else ''} available*\n"
+            if unit_count > 2:
+                answer += f"  ➕ *+{unit_count - 2} more units*\n"
 
-            # RERA number if available
-            if project.get('rera_number'):
-                answer += f"📋 RERA: {project['rera_number']}\n"
+            # KEY HIGHLIGHTS for sales pitch
+            if project.get('highlights'):
+                highlights = project['highlights'][:200]  # Truncate long text
+                if highlights:
+                    answer += f"\n✨ **Pitch Points:** {highlights}\n"
 
-            answer += "\n"
+            # AMENITIES summary
+            if project.get('amenities'):
+                amenities = project['amenities'][:150]  # Truncate
+                if amenities:
+                    answer += f"🎯 **Amenities:** {amenities}\n"
 
-        # Footer if more projects available
-        if project_count > 3:
-            answer += f"*Showing top 3 projects. {project_count - 3} more project{'s' if project_count - 3 != 1 else ''} match{'es' if project_count - 3 == 1 else ''} your criteria.*\n"
+            # SALES ACTION - RM Contact & Brochure
+            answer += "\n📞 **Quick Actions:**\n"
+            if project.get('rm_contact'):
+                answer += f"  • Call RM: {project['rm_contact']}\n"
+            if project.get('brochure_link'):
+                answer += f"  • [Download Brochure]({project['brochure_link']})\n"
+            if project.get('location_link'):
+                answer += f"  • [View on Map]({project['location_link']})\n"
+
+            answer += "\n---\n\n"
+
+        # CTA at the end
+        answer += "🤝 **Ready to help!** Would you like me to:\n"
+        answer += "• Schedule a **site visit** for any project?\n"
+        answer += "• Arrange a **meeting** with our sales team?\n"
+        answer += "• Get **detailed pricing** for a specific unit?\n"
 
         return FormattedResponse(
             format_type="structured_list",
@@ -122,7 +160,7 @@ class ResponseFormatter:
                 "total_count": project_count,
                 "filters_applied": filters
             },
-            sources=[],  # Property searches use structured data, not chunk sources
+            sources=[],
             confidence="High" if project_count > 0 else "Low",
             intent="property_search"
         )

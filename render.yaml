@@ -3,6 +3,7 @@ services:
     name: brigade-chatbot-api
     env: python
     region: oregon
+    rootDir: backend
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
@@ -22,4 +23,14 @@ services:
       - key: LLM_MODEL
         value: gpt-4
       - key: PYTHON_VERSION
-        value: 3.11.0
+        value: 3.9.0
+      - key: PIXELTABLE_DB_URL
+        fromDatabase:
+          name: brigade-db
+          property: connectionString
+
+databases:
+  - name: brigade-db
+    plan: free
+    databaseName: pixeltable
+    user: brigade_user

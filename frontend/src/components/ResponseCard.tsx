@@ -57,7 +57,7 @@ export function ResponseCard({
     return (
         <div className="w-full">
             {/* Main Content */}
-            <div className={`rounded-lg p-4 ${isRefusal ? 'bg-amber-50 border border-amber-200' : 'bg-white'}`}>
+            <div className={`rounded-2xl rounded-tl-sm p-5 shadow-sm ${isRefusal ? 'bg-amber-50 border border-amber-200' : 'bg-white border border-gray-200'}`}>
                 {isRefusal && refusalReason && (
                     <div className="flex items-center gap-2 mb-3 text-amber-700 text-sm font-medium">
                         <AlertCircle className="w-4 h-4" />
@@ -65,17 +65,19 @@ export function ResponseCard({
                     </div>
                 )}
 
-                <div className="prose prose-sm max-w-none text-gray-800">
+                <div className="prose prose-sm sm:prose-base max-w-none text-gray-700 prose-p:leading-relaxed prose-headings:text-gray-900 prose-strong:text-gray-900 prose-strong:font-semibold">
                     <ReactMarkdown>{content}</ReactMarkdown>
                 </div>
 
-                {/* Confidence Badge */}
+                {/* Confidence Badge - simplified */}
                 {confidence && !isRefusal && (
-                    <div className="mt-4 flex items-center gap-2">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${getConfidenceColor()}`}>
-                            {getConfidenceIcon()}
-                            {confidence} Confidence
-                        </span>
+                    <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-3">
+                        <div className="flex items-center gap-2">
+                            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-semibold ${getConfidenceColor()}`}>
+                                {getConfidenceIcon()}
+                                {confidence}
+                            </span>
+                        </div>
                     </div>
                 )}
             </div>

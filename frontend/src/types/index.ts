@@ -34,6 +34,7 @@ export interface ChatQueryRequest {
     project_id?: string;
     user_id?: string;
     persona?: string;
+    filters?: any; // SelectedFilters type to be imported if needed, or loose coupling
 }
 
 export interface ChatQueryResponse {
@@ -45,6 +46,7 @@ export interface ChatQueryResponse {
     refusal_reason?: string;
     response_time_ms: number;
     hallucination_risk?: boolean;
+    suggested_actions?: string[];
 }
 
 export interface CompareProjectsRequest {
@@ -63,6 +65,7 @@ export interface Message {
     intent?: IntentType;
     isRefusal?: boolean;
     refusalReason?: string;
+    suggested_actions?: string[];
     isLoading?: boolean;
 }
 

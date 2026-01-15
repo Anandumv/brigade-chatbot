@@ -3,9 +3,10 @@ fastapi==0.109.0
 uvicorn[standard]==0.27.0
 python-multipart==0.0.6
 
-# Database
-supabase==2.0.3
-psycopg2-binary==2.9.9
+# Database (Pixeltable-only mode)
+pixeltable>=0.3.0
+psycopg2-binary==2.9.9  # For local Pixeltable storage
+# supabase==2.0.3  # Optional: uncomment if using hybrid mode
 
 # OpenAI
 openai==1.10.0

@@ -1,11 +1,12 @@
 """
 Retrieval service for vector similarity search of document chunks.
+Pixeltable-only mode - uses pixeltable_client instead of Supabase.
 """
 
 from typing import List, Dict, Any, Optional
 from openai import OpenAI
 from config import settings
-from database.supabase_client import supabase_client
+from database.pixeltable_client import pixeltable_client
 import logging
 
 logger = logging.getLogger(__name__)
@@ -113,23 +114,17 @@ class RetrievalService:
         threshold = similarity_threshold or self.similarity_threshold
         limit = top_k or self.top_k
 
-        # Try vector similarity search first
-        chunks = await supabase_client.search_similar_chunks(
-            query_embedding=query_embedding,
-            match_threshold=threshold,
-            match_count=limit,
-            filter_project_id=project_id,
-            filter_source_type=source_type
-        )
-
-        # Fallback to text search if vector search returns no results
-        if not chunks:
-            logger.warning("Vector search returned no results, falling back to text search")
-            chunks = await supabase_client.search_chunks_by_text(
-                query=query,
-                limit=limit,
-                filter_project_id=project_id
+        # Use Pixeltable for document search
+        try:
+            chunks = await pixeltable_client.search_documents(
+                query=expanded_query,
+                project_id=project_id,
+                similarity_threshold=threshold,
+                top_k=limit
             )
+        except Exception as e:
+            logger.warning(f"Pixeltable search failed: {e}")
+            chunks = []
 
         logger.info(f"Retrieved {len(chunks)} chunks with similarity >= {threshold}")
 

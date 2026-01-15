@@ -1,6 +1,6 @@
 """
 Configuration management for the Real Estate Sales Intelligence Chatbot.
-Loads environment variables and provides typed configuration objects.
+Pixeltable-only mode - Supabase is optional.
 """
 
 from pydantic_settings import BaseSettings
@@ -17,9 +17,9 @@ class Settings(BaseSettings):
     # Tavily Configuration (for web search)
     tavily_api_key: Optional[str] = "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"
 
-    # Supabase Configuration
-    supabase_url: str
-    supabase_key: str
+    # Supabase Configuration (OPTIONAL - only for hybrid mode)
+    supabase_url: Optional[str] = None
+    supabase_key: Optional[str] = None
     supabase_service_key: Optional[str] = None
 
     # Application Configuration
@@ -35,15 +35,22 @@ class Settings(BaseSettings):
 
     # LLM Configuration
     gpt_model: str = "openai/gpt-4-turbo-preview"  # OpenRouter format
+    llm_model: Optional[str] = None  # Alias for gpt_model from env
     max_tokens: int = 1500
     temperature: float = 0.1  # Low temperature for factual responses
 
     # Response Time Configuration
     target_response_time: int = 3000  # milliseconds
 
+    # Pixeltable Configuration (PRIMARY DATABASE)
+    use_pixeltable: str = "true"  # Default to Pixeltable-only mode
+    pixeltable_data_dir: Optional[str] = None  # Custom data directory
+    pixeltable_mode: str = "exclusive"  # "exclusive" or "hybrid"
+
     class Config:
         env_file = ".env"
         case_sensitive = False
+        extra = "ignore"  # Ignore extra env vars
 
 
 # Global settings instance

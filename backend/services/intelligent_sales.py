@@ -17,6 +17,9 @@ from pydantic import BaseModel
 import json
 import httpx
 
+from services.sales_intelligence import sales_intelligence
+from services.sales_conversation import SUGGESTED_ACTIONS
+
 logger = logging.getLogger(__name__)
 
 
@@ -235,12 +238,35 @@ If they still prefer ready-to-move:
 class IntelligentSalesHandler:
     """
     Highly intelligent sales conversation handler powered by GPT-4.
+    Integrates with Pixeltable for pre-computed FAQ responses and session manager for CTAs.
     """
     
     def __init__(self):
         self.api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENROUTER_API_KEY")
         self.api_base = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
         self.model = os.getenv("LLM_MODEL", "openai/gpt-4-turbo-preview")
+        
+        # Try to initialize Pixeltable for pre-computed FAQs
+        self.pixeltable_available = False
+        try:
+            from services.pixeltable_retrieval import pixeltable_retrieval
+            self.pixeltable_retrieval = pixeltable_retrieval
+            self.pixeltable_available = pixeltable_retrieval.is_available()
+            if self.pixeltable_available:
+                logger.info("Pixeltable FAQ integration enabled")
+        except ImportError:
+            logger.warning("Pixeltable not available, using LLM-only responses")
+            self.pixeltable_retrieval = None
+        
+        # Session manager for CTA tracking
+        try:
+            from services.session_manager import session_manager, get_cta_for_context
+            self.session_manager = session_manager
+            self.get_cta = get_cta_for_context
+            logger.info("Session manager integration enabled")
+        except ImportError:
+            self.session_manager = None
+            self.get_cta = None
         
     async def _call_llm(
         self, 
@@ -302,18 +328,6 @@ class IntelligentSalesHandler:
         
         # Quick checks for common patterns
         
-        # Agreement/Disagreement
-        agreement_words = ["yes", "ok", "okay", "sure", "sounds good", "let's do it", 
-                          "i agree", "that works", "fine", "alright", "go ahead", "yes please"]
-        disagreement_words = ["no", "not interested", "don't want", "can't", 
-                             "not possible", "don't agree", "won't work", "no thanks"]
-        
-        if any(query_lower.startswith(word) or query_lower == word for word in agreement_words):
-            return SalesIntent.AGREEMENT
-            
-        if any(query_lower.startswith(word) or query_lower == word for word in disagreement_words):
-            return SalesIntent.DISAGREEMENT
-        
         # Meeting/Visit requests
         meeting_patterns = [
             "schedule meeting", "schedule a meeting", "book meeting", "arrange meeting",
@@ -336,7 +350,8 @@ class IntelligentSalesHandler:
                           "budget flexibility", "how to afford", "extend budget",
                           "budget upgrade", "higher budget worth", "spend more worth",
                           "why stretch", "should i stretch", "stretching budget",
-                          "worth stretching", "stretching my budget", "increase my budget"]
+                          "worth stretching", "stretching my budget", "increase my budget",
+                          "how can i stretch", "stretch my budget", "can i stretch"]
         if any(p in query_lower for p in budget_patterns):
             return SalesIntent.FAQ_BUDGET_STRETCH
         
@@ -346,30 +361,35 @@ class IntelligentSalesHandler:
         if any(p in query_lower for p in location_patterns):
             return SalesIntent.FAQ_OTHER_LOCATION
         
-        construction_patterns = ["under construction", "not ready", "still building",
-                                "construction project", "benefit of under", "why under construction"]
+        construction_patterns = ["benefit of under", "why under construction", "what about access"]
         if any(p in query_lower for p in construction_patterns):
             return SalesIntent.FAQ_UNDER_CONSTRUCTION
         
         f2f_patterns = ["face to face", "meet in person", "personal meeting",
-                       "why meet", "importance of meeting", "should we meet"]
+                       "why meet", "importance of meeting", "should we meet",
+                       "why do i need to meet", "why meeting", "can't you send details", 
+                       "send on whatsapp", "share on whatsapp"]
         if any(p in query_lower for p in f2f_patterns):
             return SalesIntent.FAQ_FACE_TO_FACE_MEETING
         
         pinclick_patterns = ["pinclick", "your company", "your service", "what do you offer",
-                            "why should i use", "your value", "how you help"]
+                            "why should i use", "your value", "how you help", "why buy through"]
         if any(p in query_lower for p in pinclick_patterns):
             return SalesIntent.FAQ_PINCLICK_VALUE
         
         # Objection patterns
         budget_objection = ["too expensive", "can't afford", "beyond budget", "out of budget",
                            "very costly", "high price", "expensive", "not in my budget",
-                           "price is high", "over budget"]
+                           "price is high", "over budget", "tight budget", "budget issue",
+                           "above my budget", "more than my budget", "broke", "cheap", 
+                           "less price", "low budget"]
         if any(p in query_lower for p in budget_objection):
             return SalesIntent.OBJECTION_BUDGET
         
         location_objection = ["too far", "far from", "don't like location", "location is far",
-                             "commute issue", "far from office", "distance problem"]
+                             "commute issue", "far from office", "distance problem", 
+                             "prefer indiranagar", "prefer koramangala", "prefer whitefield",
+                             "congested", "traffic", "pollution", "crowded"]
         if any(p in query_lower for p in location_objection):
             return SalesIntent.OBJECTION_LOCATION
         
@@ -379,15 +399,31 @@ class IntelligentSalesHandler:
             return SalesIntent.OBJECTION_POSSESSION
         
         uc_objection = ["don't trust", "scared of delay", "construction risk", 
-                       "prefer ready", "want ready only", "ready to move only"]
+                       "prefer ready", "want ready only", "ready to move only",
+                       "don't want under construction", "not under construction", 
+                       "delay", "delays", "scared of construction", "construction delay",
+                       "not want ready", "don't want ready"]
         if any(p in query_lower for p in uc_objection):
             return SalesIntent.OBJECTION_UNDER_CONSTRUCTION
         
         # Property query patterns
         property_patterns = ["show me", "find me", "looking for", "search", "bhk",
-                            "bedroom", "2bhk", "3bhk", "apartments", "flats", "property"]
+                            "bedroom", "2bhk", "3bhk", "apartments", "flats", "property",
+                            "villa", "plot", "row house"]
         if any(p in query_lower for p in property_patterns):
             return SalesIntent.PROPERTY_QUERY
+            
+        # Agreement/Disagreement (Moved to end)
+        agreement_words = ["yes", "ok", "okay", "sure", "sounds good", "let's do it", 
+                          "i agree", "that works", "fine", "alright", "go ahead", "yes please"]
+        disagreement_words = ["no", "not interested", "don't want", "can't", 
+                             "not possible", "don't agree", "won't work", "no thanks"]
+        
+        if any(query_lower.startswith(word) or query_lower == word for word in agreement_words):
+            return SalesIntent.AGREEMENT
+            
+        if any(query_lower.startswith(word) or query_lower == word for word in disagreement_words):
+            return SalesIntent.DISAGREEMENT
         
         return SalesIntent.UNKNOWN
 
@@ -498,25 +534,88 @@ I'd love to help you further!
     async def handle_query(
         self,
         query: str,
-        context: Optional[ConversationContext] = None
-    ) -> Tuple[str, SalesIntent, bool]:
+        context: Optional[ConversationContext] = None,
+        session_id: Optional[str] = None
+    ) -> Tuple[str, SalesIntent, bool, List[str]]:
         """
         Main entry point for handling sales queries.
+        Now with Pixeltable FAQ integration and session-aware CTAs.
         
         Returns:
-            (response_text, intent, should_fallback_to_rag)
+            (response_text, intent, should_fallback_to_rag, suggested_actions)
         """
         intent = self.classify_intent(query)
         logger.info(f"Classified sales intent: {intent.value}")
         
         # For unknown intents or property queries, fallback to RAG
         if intent in [SalesIntent.UNKNOWN, SalesIntent.PROPERTY_QUERY]:
-            return "", intent, True
+            return "", intent, True, []
         
-        # Generate intelligent response
-        response = await self.generate_intelligent_response(query, intent, context)
         
-        return response, intent, False
+        # Try sales intelligence service for sales FAQs
+        response = None
+        faq_type_map = {
+            SalesIntent.FAQ_BUDGET_STRETCH: "stretch_budget",
+            SalesIntent.FAQ_OTHER_LOCATION: "convince_location",
+            SalesIntent.FAQ_UNDER_CONSTRUCTION: "under_construction",
+            SalesIntent.FAQ_FACE_TO_FACE_MEETING: "face_to_face",
+            SalesIntent.FAQ_SITE_VISIT: "site_visit",
+            SalesIntent.FAQ_PINCLICK_VALUE: "pinclick_value",
+            
+            # Map objections to handlers too
+            SalesIntent.OBJECTION_BUDGET: "stretch_budget",
+            SalesIntent.OBJECTION_LOCATION: "convince_location",
+            SalesIntent.OBJECTION_POSSESSION: "under_construction",
+            SalesIntent.OBJECTION_UNDER_CONSTRUCTION: "under_construction"
+        }
+        
+        if intent in faq_type_map and sales_intelligence:
+            faq_type = faq_type_map[intent]
+            logger.info(f"Using Sales Intelligence for {faq_type}")
+            response = sales_intelligence.get_faq_response(faq_type)
+        
+        # Fallback to GPT-4 if no response
+        if not response:
+            response = await self.generate_intelligent_response(query, intent, context)
+        
+        # Track objections in session
+        if session_id and self.session_manager:
+            objection_types = {
+                SalesIntent.OBJECTION_BUDGET: "budget",
+                SalesIntent.OBJECTION_LOCATION: "location",
+                SalesIntent.OBJECTION_POSSESSION: "possession",
+                SalesIntent.OBJECTION_UNDER_CONSTRUCTION: "construction"
+            }
+            if intent in objection_types:
+                self.session_manager.record_objection(session_id, objection_types[intent])
+        
+        # Add session-aware CTA
+        if session_id and self.session_manager and self.get_cta:
+            cta_type = self.session_manager.get_next_cta(session_id)
+            cta_context = self._get_cta_context(intent)
+            cta_text = self.get_cta(cta_type, cta_context)
+            
+            # Mark CTA as suggested
+            self.session_manager.mark_cta_suggested(session_id, cta_type)
+            
+            # Add CTA to response if not already present
+            if "schedule" not in response.lower() and "meeting" not in response.lower():
+                response += cta_text
+        
+        return response, intent, False, SUGGESTED_ACTIONS.get(intent, [])
+    
+    def _get_cta_context(self, intent: SalesIntent) -> str:
+        """Map intent to CTA context for appropriate messaging."""
+        context_map = {
+            SalesIntent.FAQ_BUDGET_STRETCH: "budget",
+            SalesIntent.OBJECTION_BUDGET: "budget",
+            SalesIntent.FAQ_OTHER_LOCATION: "location",
+            SalesIntent.OBJECTION_LOCATION: "location",
+            SalesIntent.FAQ_UNDER_CONSTRUCTION: "possession",
+            SalesIntent.OBJECTION_POSSESSION: "possession",
+            SalesIntent.OBJECTION_UNDER_CONSTRUCTION: "possession"
+        }
+        return context_map.get(intent, "general")
     
     def should_handle(self, query: str) -> bool:
         """Check if this handler should process the query."""
@@ -526,3 +625,4 @@ I'd love to help you further!
 
 # Global instance
 intelligent_sales = IntelligentSalesHandler()
+

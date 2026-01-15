@@ -1,5 +1,6 @@
 """
 Main FastAPI application for Real Estate Sales Intelligence Chatbot.
+Powered by Pixeltable - No Supabase Required!
 """
 
 from fastapi import FastAPI, HTTPException, Depends
@@ -24,11 +25,14 @@ from services.filter_extractor import filter_extractor
 from services.response_formatter import response_formatter
 from services.query_preprocessor import query_preprocessor
 from services.sales_conversation import sales_conversation, get_filter_options, SalesIntent
-from services.intelligent_sales import intelligent_sales, SalesIntent as AISalesIntent
-from database.supabase_client import supabase_client
+from services.intelligent_sales import intelligent_sales, ConversationContext, SalesIntent as AISalesIntent
+from services.sales_intelligence import sales_intelligence
+
+# Pixeltable-only mode - replacing Supabase
+from database.pixeltable_client import pixeltable_client
 
 # Force reload triggers
-# Last updated: fixes applied for mock retrieval
+# Last updated: Migrated to Pixeltable-only architecture
 
 # Configure logging
 logging.basicConfig(
@@ -75,7 +79,9 @@ class ChatQueryRequest(BaseModel):
     query: str
     project_id: Optional[str] = None
     user_id: Optional[str] = None  # Required for logging
+    session_id: Optional[str] = None  # For multi-turn conversations
     persona: Optional[str] = None  # Phase 2: persona-based pitches
+    filters: Optional[Dict[str, Any]] = None  # UI-selected filters
 
 
 class SourceInfo(BaseModel):
@@ -95,6 +101,8 @@ class ChatQueryResponse(BaseModel):
     intent: str
     refusal_reason: Optional[str] = None
     response_time_ms: int
+    project_info: Optional[Dict[str, Any]] = None
+    suggested_actions: Optional[List[str]] = None  # Dynamic quick reply chips
 
 
 class ProjectInfo(BaseModel):
@@ -145,6 +153,19 @@ async def chat_query(request: ChatQueryRequest):
         intent = intent_classifier.classify_intent(request.query)
         logger.info(f"Classified intent: {intent}")
 
+        # Extract and merge filters early (needed for context and search)
+        filters = filter_extractor.extract_filters(request.query)
+        if request.filters:
+            logger.info(f"Merging explicit UI filters: {request.filters}")
+            filters = filter_extractor.merge_filters(filters, request.filters)
+        
+        # Create conversation context
+        context = ConversationContext(
+            session_id=request.session_id or "",
+            current_filters=request.filters or {},
+            last_intent=intent.value if hasattr(intent, 'value') else str(intent)
+        )
+
         # Step 1.5: Handle greetings immediately without RAG
         if intent == "greeting":
             response_time_ms = int((time.time() - start_time) * 1000)
@@ -171,15 +192,17 @@ How can I assist you today?"""
         # Step 1.6: Handle sales FAQ intents with intelligent GPT-4 handler
         if intent == "sales_faq":
             logger.info("Routing to intelligent sales FAQ handler")
-            response_text, sales_intent, should_fallback = await intelligent_sales.handle_query(
-                query=request.query
+            response_text, sales_intent, should_fallback, actions = await intelligent_sales.handle_query(
+                query=request.query,
+                context=context,
+                session_id=request.session_id
             )
             
             if not should_fallback and response_text:
                 response_time_ms = int((time.time() - start_time) * 1000)
                 
                 if request.user_id:
-                    await supabase_client.log_query(
+                    await pixeltable_client.log_query(
                         user_id=request.user_id,
                         query=request.query,
                         intent=f"intelligent_faq_{sales_intent.value}",
@@ -195,21 +218,24 @@ How can I assist you today?"""
                     confidence="High",
                     intent="intelligent_sales_faq",
                     refusal_reason=None,
-                    response_time_ms=response_time_ms
+                    response_time_ms=response_time_ms,
+                    suggested_actions=actions
                 )
 
         # Step 1.7: Handle sales objection intents with intelligent handler
         if intent == "sales_objection":
             logger.info("Routing to intelligent sales objection handler")
-            response_text, sales_intent, should_fallback = await intelligent_sales.handle_query(
-                query=request.query
+            response_text, sales_intent, should_fallback, actions = await intelligent_sales.handle_query(
+                query=request.query,
+                context=context,
+                session_id=request.session_id
             )
             
             if not should_fallback and response_text:
                 response_time_ms = int((time.time() - start_time) * 1000)
                 
                 if request.user_id:
-                    await supabase_client.log_query(
+                    await pixeltable_client.log_query(
                         user_id=request.user_id,
                         query=request.query,
                         intent=f"intelligent_objection_{sales_intent.value}",
@@ -225,19 +251,18 @@ How can I assist you today?"""
                     confidence="High",
                     intent="intelligent_sales_objection",
                     refusal_reason=None,
-                    response_time_ms=response_time_ms
+                    response_time_ms=response_time_ms,
+                    suggested_actions=actions
                 )
 
 
         # Step 2: Route property_search to hybrid filtering (NEW FLOW)
         if intent == "property_search":
             logger.info("Routing to property search with hybrid filtering")
-
-            # Extract filters from query
-            filters = filter_extractor.extract_filters(request.query)
-            logger.info(f"Extracted filters: {filters.dict(exclude_none=True)}")
+            logger.info(f"Using merged filters: {filters.dict(exclude_none=True)}")
 
             # Hybrid retrieval (SQL + vector search)
+            # Use the filters we extracted/merged earlier
             search_results = await hybrid_retrieval.search_with_filters(
                 query=request.query,
                 filters=filters
@@ -254,7 +279,7 @@ How can I assist you today?"""
                 response_time_ms = int((time.time() - start_time) * 1000)
 
                 if request.user_id:
-                    await supabase_client.log_query(
+                    await pixeltable_client.log_query(
                         user_id=request.user_id,
                         query=request.query,
                         intent=intent,
@@ -283,7 +308,7 @@ How can I assist you today?"""
             response_time_ms = int((time.time() - start_time) * 1000)
 
             if request.user_id:
-                await supabase_client.log_query(
+                await pixeltable_client.log_query(
                     user_id=request.user_id,
                     query=request.query,
                     intent=intent,
@@ -317,7 +342,7 @@ How can I assist you today?"""
                 
                 # Log as answered with external source
                 if request.user_id:
-                    await supabase_client.log_query(
+                    await pixeltable_client.log_query(
                         user_id=request.user_id,
                         query=request.query,
                         intent=intent,
@@ -369,7 +394,7 @@ How can I assist you today?"""
                 
                 # Log as answered with external source
                 if request.user_id:
-                    await supabase_client.log_query(
+                    await pixeltable_client.log_query(
                         user_id=request.user_id,
                         query=request.query,
                         intent=intent,
@@ -397,7 +422,7 @@ How can I assist you today?"""
 
             # Log query
             if request.user_id:
-                await supabase_client.log_query(
+                await pixeltable_client.log_query(
                     user_id=request.user_id,
                     query=request.query,
                     intent=intent,
@@ -444,7 +469,7 @@ How can I assist you today?"""
 
             # Log query
             if request.user_id:
-                await supabase_client.log_query(
+                await pixeltable_client.log_query(
                     user_id=request.user_id,
                     query=request.query,
                     intent=intent,
@@ -463,7 +488,7 @@ How can I assist you today?"""
         response_time_ms = int((time.time() - start_time) * 1000)
 
         if request.user_id:
-            await supabase_client.log_query(
+            await pixeltable_client.log_query(
                 user_id=request.user_id,
                 query=request.query,
                 intent=intent,
@@ -501,7 +526,7 @@ async def get_projects(user_id: str):
         List of projects the user can query
     """
     try:
-        projects = await supabase_client.get_user_projects(user_id)
+        projects = await pixeltable_client.get_user_projects(user_id)
 
         return [
             ProjectInfo(
@@ -531,7 +556,7 @@ async def get_project(project_id: str):
         Project information
     """
     try:
-        project = await supabase_client.get_project_by_id(project_id)
+        project = await pixeltable_client.get_project_by_id(project_id)
 
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
@@ -607,7 +632,7 @@ async def sales_chat_query(request: ChatQueryRequest):
             response_time_ms = int((time.time() - start_time) * 1000)
             
             if request.user_id:
-                await supabase_client.log_query(
+                await pixeltable_client.log_query(
                     user_id=request.user_id,
                     query=request.query,
                     intent=f"intelligent_sales_{sales_intent.value}",
@@ -682,7 +707,7 @@ async def compare_projects(
         response_time_ms = int((time.time() - start_time) * 1000)
 
         if user_id:
-            await supabase_client.log_query(
+            await pixeltable_client.log_query(
                 user_id=user_id,
                 query=query,
                 intent="comparison",
@@ -755,7 +780,7 @@ async def filtered_search(request: ChatQueryRequest):
 
             # Log query
             if request.user_id:
-                await supabase_client.log_query(
+                await pixeltable_client.log_query(
                     user_id=request.user_id,
                     query=request.query,
                     intent="structured_search",
@@ -812,7 +837,7 @@ async def filtered_search(request: ChatQueryRequest):
 
         # Log query
         if request.user_id:
-            await supabase_client.log_query(
+            await pixeltable_client.log_query(
                 user_id=request.user_id,
                 query=request.query,
                 intent="structured_search",
@@ -864,50 +889,23 @@ async def get_analytics(user_id: str, days: int = 7):
         # Verify admin role (simplified for now)
         # In production, check user_profiles.role == 'admin'
 
-        # Query Supabase for analytics
-        from datetime import datetime, timedelta
-
-        cutoff_date = datetime.now() - timedelta(days=days)
-
-        # Get query logs
-        response = supabase_client.client.table("query_logs").select("*").gte("created_at", cutoff_date.isoformat()).execute()
-
-        logs = response.data if response.data else []
-
-        # Calculate metrics
-        total = len(logs)
-        answered = sum(1 for log in logs if log.get("answered"))
-        refused = total - answered
-        refusal_rate = (refused / total * 100) if total > 0 else 0
-
-        # Avg response time
-        response_times = [log.get("response_time_ms", 0) for log in logs if log.get("response_time_ms")]
-        avg_response_time = sum(response_times) / len(response_times) if response_times else 0
-
-        # Top intents
-        from collections import Counter
-        intent_counts = Counter(log.get("intent") for log in logs if log.get("intent"))
-        top_intents = [{"intent": intent, "count": count} for intent, count in intent_counts.most_common(5)]
-
-        # Recent refusals
-        recent_refusals = [
-            {
-                "query": log.get("query", ""),
-                "refusal_reason": log.get("refusal_reason", ""),
-                "created_at": log.get("created_at", "")
-            }
-            for log in sorted(logs, key=lambda x: x.get("created_at", ""), reverse=True)
-            if not log.get("answered")
-        ][:10]
+        # Use Pixeltable analytics
+        analytics = pixeltable_client.get_analytics(days)
+        
+        # Format top intents
+        top_intents = [
+            {"intent": intent, "count": count}
+            for intent, count in analytics.get('top_intents', {}).items()
+        ][:5]
 
         return QueryAnalytics(
-            total_queries=total,
-            answered_queries=answered,
-            refused_queries=refused,
-            refusal_rate=round(refusal_rate, 2),
-            avg_response_time_ms=round(avg_response_time, 2),
+            total_queries=analytics.get('total_queries', 0),
+            answered_queries=analytics.get('answered_queries', 0),
+            refused_queries=analytics.get('refused_queries', 0),
+            refusal_rate=round(analytics.get('refusal_rate', 0) * 100, 2),
+            avg_response_time_ms=round(analytics.get('avg_response_time_ms', 0), 2),
             top_intents=top_intents,
-            recent_refusals=recent_refusals
+            recent_refusals=analytics.get('recent_refusals', [])
         )
 
     except Exception as e:
