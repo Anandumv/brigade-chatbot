@@ -4,7 +4,8 @@ uvicorn[standard]>=0.27.0
 python-multipart>=0.0.6
 
 # Database (Pixeltable-only mode)
-pixeltable>=0.3.0
+# Using 0.2.x to avoid av/ffmpeg dependency in 0.3.x
+pixeltable>=0.2.0,<0.3.0
 psycopg2-binary>=2.9.9
 
 # OpenAI
