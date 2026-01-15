@@ -22,7 +22,7 @@ ftfy>=6.0.0
 beautifulsoup4>=4.12.0
 pymupdf>=1.23.0  # Required for fitz in pixeltable
 jmespath>=1.0.0
-lxml>=4.9.0  # Required for bs4 lxml parser in pixeltable
+# lxml>=4.9.0  # Required for bs4 lxml parser in pixeltable (Already covered by line 16)
 # Pixeltable itself (installed with --no-deps in build command)
 # pixeltable>=0.2.0,<0.3.0
 
