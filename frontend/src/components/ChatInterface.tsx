@@ -90,8 +90,6 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                 sources: response.sources,
                 intent: response.intent,
                 isRefusal: response.is_refusal,
-                intent: response.intent,
-                isRefusal: response.is_refusal,
                 refusalReason: response.refusal_reason,
                 suggested_actions: response.suggested_actions,
             };
