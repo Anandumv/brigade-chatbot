@@ -12,6 +12,8 @@ services:
         sync: false
       - key: OPENAI_BASE_URL
         value: https://openrouter.ai/api/v1
+      - key: TAVILY_API_KEY
+        sync: false
       - key: EMBEDDING_MODEL
         value: text-embedding-3-small
       - key: LLM_MODEL
