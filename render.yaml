@@ -5,7 +5,7 @@ services:
     region: oregon
     rootDir: backend
     plan: free
-    buildCommand: pip install -r requirements.txt
+    buildCommand: apt-get update && apt-get install -y ffmpeg libavformat-dev libavcodec-dev libavdevice-dev libavutil-dev libswscale-dev libswresample-dev && pip install --upgrade pip && pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT --loop asyncio
     envVars:
       - key: OPENAI_API_KEY
