@@ -3,8 +3,8 @@ fastapi>=0.110.0
 uvicorn[standard]>=0.27.0
 python-multipart>=0.0.6
 
-# Database (Pixeltable RAG mode)
-pixeltable>=0.3.0
+# Database (Pixeltable - Python only, no FFmpeg needed)
+pixeltable>=0.2.0,<0.3.0
 psycopg2-binary>=2.9.9
 
 # OpenAI
