@@ -17,20 +17,25 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'vendor')))
 
 import nest_asyncio
+import json
+import asyncio
 
 
 # Apply nest_asyncio to allow re-entrant event loops
 # Wrap in try-except because it fails with 'uvloop' (default on Render)
+logging.info("Starting up application...")
 try:
     nest_asyncio.apply()
-except ValueError:
-    print("WARNING: Could not patch event loop (likely uvloop). Pixeltable sync might flak.")
+    logging.info("nest_asyncio applied successfully")
 except Exception as e:
-    print(f"WARNING: nest_asyncio failed: {e}")
+    logging.warning(f"Could not patch event loop: {e}")
+
+logging.info("Imports completed. Initializing FastAPI app...")
 
 from config import settings
-from services.intent_classifier import intent_classifier
-from services.retrieval import retrieval_service
+from services.flow_engine import FlowEngine
+# from services.retrieval import retrieval_service # Deferred import to prevent hang
+
 from services.confidence_scorer import confidence_scorer
 from services.refusal_handler import refusal_handler
 from services.answer_generator import answer_generator
