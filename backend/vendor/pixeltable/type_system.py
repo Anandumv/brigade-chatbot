@@ -37,7 +37,7 @@ class ColumnType:
         JSON = 5
         ARRAY = 6
         IMAGE = 7
-        # VIDEO = 8  <-- Removed
+        VIDEO = 8  # Restored - enum needed, av import not
         AUDIO = 9
         DOCUMENT = 10
 
@@ -1021,24 +1021,8 @@ class VideoType(ColumnType):
         self._validate_file_path(val)
 
     def validate_media(self, val: Any) -> None:
-        assert isinstance(val, str)
-        try:
-            with av.open(val, 'r') as fh:
-                if len(fh.streams.video) == 0:
-                    raise excs.Error(f'Not a valid video: {val}')
-                # decode a few frames to make sure it's playable
-                # TODO: decode all frames? but that's very slow
-                num_decoded = 0
-                for frame in fh.decode(video=0):
-                    _ = frame.to_image()
-                    num_decoded += 1
-                    if num_decoded == 10:
-                        break
-                if num_decoded < 2:
-                    # this is most likely an image file
-                    raise excs.Error(f'Not a valid video: {val}')
-        except av.FFmpegError:
-            raise excs.Error(f'Not a valid video: {val}') from None
+        # Video validation disabled - av/FFmpeg not available
+        pass
 
 
 class AudioType(ColumnType):
@@ -1053,19 +1037,8 @@ class AudioType(ColumnType):
         self._validate_file_path(val)
 
     def validate_media(self, val: Any) -> None:
-        try:
-            with av.open(val) as container:
-                if len(container.streams.audio) == 0:
-                    raise excs.Error(f'No audio stream in file: {val}')
-                audio_stream = container.streams.audio[0]
-
-                # decode everything to make sure it's playable
-                # TODO: is there some way to verify it's a playable audio file other than decoding all of it?
-                for packet in container.demux(audio_stream):
-                    for _ in packet.decode():
-                        pass
-        except av.FFmpegError as e:
-            raise excs.Error(f'Not a valid audio file: {val}\n{e}') from None
+        # Audio validation disabled - av/FFmpeg not available
+        pass
 
 
 class DocumentType(ColumnType):
