@@ -191,10 +191,10 @@ async def admin_refresh_projects(x_admin_key: str = Header(None)):
     import os
     import pixeltable as pxt
     
-    # Simple security: First 8 chars of OpenAI key or 'secret'
-    expected_key = settings.openai_api_key[:8] if settings.openai_api_key else "secret"
+    # Use dedicated ADMIN_KEY env var
+    expected_key = os.getenv("ADMIN_KEY", "secret")
     
-    if x_admin_key != expected_key:
+    if not x_admin_key or x_admin_key != expected_key:
          raise HTTPException(status_code=403, detail="Invalid Admin Key")
 
     try:
