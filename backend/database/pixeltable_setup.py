@@ -74,6 +74,7 @@ def _create_projects_table():
         'name': pxt.String,
         'developer': pxt.String,
         'location': pxt.String,
+        'zone': pxt.String,              # New: "East Bangalore", "North Bangalore"
         'configuration': pxt.String,     # "2BHK", "3BHK", "2,3 BHK"
         'budget_min': pxt.Int,           # In lakhs (e.g., 50 = 50L = 5000000)
         'budget_max': pxt.Int,

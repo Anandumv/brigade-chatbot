@@ -60,6 +60,33 @@ async def lifespan(app: FastAPI):
     logger.info(f"Similarity threshold: {settings.similarity_threshold}")
     logger.info(f"Embedding model: {settings.embedding_model}")
     logger.info("Vector fallback enabled for property search")
+    
+    # Auto-seed projects if table is empty
+    try:
+        from database.pixeltable_setup import get_projects_table, initialize_pixeltable
+        import json
+        import os
+        import pixeltable as pxt
+        
+        # Ensure tables exist
+        initialize_pixeltable()
+        
+        projects_table = get_projects_table()
+        count = projects_table.count()
+        logger.info(f"Projects table has {count} rows.")
+        
+        if count == 0:
+            seed_file = os.path.join(os.path.dirname(__file__), 'data', 'seed_projects.json')
+            if os.path.exists(seed_file):
+                with open(seed_file, 'r') as f:
+                    seed_data = json.load(f)
+                projects_table.insert(seed_data)
+                logger.info(f"Seeded {len(seed_data)} projects from seed_projects.json")
+            else:
+                logger.warning(f"Seed file not found: {seed_file}")
+    except Exception as e:
+        logger.error(f"Auto-seed failed: {e}")
+    
     yield
     logger.info("Shutting down API...")
 
@@ -798,6 +825,8 @@ async def filtered_search(request: ChatQueryRequest):
         # Step 1: Extract filters from query
         filters = filter_extractor.extract_filters(request.query)
         logger.info(f"Extracted filters: {filters.dict(exclude_none=True)}")
+        
+
 
         # Step 2: Hybrid retrieval (SQL + vector search)
         search_results = await hybrid_retrieval.search_with_filters(
@@ -987,6 +1016,41 @@ if settings.environment == "development":
             return {"query": query, "intent": intent}
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
+
+
+
+# === Agent Flow Endpoint (STRICT MODE) ===
+from services.flow_engine import execute_flow, FlowState, FlowResponse
+from services.session_manager import session_manager
+
+@app.post("/api/agent/flow", response_model=FlowResponse)
+async def agent_flow_query(request: ChatQueryRequest):
+    """
+    Strict Flowchart-Driven Agent Logic.
+    Does NOT use general RAG. Enforces the 10-node decision tree.
+    """
+    try:
+        session_id = request.session_id or "default_agent_session"
+        session = session_manager.get_or_create_session(session_id)
+        
+        # Load state
+        current_state_data = session.flow_state
+        if current_state_data:
+            state = FlowState(**current_state_data)
+        else:
+            state = FlowState() # Start at Node 1
+            
+        # Execute Flow
+        response = execute_flow(state, request.query)
+        
+        # Save state
+        session.flow_state = state.dict()
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Agent flow error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

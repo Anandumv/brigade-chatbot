@@ -39,6 +39,9 @@ class ConversationSession(BaseModel):
     # Lead scoring
     engagement_score: int = 0  # Increases with each meaningful interaction
 
+    # Flow Engine State (Strict Agent Mode)
+    flow_state: Optional[Dict[str, Any]] = None
+
 
 class SessionManager:
     """Manage conversation sessions with in-memory storage."""

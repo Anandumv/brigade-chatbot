@@ -1,20 +1,10 @@
 import pandas as pd
-import os
 
-file_path = "Test - Projects.xlsx"
-
-if not os.path.exists(file_path):
-    print(f"File not found: {file_path}")
-    exit(1)
-
+file_path = "/Users/anandumv/Downloads/chatbot/GPT Projects (1).xlsx"
 try:
     df = pd.read_excel(file_path)
     print("Columns:", list(df.columns))
-    print("\nFirst 3 rows:")
-    print(df.head(3).to_string())
-    
-    # Check data types
-    print("\nData Types:")
-    print(df.dtypes)
+    print("First row:", df.iloc[0].to_dict())
+    print("Total rows:", len(df))
 except Exception as e:
     print(f"Error reading excel: {e}")
