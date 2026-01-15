@@ -379,32 +379,29 @@ How can I assist you today?"""
             )
 
             if not search_results["projects"]:
-                # No matches - fall back to web search
-                logger.info("No matching properties found, falling back to web search")
-                web_result = web_search_service.search_and_answer(
-                    query=request.query,
-                    topic_hint="Real estate properties Bangalore"
-                )
-
+                # No matches - strict mode refusal (no web search)
+                logger.info("No matching properties found in internal database.")
+                
                 response_time_ms = int((time.time() - start_time) * 1000)
-
+                
+                # Log refusal
                 if request.user_id:
                     await pixeltable_client.log_query(
                         user_id=request.user_id,
                         query=request.query,
                         intent=intent,
-                        answered=True,
-                        confidence_score="Low (External)",
+                        answered=False,
+                        refusal_reason="no_relevant_info",
                         response_time_ms=response_time_ms,
                         project_id=request.project_id
                     )
 
                 return ChatQueryResponse(
-                    answer=web_result["answer"],
-                    sources=[SourceInfo(**s) for s in web_result.get("sources", [])],
-                    confidence=web_result.get("confidence", "Low"),
+                    answer="I apologize, but I don't have information about any projects matching your criteria in my database. I can only provide details on our specific portfolio of projects.",
+                    sources=[],
+                    confidence="Low",
                     intent=intent,
-                    refusal_reason=None,
+                    refusal_reason="no_relevant_info",
                     response_time_ms=response_time_ms
                 )
 
@@ -439,37 +436,51 @@ How can I assist you today?"""
                 response_time_ms=response_time_ms
             )
 
-        # Step 3: For unsupported intents, try web search fallback instead of refusing
+        # Step 3: For unsupported intents, refuse instead of web search
         if intent == "unsupported":
-            logger.info("Unsupported intent, trying web search fallback")
-            web_result = web_search_service.search_and_answer(
-                query=request.query,
-                topic_hint="Brigade Group real estate Bangalore"
-            )
+            logger.info("Unsupported intent - refusing")
+            response_time_ms = int((time.time() - start_time) * 1000)
             
-            if web_result.get("answer") and web_result.get("is_external", False):
-                response_time_ms = int((time.time() - start_time) * 1000)
+            return ChatQueryResponse(
+                answer="I apologize, I can only assist with property search, project details, and sales inquiries related to our portfolio.",
+                sources=[],
+                confidence="Low",
+                intent=intent,
+                refusal_reason="unsupported_intent",
+                response_time_ms=response_time_ms
+            )
+
+        # DISABLED: Unsupported intent web search fallback
+        # if intent == "unsupported":
+        #     logger.info("Unsupported intent, trying web search fallback")
+        #     web_result = web_search_service.search_and_answer(
+        #         query=request.query,
+        #         topic_hint="Brigade Group real estate Bangalore"
+        #     )
+            
+        #     if web_result.get("answer") and web_result.get("is_external", False):
+        #         response_time_ms = int((time.time() - start_time) * 1000)
                 
-                # Log as answered with external source
-                if request.user_id:
-                    await pixeltable_client.log_query(
-                        user_id=request.user_id,
-                        query=request.query,
-                        intent=intent,
-                        answered=True,
-                        confidence_score="Low (External)",
-                        response_time_ms=response_time_ms,
-                        project_id=request.project_id
-                    )
+        #         # Log as answered with external source
+        #         if request.user_id:
+        #             await pixeltable_client.log_query(
+        #                 user_id=request.user_id,
+        #                 query=request.query,
+        #                 intent=intent,
+        #                 answered=True,
+        #                 confidence_score="Low (External)",
+        #                 response_time_ms=response_time_ms,
+        #                 project_id=request.project_id
+        #             )
                 
-                return ChatQueryResponse(
-                    answer=web_result["answer"],
-                    sources=[SourceInfo(**s) for s in web_result.get("sources", [])],
-                    confidence=web_result.get("confidence", "Low"),
-                    intent=intent,
-                    refusal_reason=None,
-                    response_time_ms=response_time_ms
-                )
+        #         return ChatQueryResponse(
+        #             answer=web_result["answer"],
+        #             sources=[SourceInfo(**s) for s in web_result.get("sources", [])],
+        #             confidence=web_result.get("confidence", "Low"),
+        #             intent=intent,
+        #             refusal_reason=None,
+        #             response_time_ms=response_time_ms
+        #         )
 
         # Step 3: Retrieve similar document chunks
         chunks = await retrieval_service.retrieve_similar_chunks(
