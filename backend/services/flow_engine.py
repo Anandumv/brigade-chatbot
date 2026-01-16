@@ -290,7 +290,9 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
             )
 
     # --- PROJECT SELECTION INTERCEPTOR ---
-    if intent == "project_selection" or any(w in user_lower for w in ["tell me", "details about", "pitch me", "select"]):
+    # Expanded keywords to cover more natural ways users ask about projects
+    selection_keywords = ["tell me", "details about", "pitch me", "select", "pitch ", "about ", "more on", "why ", "usp of", "info on", "interested in"]
+    if intent == "project_selection" or any(w in user_lower for w in selection_keywords):
         # Try to find which project the user is referring to
         target_project = None
         
