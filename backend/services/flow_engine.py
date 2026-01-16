@@ -254,6 +254,41 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
                 next_redirection="NODE 7"
             )
 
+    # --- SHOW MORE INTERCEPTOR ---
+    if any(w in user_lower for w in ["show more", "more options", "see more", "other projects", "remaining"]):
+        if state.last_shown_projects and len(state.last_shown_projects) > 3:
+            # Show projects 4 onwards
+            response_parts = ["Here are more options:\n\n"]
+            for i, proj in enumerate(state.last_shown_projects[3:10], 4):  # Show up to 10 total
+                # Simplify configuration
+                config_raw = proj.get('configuration', '')
+                bhk_types = []
+                for part in ['2 BHK', '2BHK', '3 BHK', '3BHK', '4 BHK', '4BHK', '2.5 BHK', '3.5 BHK']:
+                    if part.lower() in config_raw.lower():
+                        clean_type = part.replace('BHK', ' BHK').strip()
+                        if clean_type not in bhk_types:
+                            bhk_types.append(clean_type)
+                config_display = ', '.join(bhk_types) if bhk_types else 'Multiple Options'
+                
+                response_parts.append(f"**{i}. {proj['name']}** ({proj['status']})\n")
+                response_parts.append(f"- 📍 {proj['location']}\n")
+                response_parts.append(f"- 💰 ₹{proj['budget_min']/100:.2f} - ₹{proj['budget_max']/100:.2f} Cr\n")
+                response_parts.append(f"- 🏠 {config_display}\n\n")
+            
+            remaining = len(state.last_shown_projects) - 10
+            if remaining > 0:
+                response_parts.append(f"_And {remaining} more in our database..._\n\n")
+            
+            response_parts.append("Would you like details on any of these? Just say the project name! 🏡")
+            action = "".join(response_parts)
+            
+            return FlowResponse(
+                extracted_requirements=merged_reqs.dict(),
+                current_node=node,
+                system_action=action,
+                next_redirection="NODE 2A"
+            )
+
     # --- PROJECT SELECTION INTERCEPTOR ---
     if intent == "project_selection" or any(w in user_lower for w in ["tell me", "details about", "pitch me", "select"]):
         # Try to find which project the user is referring to
@@ -356,21 +391,32 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
                 response_parts.append(f"**{i}. {proj['name']}** ({proj['status']})\n")
                 response_parts.append(f"- 📍 Location: {proj['location']}\n")
                 response_parts.append(f"- 💰 Price Range: ₹{proj['budget_min']/100:.2f} - ₹{proj['budget_max']/100:.2f} Cr\n")
-                response_parts.append(f"- 🏠 Configuration: {proj['configuration']}\n")
+                
+                # Simplify configuration - extract just BHK types
+                config_raw = proj.get('configuration', '')
+                bhk_types = []
+                for part in ['2 BHK', '2BHK', '3 BHK', '3BHK', '4 BHK', '4BHK', '2.5 BHK', '3.5 BHK']:
+                    if part.lower() in config_raw.lower():
+                        clean_type = part.replace('BHK', ' BHK').strip()
+                        if clean_type not in bhk_types:
+                            bhk_types.append(clean_type)
+                config_display = ', '.join(bhk_types) if bhk_types else 'Multiple Options'
+                response_parts.append(f"- 🏠 Configuration: {config_display}\n")
+                
                 response_parts.append(f"- 📅 Possession: {proj['possession_quarter']} {proj['possession_year']}\n")
 
                 if proj.get('amenities'):
                     amenities = proj['amenities'].replace("[", "").replace("]", "").replace("'", "")
-                    response_parts.append(f"- 🎯 Amenities: {amenities[:100]}...\n")
+                    # Truncate amenities nicely
+                    if len(amenities) > 60:
+                        amenities = amenities[:60].rsplit(' ', 1)[0] + "..."
+                    response_parts.append(f"- 🎯 Amenities: {amenities}\n")
 
-                if proj.get('rera_number'):
-                    response_parts.append(f"- 📋 RERA: {proj['rera_number']}\n")
-                
                 response_parts.append("\n")  # Extra line between projects
 
-            # If more than 3 matches, mention them
+            # If more than 3 matches, make it actionable
             if len(matches) > 3:
-                response_parts.append(f"*Plus {len(matches) - 3} more options available!*\n\n")
+                response_parts.append(f"\n📋 **Plus {len(matches) - 3} more options!** Type \"show more\" to see them.\n\n")
 
             response_parts.append("Would you like to schedule a site visit to see these properties? 🏡")
 
