@@ -201,10 +201,10 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
         <div className="flex flex-col h-full bg-gray-50 font-sans text-gray-800">
             {/* Minimal Header */}
             <div className="flex-shrink-0 py-4 bg-white/80 backdrop-blur-md border-b border-gray-200 flex justify-center items-center z-10 sticky top-0">
-                <span className="font-semibold text-gray-800 tracking-tight flex items-center gap-2">
+                <a href="/" className="font-semibold text-gray-800 tracking-tight flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer">
                     <Sparkles className="w-4 h-4 text-orange-500" />
                     Pinclick Genie
-                </span>
+                </a>
             </div>
 
             {/* Chat Area - Mobile optimized with safe areas */}
