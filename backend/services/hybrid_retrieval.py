@@ -136,10 +136,10 @@ class HybridRetrievalService:
             if filters.max_price_inr:
                 # Convert max price (INR) to Lakhs for comparison
                 max_lakhs = filters.max_price_inr / 100000
-                # STRICT FILTERING: Exclude projects where price is Unknown (None)
-                # Only include if budget_min exists AND is <= max_lakhs
+                # STRICT FILTERING: Exclude projects where price is Unknown (None or 0)
+                # Only include if budget_min exists AND is > 0 AND is <= max_lakhs
                 filtered_results = [r for r in filtered_results 
-                                   if r.get('budget_min') is not None and r.get('budget_min') <= max_lakhs]
+                                   if r.get('budget_min') and r.get('budget_min') > 0 and r.get('budget_min') <= max_lakhs]
                 logger.info(f"After max price filter {max_lakhs}L: {len(filtered_results)} results")
             
             if filters.min_price_inr:
