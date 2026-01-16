@@ -143,7 +143,7 @@ INTENT_EXAMPLES = {
 SALES_FAQ_KEYWORDS = [
     "stretch budget", "extend budget", "increase budget",
     "other location", "different location", "alternate location",
-    "why under construction", "benefits of under construction",
+    "why under construction", "why buy under construction", "benefits of under construction",
     "face to face", "meet in person", "schedule meeting",
     "site visit", "visit site", "see property",
     "pinclick value", "why pinclick", "about pinclick",
