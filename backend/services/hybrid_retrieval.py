@@ -108,43 +108,45 @@ class HybridRetrievalService:
             
             # Check if query mentions a specific project or developer
             query_lower = query.lower()
-            has_filters = False
             
-            # Apply filters from the filter extractor
-            # Location/locality filter
-            if filters.locality:
-                q = q.where(projects.location.contains(filters.locality))
-                has_filters = True
-                logger.info(f"Applied locality filter: {filters.locality}")
+            # Get all projects first, then filter in Python (more reliable)
+            all_results = projects.collect()
+            logger.info(f"Total projects fetched: {len(all_results)}")
             
-            # Developer filter - search both name and builder
-            if filters.developer_name:
-                dev_query = filters.developer_name.split()[0] if filters.developer_name else ""  # Use first word (e.g., "Brigade" from "Brigade Group")
-                q = q.where(projects.name.contains(dev_query) | projects.builder.contains(dev_query))
-                has_filters = True
-                logger.info(f"Applied developer filter: {dev_query}")
+            # Filter in Python
+            filtered_results = list(all_results)  # Start with all
             
-            # Budget filter (price in Cr)
+            # Apply locality filter
+            if filters.locality and filters.locality.strip():
+                locality_lower = filters.locality.lower()
+                filtered_results = [r for r in filtered_results 
+                                   if locality_lower in str(r.get('location', '')).lower()]
+                logger.info(f"After locality filter '{filters.locality}': {len(filtered_results)} results")
+            
+            # Apply developer filter - search in name and builder
+            if filters.developer_name and filters.developer_name.strip():
+                dev_keywords = filters.developer_name.lower().split()
+                filtered_results = [r for r in filtered_results 
+                                   if any(kw in str(r.get('name', '')).lower() or 
+                                         kw in str(r.get('builder', '')).lower() 
+                                         for kw in dev_keywords)]
+                logger.info(f"After developer filter '{filters.developer_name}': {len(filtered_results)} results")
+            
+            # Apply budget filter (price in Cr)
             if filters.max_price_inr:
                 max_cr = filters.max_price_inr / 10000000
-                q = q.where(projects.min_price_cr <= max_cr)
-                has_filters = True
-                logger.info(f"Applied max price filter: {max_cr} Cr")
+                filtered_results = [r for r in filtered_results 
+                                   if r.get('min_price_cr') is None or r.get('min_price_cr', 0) <= max_cr]
+                logger.info(f"After max price filter {max_cr}Cr: {len(filtered_results)} results")
             
             if filters.min_price_inr:
                 min_cr = filters.min_price_inr / 10000000
-                q = q.where(projects.max_price_cr >= min_cr)
-                has_filters = True
-                logger.info(f"Applied min price filter: {min_cr} Cr")
+                filtered_results = [r for r in filtered_results 
+                                   if r.get('max_price_cr') is None or r.get('max_price_cr', 999) >= min_cr]
+                logger.info(f"After min price filter {min_cr}Cr: {len(filtered_results)} results")
             
-            # Execute query
-            results = q.collect()
-            logger.info(f"Query returned {len(results)} results, has_filters={has_filters}")
-            
-            # If no results with filters but we have projects, return all projects
-            if len(results) == 0 and all_count > 0 and has_filters:
-                logger.info("No filtered results, returning all projects")
-                results = projects.collect()
+            results = filtered_results
+            logger.info(f"Final result count: {len(results)}")
             
             # Format results
             formatted = []
