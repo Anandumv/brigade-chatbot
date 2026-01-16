@@ -5,7 +5,7 @@ import json
 import sys
 
 # PRODUCTION URL
-BASE_URL = "https://chatbot-production-aaa8.up.railway.app/api/chat/query"
+BASE_URL = "https://brigade-chatbot-production.up.railway.app/api/chat/query"
 
 class FlowVerifier:
     def __init__(self, scenario_name):

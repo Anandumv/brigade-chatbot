@@ -10,9 +10,9 @@ from typing import Optional
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
-    # OpenAI/OpenRouter Configuration
+    # OpenAI Configuration
     openai_api_key: str
-    openai_base_url: Optional[str] = "https://openrouter.ai/api/v1"  # OpenRouter by default
+    openai_base_url: Optional[str] = "https://api.openai.com/v1"  # OpenAI direct API
 
     # Tavily Configuration (for web search)
     tavily_api_key: Optional[str] = "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"
@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     embedding_dimensions: int = 1536
 
     # LLM Configuration
-    gpt_model: str = "openai/gpt-4-turbo-preview"  # OpenRouter format
+    gpt_model: str = "gpt-4-turbo-preview"  # OpenAI model name
     llm_model: Optional[str] = None  # Alias for gpt_model from env
     max_tokens: int = 1500
     temperature: float = 0.1  # Low temperature for factual responses
