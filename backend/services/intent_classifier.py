@@ -67,7 +67,12 @@ class IntentClassifier:
             logger.info(f"Detected sales_faq intent via keywords: {query[:50]}...")
             return "sales_faq"
 
-        # Priority 4: Fall back to GPT-4 classification for other intents
+        # Priority 4: Detect sales pitch queries (fast keyword match)
+        if self._is_sales_pitch(query_lower):
+             logger.info(f"Detected sales_pitch intent via keywords: {query[:50]}...")
+             return "sales_pitch"
+
+        # Priority 5: Fall back to GPT-4 classification for other intents
         try:
             system_prompt = self._build_system_prompt()
             user_message = f"Classify this query: {query}"
@@ -158,6 +163,9 @@ class IntentClassifier:
                 return True
         
         # Additional pattern checks
+        if "worth" in query_lower and ("invest" in query_lower or "buying" in query_lower):
+            return True
+            
         faq_patterns = [
             r'why\s+(?:should|would|do)\s+.*(?:meet|visit|pinclick)',
             r'(?:schedule|arrange|book)\s+(?:a\s+)?(?:meeting|visit|call)',
@@ -206,6 +214,15 @@ class IntentClassifier:
         
         return False
 
+
+    def _is_sales_pitch(self, query_lower: str) -> bool:
+        """
+        Detect sales pitch queries (pitch me, tell me about, why buy).
+        """
+        pitch_keywords = ["pitch", "why buy", "why should i", "give me a reason", "unique selling", "usp", "investment potential", "tell me about"]
+        if any(kw in query_lower for kw in pitch_keywords):
+            return True
+        return False
 
     def _build_system_prompt(self) -> str:
         """Build few-shot system prompt for intent classification."""
