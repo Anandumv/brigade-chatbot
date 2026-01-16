@@ -131,6 +131,10 @@ class IntentClassifier:
             if any(word in query_lower for word in ["in ", "at ", "near ", "bangalore", "whitefield", "road"]):
                 return True
 
+        # Handle 'show more' pagination intent
+        if any(w in query_lower for w in ["show more", "more options", "see more", "other projects", "remaining"]):
+            return True
+
         return False
 
     def _is_sales_faq(self, query_lower: str) -> bool:

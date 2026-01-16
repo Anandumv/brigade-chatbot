@@ -367,8 +367,9 @@ How can I assist you today?"""
                 )
 
 
-        # Step 2: Route property_search to Flow Engine (Strict Flowchart Logic)
-        if intent == "property_search":
+        # Step 2: Route property_search, project selection, and facts to Flow Engine (Strict Flowchart Logic)
+        # We group all search/project related intents here because flow_engine handles them all via interceptors
+        if intent in ["property_search", "sales_pitch", "project_fact", "comparison", "project_selection"]:
             logger.info("Routing to Flow Engine for property search")
             
             # Use Flow Engine to process the request
