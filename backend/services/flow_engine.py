@@ -434,33 +434,53 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
         loc_term = (merged_reqs.location or "").lower()
         conf_term = (merged_reqs.configuration or "").lower()
         
-        matches = []
-        match_details = []
-        upsell_matches = []
+        # Helper to run search with given constraints
+        def run_search(projects, budget_cap=None):
+            results = []
+            details = []
+            upsells = []
+            
+            cap = float(budget_cap) * 100 if budget_cap else float('inf')
+            
+            for p in projects:
+                # Filter Location
+                p_loc = p['location'].lower()
+                if loc_term and loc_term not in p_loc: continue
+                
+                # Filter Config (Normalize: remove spaces and dots)
+                p_conf_norm = p['configuration'].lower().replace(" ", "").replace(".", "")
+                conf_term_norm = conf_term.replace(" ", "").replace(".", "")
+                if conf_term and conf_term_norm not in p_conf_norm: continue
+                
+                # Filter Poss Type
+                if merged_reqs.possession_type == "RTMI" and "ready" not in p['status'].lower(): continue
+
+                if p['budget_min'] <= cap:
+                    results.append(f"{p['name']} ({p['status']})")
+                    details.append(p)
+                elif p['budget_min'] <= cap * 1.2:
+                    upsells.append(f"{p['name']} ({p['budget_min']/100} Cr)")
+            
+            return results, details, upsells
+
+        # 1. Strict Search (with budget)
+        matches, match_details, upsell_matches = run_search(all_projects, merged_reqs.budget_max)
         
-        # Convert budget to integer (scale of 100 per Cr)
-        budget_limit = float(merged_reqs.budget_max) * 100 if merged_reqs.budget_max else float('inf')
-
-        for p in all_projects:
-            # Filter Location
-            p_loc = p['location'].lower()
-            if loc_term and loc_term not in p_loc: continue
-            # Filter Config (Normalize: remove spaces and dots)
-            p_conf_norm = p['configuration'].lower().replace(" ", "").replace(".", "")
-            conf_term_norm = conf_term.replace(" ", "").replace(".", "")
-            if conf_term and conf_term_norm not in p_conf_norm: continue
-            # Filter Poss Type
-            if merged_reqs.possession_type == "RTMI" and "ready" not in p['status'].lower(): continue
-
-            if p['budget_min'] <= budget_limit:
-                matches.append(f"{p['name']} ({p['status']})")
-                match_details.append(p)
-            elif p['budget_min'] <= budget_limit * 1.2:
-                upsell_matches.append(f"{p['name']} ({p['budget_min']/100} Cr)")
+        budget_relaxed = False
+        
+        # 2. Fallback: If no matches, try relaxing budget completely
+        if not matches and merged_reqs.budget_max:
+            logger.info("No matches with strict budget. relaxing budget constraint.")
+            matches, match_details, _ = run_search(all_projects, budget_cap=None)
+            if matches:
+                 budget_relaxed = True
 
         if matches:
             # Build detailed response with property information using proper markdown
-            response_parts = ["I found these excellent matches:\n\n"]
+            if budget_relaxed:
+                response_parts = [f"I couldn't find matches within **₹{merged_reqs.budget_max} Cr**, but here are excellent options slightly above that range:\n\n"]
+            else:
+                response_parts = ["I found these excellent matches:\n\n"]
 
             for i, proj in enumerate(match_details[:3], 1):  # Show top 3 in detail
                 response_parts.append(f"**{i}. {proj['name']}** ({proj['status']})\n")
