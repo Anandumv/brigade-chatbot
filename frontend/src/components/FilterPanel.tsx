@@ -10,6 +10,7 @@ interface FilterPanelProps {
     selectedFilters: SelectedFilters;
     isCollapsed?: boolean;
     onToggleCollapse?: () => void;
+    onApplyFilters?: () => void; // New: callback to trigger search
 }
 
 export function FilterPanel({
@@ -17,6 +18,7 @@ export function FilterPanel({
     selectedFilters,
     isCollapsed = true,
     onToggleCollapse,
+    onApplyFilters,
 }: FilterPanelProps) {
     const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -279,7 +281,10 @@ export function FilterPanel({
                                 Clear All
                             </button>
                             <button
-                                onClick={onToggleCollapse}
+                                onClick={() => {
+                                    onToggleCollapse?.();
+                                    onApplyFilters?.();
+                                }}
                                 className="flex-1 py-2 text-sm text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
                             >
                                 Apply Filters

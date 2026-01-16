@@ -115,6 +115,85 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
         }
     };
 
+    // Build a natural language query from filters and trigger search
+    const handleApplyFilters = async () => {
+        if (isLoading) return;
+
+        const parts: string[] = [];
+
+        if (selectedFilters.configuration) {
+            parts.push(selectedFilters.configuration);
+        }
+        if (selectedFilters.location) {
+            parts.push(`in ${selectedFilters.location}`);
+        }
+        if (selectedFilters.budgetMax) {
+            parts.push(`under ${selectedFilters.budgetMax / 100} Cr`);
+        }
+        if (selectedFilters.possessionYear === 'ready') {
+            parts.push('ready to move');
+        } else if (selectedFilters.possessionYear) {
+            parts.push(`by ${selectedFilters.possessionYear}`);
+        }
+
+        if (parts.length === 0) return;
+
+        const generatedQuery = `Show me ${parts.join(' ')}`;
+
+        // Create user message
+        const userMessage: Message = {
+            id: generateId(),
+            role: 'user',
+            content: generatedQuery,
+            timestamp: new Date(),
+        };
+
+        setMessages((prev) => [...prev, userMessage]);
+        setIsLoading(true);
+        setError(null);
+
+        // Add loading message
+        const loadingMessage: Message = {
+            id: generateId(),
+            role: 'assistant',
+            content: '',
+            timestamp: new Date(),
+            isLoading: true,
+        };
+        setMessages((prev) => [...prev, loadingMessage]);
+
+        try {
+            const response = await apiService.sendQueryWithFilters(
+                generatedQuery,
+                selectedFilters
+            );
+
+            const assistantMessage: Message = {
+                id: generateId(),
+                role: 'assistant',
+                content: response.answer,
+                timestamp: new Date(),
+                confidence: response.confidence,
+                sources: response.sources,
+                intent: response.intent,
+                isRefusal: response.is_refusal,
+                refusalReason: response.refusal_reason,
+                suggested_actions: response.suggested_actions,
+                projects: response.projects,
+            };
+
+            setMessages((prev) =>
+                prev.filter((m) => !m.isLoading).concat(assistantMessage)
+            );
+        } catch (err) {
+            console.error('Filter search error:', err);
+            setError('Failed to search with filters. Please try again.');
+            setMessages((prev) => prev.filter((m) => !m.isLoading));
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     return (
         <div className="flex flex-col h-full bg-gray-50 font-sans text-gray-800">
             {/* Minimal Header */}
@@ -148,6 +227,7 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                                 onFiltersChange={setSelectedFilters}
                                 isCollapsed={isFilterCollapsed}
                                 onToggleCollapse={() => setIsFilterCollapsed(!isFilterCollapsed)}
+                                onApplyFilters={handleApplyFilters}
                             />
                         </div>
 
