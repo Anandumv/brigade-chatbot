@@ -19,6 +19,7 @@ import httpx
 
 from services.sales_intelligence import sales_intelligence
 from services.sales_conversation import SUGGESTED_ACTIONS
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -242,9 +243,9 @@ class IntelligentSalesHandler:
     """
     
     def __init__(self):
-        self.api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENROUTER_API_KEY")
-        self.api_base = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
-        self.model = os.getenv("LLM_MODEL", "openai/gpt-4-turbo-preview")
+        self.api_key = settings.openai_api_key
+        self.api_base = settings.openai_base_url
+        self.model = settings.effective_gpt_model
         
         # Try to initialize Pixeltable for pre-computed FAQs
         self.pixeltable_available = False

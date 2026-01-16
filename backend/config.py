@@ -37,6 +37,15 @@ class Settings(BaseSettings):
     gpt_model: str = "gpt-4-turbo-preview"  # OpenAI model name
     llm_model: Optional[str] = None  # Alias for gpt_model from env
     max_tokens: int = 1500
+
+    @property
+    def effective_gpt_model(self) -> str:
+        """Returns llm_model (cleaned) or fallback to gpt_model."""
+        model = self.llm_model or self.gpt_model
+        if model and "/" in model:
+            # Strip prefixes like 'openai/' which are common in proxy configs but invalid for direct OpenAI API
+            return model.split("/")[-1]
+        return model
     temperature: float = 0.1  # Low temperature for factual responses
 
     # Response Time Configuration

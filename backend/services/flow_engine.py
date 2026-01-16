@@ -66,7 +66,7 @@ def extract_requirements_llm(user_input: str) -> FlowRequirements:
             base_url=settings.openai_base_url
         )
         response = client.chat.completions.create(
-            model=settings.llm_model or settings.gpt_model,
+            model=settings.effective_gpt_model,
             messages=[
                 {"role": "system", "content": "Extract JSON: configuration (e.g. 2BHK), location, budget_max (float in Cr), possession_year (int), possession_type (RTMI/Under Construction). Return null if missing."},
                 {"role": "user", "content": user_input}
@@ -87,7 +87,7 @@ def generate_persuasion_text(topic: str, context: str) -> str:
             base_url=settings.openai_base_url
         )
         response = client.chat.completions.create(
-            model=settings.llm_model or settings.gpt_model,
+            model=settings.effective_gpt_model,
             messages=[
                 {"role": "system", "content": "You are a sales coach. Generate persuasive talking points (no fake data) for the agent."},
                 {"role": "user", "content": f"Topic: {topic}\nContext: {context}"}
@@ -105,7 +105,7 @@ def classify_user_intent(user_input: str, context: str) -> dict:
             base_url=settings.openai_base_url
         )
         response = client.chat.completions.create(
-            model=settings.llm_model,
+            model=settings.effective_gpt_model,
             messages=[
                 {
                     "role": "system",
@@ -148,7 +148,7 @@ def generate_contextual_response(user_input: str, context: str, conversation_goa
             base_url=settings.openai_base_url
         )
         response = client.chat.completions.create(
-            model=settings.llm_model or settings.gpt_model,
+            model=settings.effective_gpt_model,
             messages=[
                 {
                     "role": "system",
