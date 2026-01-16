@@ -16,7 +16,8 @@ def _dir_exists(name: str) -> bool:
     """Check if a directory exists in Pixeltable."""
     try:
         dirs = pxt.list_dirs()
-        return name in [d.name for d in dirs] if dirs else False
+        # dirs is a list of Dir objects, we need to check .path or .name
+        return any(d.path == name or d.name == name for d in dirs) if dirs else False
     except:
         return False
 
@@ -24,8 +25,15 @@ def _dir_exists(name: str) -> bool:
 def _table_exists(name: str) -> bool:
     """Check if a table exists in Pixeltable."""
     try:
+        # Tables might be in directories, e.g. 'brigade.projects'
         tables = pxt.list_tables()
-        return name in [t.name for t in tables] if tables else False
+        if not tables:
+            return False
+        # Check for exact path match
+        for t in tables:
+            if t.path == name or t.name == name:
+                return True
+        return False
     except:
         return False
 
@@ -98,7 +106,7 @@ def _create_projects_table():
 def _create_documents_table():
     """Create documents table with auto-chunking and embeddings."""
     
-    if pxt.table_exists('brigade.documents'):
+    if _table_exists('brigade.documents'):
         logger.info("Documents table already exists")
         return pxt.get_table('brigade.documents')
     
@@ -114,7 +122,7 @@ def _create_documents_table():
     logger.info("Created brigade.documents table")
     
     # Create view with auto-chunking
-    if not pxt.view_exists('brigade.doc_chunks'):
+    if not _table_exists('brigade.doc_chunks'):
         chunks = pxt.create_view(
             'brigade.doc_chunks',
             docs,
@@ -142,7 +150,7 @@ def _create_documents_table():
 def _create_faq_table():
     """Create FAQ table with pre-computed GPT responses for sales training."""
     
-    if pxt.table_exists('brigade.faq'):
+    if _table_exists('brigade.faq'):
         logger.info("FAQ table already exists")
         return pxt.get_table('brigade.faq')
     
