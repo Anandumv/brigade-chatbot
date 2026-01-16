@@ -549,6 +549,9 @@ Return ONLY valid JSON with extracted filters. If a field cannot be determined, 
         if ui_filters.get('location'):
             # UI sends "whitefield", "north_bangalore", etc.
             loc = ui_filters['location']
+            if isinstance(loc, list):
+                loc = loc[0] if loc else ""
+            
             # Check if it's an area or locality
             if 'bangalore' in loc: 
                 merged.area = loc.replace('_', ' ').title() # north_bangalore -> North Bangalore

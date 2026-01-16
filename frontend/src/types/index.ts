@@ -47,6 +47,7 @@ export interface ChatQueryResponse {
     response_time_ms: number;
     hallucination_risk?: boolean;
     suggested_actions?: string[];
+    projects?: any[];
 }
 
 export interface CompareProjectsRequest {
@@ -67,6 +68,7 @@ export interface Message {
     refusalReason?: string;
     suggested_actions?: string[];
     isLoading?: boolean;
+    projects?: any[];
 }
 
 export interface QueryAnalytics {

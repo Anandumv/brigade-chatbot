@@ -151,7 +151,8 @@ class ChatQueryResponse(BaseModel):
     intent: str
     refusal_reason: Optional[str] = None
     response_time_ms: int
-    project_info: Optional[Dict[str, Any]] = None
+    data: Optional[Dict[str, Any]] = None
+    projects: List[Dict[str, Any]] = []  # Default to empty list instead of None
     suggested_actions: Optional[List[str]] = None  # Dynamic quick reply chips
 
 
@@ -462,108 +463,93 @@ How can I assist you today?"""
                     logger.info(f"Context Injection: Appending '{last_project}' to query '{request.query}'")
                     request.query += f" regarding {last_project}"
 
-        # Step 3: Retrieve similar document chunks
-        chunks = await retrieval_service.retrieve_similar_chunks(
-            query=request.query,
-            project_id=request.project_id,
-            source_type="internal"  # Phase 1: internal only
-        )
+        # Step 3: Handle Intent-Specific Logic
+        chunks = [] # Initialize chunks to avoid UnboundLocalError
+        
+        # A. Property Search (Structured)
+        if intent == "property_search" or (request.filters and len(request.filters) > 0):
+            logger.info("Executing Structured Search for Property Query")
+            
+            # Extract filters if not already provided
+            if not request.filters:
+                filters = filter_extractor.extract_filters(request.query)
+            else:
+                filters = filter_extractor.extract_filters(request.query) # Re-extract to be safe or use provided? Use provided usually.
+                # Actually, main.py schema defines filters as dict. We need to convert to PropertyFilters model?
+                # filter_extractor expects query. If request.filters provided (from frontend), utilize it.
+                # Let's trust extraction from query for now as it's more robust on backend unless frontend is very specific.
+                pass 
 
-        logger.info(f"Retrieved {len(chunks)} chunks")
-
-        # Step 4: Calculate confidence
-        confidence = confidence_scorer.score_confidence(chunks)
-        logger.info(f"Confidence: {confidence}")
-
-        # Step 5: Refusal logic - but with web search fallback
-        should_refuse, refusal_reason = refusal_handler.should_refuse(
-            intent=intent,
-            chunks=chunks,
-            confidence=confidence
-        )
-
-        # If we should refuse due to no relevant info, try web search fallback
-        # ENABLED: For amenities and context pitching as requested
-        if should_refuse and refusal_reason == "no_relevant_info":
-            logger.info("No internal docs found, trying web search fallback for context/amenities")
-            web_result = web_search_service.search_and_answer(
+            # Perform Hybrid Retrieval
+            search_results = await hybrid_retrieval.search_with_filters(
                 query=request.query,
-                topic_hint="Brigade Group real estate Bangalore"
+                filters=filters
             )
             
-            if web_result.get("answer") and web_result.get("is_external", False):
-                response_time_ms = int((time.time() - start_time) * 1000)
+            # Structured search doesn't use vector chunks
+            chunks = []
+            
+            # Generate Answer based on projects
+            full_projects = search_results["projects"]
+            
+            # Create a context summary for the LLM
+            if full_projects:
+                project_context = "\n".join([
+                    f"- {p['project_name']} ({p.get('status')}): {p.get('location')}. Price: {p['price_range']['min_display']} - {p['price_range']['max_display']}. {p.get('highlights')}"
+                    for p in full_projects[:5] # Limit context
+                ])
+                system_prompt = f"You are a helpful sales assistant. The user is looking for properties. Here are the matches:\n{project_context}\n\nSummarize these options briefly and ask if they'd like to schedule a visit."
                 
-                # Log as answered with external source
-                if request.user_id:
-                    await pixeltable_client.log_query(
-                        user_id=request.user_id,
-                        query=request.query,
-                        intent=intent,
-                        answered=True,
-                        confidence_score="Low (External)",
-                        response_time_ms=response_time_ms,
-                        project_id=request.project_id
-                    )
-                
-                return ChatQueryResponse(
-                    answer=web_result["answer"],
-                    sources=[SourceInfo(**s) for s in web_result.get("sources", [])],
-                    confidence=web_result.get("confidence", "Low"),
-                    intent=intent,
-                    refusal_reason=None,
-                    response_time_ms=response_time_ms
-                )
-
-        # Original refusal logic for other reasons
-        if should_refuse:
-            refusal_response = refusal_handler.get_refusal_response(
-                refusal_reason=refusal_reason,
-                query=request.query
-            )
-
-            # Log query
-            if request.user_id:
-                await pixeltable_client.log_query(
-                    user_id=request.user_id,
+                # We can use answer_generator to generate the text, but providing specific context
+                # For now, let's use a simple generation or re-use generate_answer with boosted context
+                # To keep it simple and robust:
+                result = answer_generator.generate_answer(
                     query=request.query,
+                    chunks=[], # We rely on project data, not chunks
                     intent=intent,
-                    answered=False,
-                    refusal_reason=refusal_reason,
-                    response_time_ms=int((time.time() - start_time) * 1000),
-                    project_id=request.project_id
+                    confidence="High"
                 )
+                # Override answer with a more specific one if needed, or rely on answer_generator to be smart if we passed context.
+                # Actually answer_generator uses chunks. We should probably pass project info as chunks or distinct context.
+                # Let's keep it simple: Let the frontend render the cards. The answer should be "Here are some projects that match your criteria:"
+                result["answer"] = f"I found {len(full_projects)} projects matching your criteria. Here are the details:"
+                result["confidence"] = "High"
+                
+                # Format projects for response (already formatted by hybrid_retrieval? No, search_with_filters returns formatted list relative to schema? 
+                # verified: search_with_filters returns dict with "projects": [formatted_dict...]
+                # So we can pass it directly.
+            else:
+                result = {
+                    "answer": "I couldn't find any projects matching those specific criteria. You might want to try broadening your search (e.g., different location or budget).",
+                    "confidence": "High",
+                    "sources": []
+                }
+                full_projects = []
 
-            return ChatQueryResponse(
-                **refusal_response,
-                response_time_ms=int((time.time() - start_time) * 1000)
-            )
-
-        # Step 6: Generate answer (with persona support)
-        if request.persona:
-            # Phase 2: Persona-based pitch
-            result = persona_pitch_generator.generate_persona_pitch(
-                query=request.query,
-                chunks=chunks,
-                persona=request.persona
-            )
+        # B. Comparison
         elif intent == "comparison":
             # Multi-project comparison
             result = answer_generator.generate_comparison_answer(
                 query=request.query,
                 chunks=chunks
             )
+            full_projects = [] # Could perhaps extract involved projects?
+            
+        # C. General / Other
         else:
             # Standard answer
             result = answer_generator.generate_answer(
                 query=request.query,
                 chunks=chunks,
                 intent=intent,
-                confidence=confidence
+                confidence="Medium" # Default confidence for generic
             )
+            full_projects = []
 
         # Step 7: Validate answer (anti-hallucination check)
-        if refusal_handler.detect_hallucination_risk(result["answer"], chunks):
+        # Step 7: Validate answer (anti-hallucination check)
+        # Skip validation for property_search as it relies on structured data, not chunks
+        if intent != "property_search" and refusal_handler.detect_hallucination_risk(result["answer"], chunks):
             logger.warning("Hallucination risk detected - refusing")
             refusal_response = refusal_handler.get_refusal_response(
                 refusal_reason="insufficient_confidence"
@@ -590,17 +576,23 @@ How can I assist you today?"""
         response_time_ms = int((time.time() - start_time) * 1000)
 
         if request.user_id:
+            confidence_score = result.get("confidence", "Medium")
             await pixeltable_client.log_query(
                 user_id=request.user_id,
                 query=request.query,
                 intent=intent,
                 answered=True,
-                confidence_score=confidence,
+                confidence_score=confidence_score,
                 response_time_ms=response_time_ms,
                 project_id=request.project_id
             )
 
         logger.info(f"Query processed successfully in {response_time_ms}ms")
+
+        if full_projects:
+             logger.info(f"DEBUG: Returning {len(full_projects)} projects in response.")
+        else:
+             logger.info("DEBUG: full_projects is empty or None")
 
         return ChatQueryResponse(
             answer=result["answer"],
@@ -608,7 +600,8 @@ How can I assist you today?"""
             confidence=result["confidence"],
             intent=intent,
             refusal_reason=None,
-            response_time_ms=response_time_ms
+            response_time_ms=response_time_ms,
+            projects=full_projects
         )
 
     except Exception as e:

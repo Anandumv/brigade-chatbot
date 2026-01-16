@@ -59,17 +59,24 @@ class PixeltableClient:
         session_id: str = None
     ):
         """Log a query - compatible with supabase_client interface."""
-        await log_query(
-            user_id=user_id,
-            query=query,
-            intent=intent,
-            answered=answered,
-            confidence_score=confidence_score,
-            refusal_reason=refusal_reason,
-            response_time_ms=response_time_ms,
-            project_id=project_id,
-            session_id=session_id
-        )
+        if not self.initialized:
+            logger.warning("Pixeltable not initialized, skipping log_query")
+            return
+
+        try:
+            await log_query(
+                user_id=user_id,
+                query=query,
+                intent=intent,
+                answered=answered,
+                confidence_score=confidence_score,
+                refusal_reason=refusal_reason,
+                response_time_ms=response_time_ms,
+                project_id=project_id,
+                session_id=session_id
+            )
+        except Exception as e:
+            logger.error(f"Failed to log query: {e}")
     
     async def get_user_projects(self, user_id: str) -> List[Dict[str, Any]]:
         """Get all projects (no user filtering in Pixeltable version)."""

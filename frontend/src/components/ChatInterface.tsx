@@ -5,6 +5,7 @@ import { Message, ProjectInfo, PersonaInfo, ChatQueryResponse } from '@/types';
 import { SelectedFilters } from '@/types/filters';
 import { apiService } from '@/services/api';
 import { ResponseCard } from './ResponseCard';
+import { ProjectCard } from './ProjectCard';
 import { FilterPanel } from './FilterPanel';
 import { QuickReplies, getQuickRepliesForIntent } from './QuickReplies';
 import { Send, Loader2, Sparkles, User, AlertCircle, Zap } from '@/components/icons';
@@ -92,6 +93,7 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                 isRefusal: response.is_refusal,
                 refusalReason: response.refusal_reason,
                 suggested_actions: response.suggested_actions,
+                projects: response.projects,
             };
 
             setMessages((prev) =>
@@ -211,6 +213,48 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                                                 isRefusal={message.isRefusal}
                                                 refusalReason={message.refusalReason}
                                             />
+
+                                            {message.projects && message.projects.length > 0 && (
+                                                <div className="mt-4 flex flex-col gap-4">
+                                                    {message.projects.map((project, idx) => {
+                                                        // Adapter to map backend fields to frontend ProjectCard props
+                                                        const adaptProjectData = (apiProject: any) => {
+                                                            const minCr = (apiProject.budget_min || 0) / 100;
+                                                            const maxCr = (apiProject.budget_max || 0) / 100;
+
+                                                            let priceInfo = 'Price on Request';
+                                                            if (minCr > 0) {
+                                                                if (maxCr > minCr) {
+                                                                    priceInfo = `₹${minCr.toFixed(2)} Cr - ₹${maxCr.toFixed(2)} Cr`;
+                                                                } else {
+                                                                    priceInfo = `Starting ₹${minCr.toFixed(2)} Cr`;
+                                                                }
+                                                            }
+
+                                                            return {
+                                                                project_name: apiProject.name || 'Unknown Project',
+                                                                developer_name: apiProject.developer || apiProject.builder || 'Brigade Group',
+                                                                location: apiProject.location || 'Bangalore',
+                                                                price_range: priceInfo,
+                                                                configuration: apiProject.configuration || '2, 3 BHK',
+                                                                status: apiProject.status || 'Active',
+                                                                possession_year: apiProject.possession_year?.toString(),
+                                                                rera_number: apiProject.rera_number,
+                                                                image_url: apiProject.image_url,
+                                                                usp: apiProject.usp || [],
+                                                            };
+                                                        };
+
+                                                        return (
+                                                            <ProjectCard
+                                                                key={idx}
+                                                                project={adaptProjectData(project)}
+                                                            />
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+
                                             {messages.indexOf(message) === messages.length - 1 && (
                                                 <QuickReplies
                                                     replies={

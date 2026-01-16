@@ -10,36 +10,71 @@ from config import settings
 import pixeltable as pxt
 import logging
 import asyncio
+import json
+import os
 from concurrent.futures import ThreadPoolExecutor
+from utils.geolocation_utils import get_coordinates, calculate_distance
 
 logger = logging.getLogger(__name__)
 
 # Thread pool for Pixeltable queries (avoids uvloop conflict)
 _executor = ThreadPoolExecutor(max_workers=4)
 
+MOCK_DATA_PATH = os.path.join(os.path.dirname(__file__), '../data/seed_projects.json')
 
 class HybridRetrievalService:
     """
     Production retrieval service for sales assistant.
     Queries Pixeltable directly for real project data.
+    Falls back to mock data if database is unavailable.
     """
 
     def __init__(self):
         self.projects_table = None
         self.units_table = None
+        self.mock_projects = []
         self._init_tables()
     
     def _init_tables(self):
-        """Initialize Pixeltable table handles."""
+        """Initialize Pixeltable table handles or load mock data."""
         try:
             self.projects_table = pxt.get_table('brigade.projects')
             # Units are embedded in projects table, no separate units table
             self.units_table = None
             logger.info("HybridRetrieval: Connected to Pixeltable brigade.projects table")
         except Exception as e:
-            logger.warning(f"Pixeltable tables not available: {e}")
+            logger.warning(f"Pixeltable tables not available: {e}. Switching to MOCK DATA.")
             self.projects_table = None
             self.units_table = None
+            self._load_mock_data()
+
+    def _load_mock_data(self):
+        """Load mock projects from seed JSON."""
+        try:
+            if os.path.exists(MOCK_DATA_PATH):
+                with open(MOCK_DATA_PATH, 'r') as f:
+                    self.mock_projects = json.load(f)
+                
+                # Add coordinates to mock data for radius search
+                for p in self.mock_projects:
+                    loc = p.get('location', '')
+                    coords = get_coordinates(loc)
+                    if coords:
+                        p['_lat'], p['_lon'] = coords
+                    else:
+                        # Fallback based on zone if location is too specific
+                        zone = p.get('zone', '')
+                        coords = get_coordinates(zone)
+                        if coords:
+                            p['_lat'], p['_lon'] = coords
+
+                logger.info(f"Loaded {len(self.mock_projects)} mock projects with coordinates")
+            else:
+                logger.error(f"Mock data file not found at {MOCK_DATA_PATH}")
+                self.mock_projects = []
+        except Exception as e:
+            logger.error(f"Failed to load mock data: {e}")
+            self.mock_projects = []
 
     async def search_with_filters(
         self,
@@ -54,9 +89,9 @@ class HybridRetrievalService:
         logger.info(f"Searching for: {query}")
 
         # Ensure tables are initialized
-        if not self.projects_table:
+        if not self.projects_table and not self.mock_projects:
             self._init_tables()
-            if not self.projects_table:
+            if not self.projects_table and not self.mock_projects:
                 return {
                     "projects": [],
                     "total_matching_projects": 0,
@@ -71,14 +106,20 @@ class HybridRetrievalService:
         
         logger.info(f"Extracted filters: {filters.dict(exclude_none=True)}")
 
-        # Query Pixeltable in thread to avoid uvloop conflict
-        loop = asyncio.get_event_loop()
-        results = await loop.run_in_executor(
-            _executor,
-            self._query_projects_sync,
-            filters,
-            query
-        )
+        # Query Pixeltable or Mock Data
+        if self.projects_table:
+            loop = asyncio.get_event_loop()
+            results = await loop.run_in_executor(
+                _executor,
+                self._query_projects_sync,
+                filters,
+                query
+            )
+            search_method = "pixeltable"
+        else:
+            # Synchronous mock query (fast enough)
+            results = self._query_mock_projects_sync(filters, query)
+            search_method = "mock_data"
         
         return {
             "projects": results,
@@ -305,6 +346,185 @@ class HybridRetrievalService:
         else:
             return f"₹{amount_inr:,}"
 
+    def _query_mock_projects_sync(self, filters: PropertyFilters, query: str) -> List[Dict[str, Any]]:
+        """Query Mock projects with filters."""
+        try:
+            if not self.mock_projects:
+                logger.error("WARNING: No mock projects loaded during query! Check seed_projects.json path.")
+                return []
+
+            filtered_results = list(self.mock_projects)
+            logger.info(f"Mock Query: Starting with {len(filtered_results)} projects")
+
+            # Normalization helper
+            def normalize(s):
+                return str(s).lower().strip() if s else ""
+
+            # Apply city filter
+            if filters.city and filters.city.strip():
+                city_lower = normalize(filters.city)
+                if city_lower != 'bangalore':
+                    filtered_results = [r for r in filtered_results 
+                                       if city_lower in normalize(r.get('location', '')) or 
+                                          city_lower in normalize(r.get('zone', '')) or
+                                          city_lower in normalize(r.get('full_address', ''))]
+
+            # Apply Zone filter
+            if filters.area and filters.area.strip():
+                area_lower = normalize(filters.area)
+                filtered_results = [r for r in filtered_results 
+                                   if area_lower in normalize(r.get('zone', '')) or 
+                                      area_lower in normalize(r.get('location', '')) or
+                                      area_lower in normalize(r.get('full_address', ''))]
+
+            # Apply locality filter
+            if filters.locality and filters.locality.strip():
+                locality_lower = normalize(filters.locality)
+                filtered_results = [r for r in filtered_results 
+                                   if locality_lower in normalize(r.get('location', '')) or
+                                      locality_lower in normalize(r.get('full_address', '')) or
+                                      locality_lower in normalize(r.get('description', '')) or
+                                      locality_lower in normalize(r.get('usp', ''))] # Added USP check
+
+            # Apply developer filter
+            if filters.developer_name and filters.developer_name.strip():
+                dev_keywords = filters.developer_name.lower().split()
+                filtered_results = [r for r in filtered_results 
+                                   if any(kw in normalize(r.get('name', '')) or 
+                                         kw in normalize(r.get('builder', '')) 
+                                         for kw in dev_keywords)]
+            
+            # Apply budget filter
+            if filters.max_price_inr:
+                max_lakhs = filters.max_price_inr / 100000
+                filtered_results = [r for r in filtered_results 
+                                   if r.get('budget_min') is not None and r.get('budget_min') > 0 and r.get('budget_min') <= max_lakhs]
+            
+            if filters.min_price_inr:
+                min_lakhs = filters.min_price_inr / 100000
+                filtered_results = [r for r in filtered_results 
+                                   if r.get('budget_max') is None or r.get('budget_max', 99999) >= min_lakhs]
+            
+            # Apply Possession Year filter
+            if filters.possession_year:
+                target_year = filters.possession_year
+                filtered_results = [r for r in filtered_results 
+                                   if r.get('possession_year') and str(r.get('possession_year')).strip().isdigit() and int(r.get('possession_year')) <= target_year]
+
+            # Apply Bedroom Filter
+            if filters.bedrooms:
+                target_bhks = filters.bedrooms # List[int], e.g. [2, 3]
+                def check_bhk(r):
+                    # Project config usually string: "2, 3 BHK" or "2BHK"
+                    conf = normalize(r.get('configuration', ''))
+                    for bhk in target_bhks:
+                        if f"{bhk}" in conf: # Simple substring check: "2" in "2, 3 BHK"
+                            return True
+                    return False
+                
+                filtered_results = [r for r in filtered_results if check_bhk(r)]
+
+            # Apply Check Property Type
+            if filters.property_type:
+                # 'apartment', 'villa', 'plot'
+                # Map to keywords
+                pt_keywords = []
+                for pt in filters.property_type:
+                    pt = pt.lower()
+                    if 'villa' in pt: pt_keywords.append('villa')
+                    elif 'plot' in pt: pt_keywords.append('plot')
+                    elif 'apartment' in pt: 
+                        pt_keywords.append('apartment')
+                        pt_keywords.append('bhk') # 2BHK usually means apartment
+
+                if pt_keywords:
+                    filtered_results = [r for r in filtered_results 
+                                       if any(kw in normalize(r.get('configuration', '')) or 
+                                             kw in normalize(r.get('description', '')) 
+                                             for kw in pt_keywords)]
+
+            # Apply Status
+            if filters.status:
+                # 'ongoing'/'upcoming' -> Under Construction
+                # 'completed' -> Ready to Move
+                status_whitelist = []
+                for s in filters.status:
+                    if s in ['completed', 'ready']:
+                        status_whitelist.append('ready')
+                    elif s in ['ongoing', 'upcoming', 'under construction']:
+                        status_whitelist.append('construction')
+                
+                if status_whitelist:
+                    filtered_results = [r for r in filtered_results 
+                                       if any(sw in normalize(r.get('status', '')) for sw in status_whitelist)]
+
+            # Format results like Pixeltable
+            formatted = []
+            for r in filtered_results:
+                img = r.get('image_url')
+                if isinstance(img, list) and img:
+                    img = img[0]
+                # Format price
+                min_p = r.get('budget_min', 0)
+                max_p = r.get('budget_max', 0)
+                
+                min_display = f"₹{min_p}L" if min_p else "POA"
+                max_display = f"₹{max_p}L" if max_p else "POA"
+                
+                price_range = {
+                    "min_display": min_display,
+                    "max_display": max_display
+                }
+                
+                formatted.append({
+                    "project_name": r.get('name'),
+                    "developer_name": r.get('builder', 'Brigade Group'),
+                    "location": r.get('location'),
+                    "price_range": price_range,
+                    "configuration": r.get('configuration', '2, 3 BHK'),
+                    "status": r.get('status', 'Under Construction'),
+                    "possession_year": str(r.get('possession_year', '')),
+                    "image_url": img,
+                    "usp": r.get('usp', []),
+                    "full_address": r.get('full_address'),
+                    "highlights": r.get('description', '')
+                })
+            
+            logger.info(f"Mock Query Final Count: {len(formatted)}")
+            return formatted
+
+        except Exception as e:
+            logger.error(f"Error in mock query: {e}")
+            return []
+
+
+    async def get_projects_within_radius(self, location_name: str, radius_km: float = 10.0) -> List[Dict[str, Any]]:
+        """
+        Returns projects within a radius of a named location.
+        """
+        center_coords = get_coordinates(location_name)
+        if not center_coords:
+            logger.warning(f"Could not find coordinates for {location_name}")
+            return []
+            
+        lat, lon = center_coords
+        matches = []
+        
+        # Search in mock data (or Pixeltable if it had latent coords)
+        # For now we use the enriched mock data
+        source = self.mock_projects
+        
+        for p in source:
+            if '_lat' in p and '_lon' in p:
+                dist = calculate_distance(lat, lon, p['_lat'], p['_lon'])
+                if dist <= radius_km:
+                    p_copy = p.copy()
+                    p_copy['_distance'] = round(dist, 2)
+                    matches.append(p_copy)
+                    
+        # Sort by distance
+        matches.sort(key=lambda x: x.get('_distance', 999))
+        return matches
 
 # Global instance
 hybrid_retrieval = HybridRetrievalService()
