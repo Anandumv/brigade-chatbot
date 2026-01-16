@@ -479,7 +479,7 @@ def get_recent_queries(user_id: str = None, limit: int = 100):
     
     query = logs.select(
         logs.query_id,
-        logs.query,
+        logs.query_text,
         logs.intent,
         logs.answered,
         logs.confidence_score,
