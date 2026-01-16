@@ -122,7 +122,10 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
         const parts: string[] = [];
 
         if (selectedFilters.configuration) {
-            parts.push(selectedFilters.configuration);
+            // Ensure configuration includes 'BHK' for proper query parsing
+            const config = selectedFilters.configuration;
+            const configDisplay = config.toLowerCase().includes('bhk') ? config : `${config} BHK`;
+            parts.push(configDisplay);
         }
         if (selectedFilters.location) {
             parts.push(`in ${selectedFilters.location}`);
