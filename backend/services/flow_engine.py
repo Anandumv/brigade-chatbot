@@ -51,6 +51,7 @@ class FlowState(BaseModel):
     selected_project_name: Optional[str] = None
     cached_project_details: Optional[Dict[str, Any]] = None
     last_shown_projects: List[Dict[str, Any]] = Field(default_factory=list)
+    pagination_offset: int = 3  # Track pagination state (default skip top 3)
 
 class FlowResponse(BaseModel):
     extracted_requirements: Dict[str, Any]
@@ -287,10 +288,18 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
 
     # --- SHOW MORE INTERCEPTOR ---
     if any(w in user_lower for w in ["show more", "more options", "see more", "other projects", "remaining"]):
-        if state.last_shown_projects and len(state.last_shown_projects) > 3:
-            # Show projects 4 onwards
+        if state.last_shown_projects and len(state.last_shown_projects) > state.pagination_offset:
+            # Dynamic Pagination
+            start = state.pagination_offset
+            PAGE_SIZE = 5
+            end = start + PAGE_SIZE
+            batch = state.last_shown_projects[start:end]
+            
+            # Update offset for next time
+            state.pagination_offset = end
+            
             response_parts = ["Here are more options:\n\n"]
-            for i, proj in enumerate(state.last_shown_projects[3:10], 4):  # Show up to 10 total
+            for i, proj in enumerate(batch, start + 1):  # Continue numbering
                 # Simplify configuration
                 config_raw = proj.get('configuration', '')
                 bhk_types = []
@@ -299,16 +308,17 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
                         clean_type = part.replace('BHK', ' BHK').strip()
                         if clean_type not in bhk_types:
                             bhk_types.append(clean_type)
-                config_display = ', '.join(bhk_types) if bhk_types else 'Multiple Options'
+                
+                config_display = ", ".join(bhk_types) if bhk_types else config_raw
                 
                 response_parts.append(f"**{i}. {proj['name']}** ({proj['status']})\n")
-                response_parts.append(f"- 📍 {proj['location']}\n")
-                response_parts.append(f"- 💰 ₹{proj['budget_min']/100:.2f} - ₹{proj['budget_max']/100:.2f} Cr\n")
-                response_parts.append(f"- 🏠 {config_display}\n\n")
-            
-            remaining = len(state.last_shown_projects) - 10
+                response_parts.append(f"   📍 {proj['location']}\n")
+                response_parts.append(f"   💰 ₹{proj['budget_min']} - ₹{proj['budget_max']} Cr\n")
+                response_parts.append(f"   🏠 {config_display}\n\n")
+
+            remaining = len(state.last_shown_projects) - end
             if remaining > 0:
-                response_parts.append(f"_And {remaining} more in our database..._\n\n")
+                response_parts.append(f"_And {remaining} more in our database... Say 'show more' again!_\n\n")
             
             response_parts.append("Would you like details on any of these? Just say the project name! 🏡")
             action = "".join(response_parts)
@@ -442,6 +452,7 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
 
     # --- NODE 2: SEARCH & RESULTS ---
     if node == "NODE 2":
+        state.pagination_offset = 3  # Reset pagination on new search
         # 1. Sanity Check for Budget
         budget_warning = ""
         if merged_reqs.budget_max and merged_reqs.budget_max > 50:
