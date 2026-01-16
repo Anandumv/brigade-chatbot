@@ -52,13 +52,19 @@ class PixeltableRetrievalService:
     def _initialize_tables(self):
         """Initialize Pixeltable table connections."""
         try:
-            if pxt.table_exists('brigade.doc_chunks'):
+            # Check for doc_chunks
+            try:
                 self.chunks_view = pxt.get_table('brigade.doc_chunks')
                 logger.info("Connected to brigade.doc_chunks view")
+            except Exception:
+                logger.warning("Table brigade.doc_chunks not found")
             
-            if pxt.table_exists('brigade.faq'):
+            # Check for faq
+            try:
                 self.faq_table = pxt.get_table('brigade.faq')
                 logger.info("Connected to brigade.faq table")
+            except Exception:
+                logger.warning("Table brigade.faq not found")
             
             self.initialized = self.chunks_view is not None
             

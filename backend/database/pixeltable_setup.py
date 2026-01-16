@@ -15,27 +15,34 @@ logger = logging.getLogger(__name__)
 def _dir_exists(name: str) -> bool:
     """Check if a directory exists in Pixeltable."""
     try:
-        dirs = pxt.list_dirs()
-        # dirs is a list of Dir objects, we need to check .path or .name
-        return any(d.path == name or d.name == name for d in dirs) if dirs else False
+        pxt.get_dir(name)
+        return True
     except:
-        return False
+        try:
+            # Fallback for older versions or slightly different names
+            dirs = pxt.list_dirs()
+            return any(d.path == name or d.name == name for d in dirs) if dirs else False
+        except:
+            return False
 
 
 def _table_exists(name: str) -> bool:
     """Check if a table exists in Pixeltable."""
     try:
-        # Tables might be in directories, e.g. 'brigade.projects'
-        tables = pxt.list_tables()
-        if not tables:
-            return False
-        # Check for exact path match
-        for t in tables:
-            if t.path == name or t.name == name:
-                return True
-        return False
+        pxt.get_table(name)
+        return True
     except:
-        return False
+        try:
+            # Fallback: list all tables and check
+            tables = pxt.list_tables()
+            if not tables:
+                return False
+            for t in tables:
+                if t.path == name or t.name == name:
+                    return True
+            return False
+        except:
+            return False
 
 
 def initialize_pixeltable():
