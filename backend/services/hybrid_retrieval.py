@@ -91,121 +91,106 @@ class HybridRetrievalService:
         """Query Pixeltable projects table with filters (runs in thread)."""
         try:
             projects = self.projects_table
+            if projects is None:
+                logger.error("Projects table is None - cannot query")
+                return []
             
-            # Start with all projects
-            q = projects.select(
-                projects.project_id,
-                projects.name,
-                projects.builder,
-                projects.status,
-                projects.city,
-                projects.location,
-                projects.location_link,
-                projects.total_land_area,
-                projects.towers,
-                projects.floors,
-                projects.possession_year,
-                projects.amenities,
-                projects.highlights,
-                projects.brochure_link,
-                projects.rm_contact,
-                projects.config_summary,
-                projects.min_price_cr,
-                projects.max_price_cr,
-                projects.min_sqft,
-                projects.max_sqft
-            )
+            # First, try to get ALL projects to verify table access
+            try:
+                all_count = len(projects.collect())
+                logger.info(f"Total projects in table: {all_count}")
+            except Exception as count_err:
+                logger.error(f"Cannot access projects table: {count_err}")
+                return []
+            
+            # Start with all projects - simplified query
+            q = projects.select()
             
             # Check if query mentions a specific project or developer
             query_lower = query.lower()
             has_filters = False
             
             # Search by project name (highest priority)
-            project_keywords = ['birla', 'brigade', 'prestige', 'evara', 'avalon', 'citrine', 'raintree']
+            project_keywords = ['birla', 'brigade', 'prestige', 'evara', 'avalon', 'citrine', 'raintree', 'sobha']
             for keyword in project_keywords:
                 if keyword in query_lower:
                     q = q.where(projects.name.contains(keyword.title()) | projects.builder.contains(keyword.title()))
                     has_filters = True
+                    logger.info(f"Applied keyword filter: {keyword}")
                     break
             
             # Apply standard filters only if no project-specific search
             if not has_filters:
-                # City filter
-                if filters.city:
-                    q = q.where(projects.city.contains(filters.city))
-                    has_filters = True
-                
                 # Location/locality filter
                 if filters.locality:
                     q = q.where(projects.location.contains(filters.locality))
                     has_filters = True
+                    logger.info(f"Applied locality filter: {filters.locality}")
                 
                 # Budget filter (price in Cr)
                 if filters.max_price_inr:
                     max_cr = filters.max_price_inr / 10000000
                     q = q.where(projects.min_price_cr <= max_cr)
                     has_filters = True
+                    logger.info(f"Applied max price filter: {max_cr} Cr")
                 
                 if filters.min_price_inr:
                     min_cr = filters.min_price_inr / 10000000
                     q = q.where(projects.max_price_cr >= min_cr)
                     has_filters = True
-                
-                # Status filter
-                if filters.status:
-                    status_str = filters.status[0] if filters.status else None
-                    if status_str:
-                        q = q.where(projects.status.contains(status_str))
-                        has_filters = True
-                
-                # Possession year filter
-                if filters.possession_year:
-                    q = q.where(projects.possession_year == filters.possession_year)
-                    has_filters = True
+                    logger.info(f"Applied min price filter: {min_cr} Cr")
                 
                 # Developer filter
                 if filters.developer_name:
                     q = q.where(projects.builder.contains(filters.developer_name))
                     has_filters = True
+                    logger.info(f"Applied developer filter: {filters.developer_name}")
             
             # Execute query
             results = q.collect()
+            logger.info(f"Query returned {len(results)} results, has_filters={has_filters}")
+            
+            # If no results with filters but we have projects, return all projects
+            if len(results) == 0 and all_count > 0 and has_filters:
+                logger.info("No filtered results, returning all projects")
+                results = projects.collect()
             
             # Format results
             formatted = []
             for r in results:
-                # Get units for this project
-                units = self._get_project_units(r['project_id'], filters.bedrooms)
-                
-                formatted.append({
-                    "project_id": r['project_id'],
-                    "project_name": r['name'],
-                    "developer_name": r['builder'],
-                    "location": r['location'],
-                    "city": r['city'],
-                    "locality": r['location'],
-                    "status": r['status'],
-                    "possession_year": r['possession_year'],
-                    "total_land_area": r['total_land_area'],
-                    "towers": r['towers'],
-                    "floors": r['floors'],
-                    "amenities": r['amenities'],
-                    "highlights": r['highlights'],
-                    "brochure_link": r['brochure_link'],
-                    "rm_contact": r['rm_contact'],
-                    "location_link": r['location_link'],
-                    "config_summary": r['config_summary'],
-                    "price_range": {
-                        "min": r['min_price_cr'],
-                        "max": r['max_price_cr'],
-                        "min_display": f"₹{r['min_price_cr']:.2f} Cr" if r['min_price_cr'] else "TBD",
-                        "max_display": f"₹{r['max_price_cr']:.2f} Cr" if r['max_price_cr'] else "TBD"
-                    },
-                    "matching_units": units,
-                    "unit_count": len(units),
-                    "can_expand": len(units) > 3,
-                    "relevant_chunks": []
-                })
+                try:
+                    formatted.append({
+                        "project_id": r.get('project_id', ''),
+                        "project_name": r.get('name', ''),
+                        "developer_name": r.get('builder', ''),
+                        "location": r.get('location', ''),
+                        "city": r.get('city', ''),
+                        "locality": r.get('location', ''),
+                        "status": r.get('status', ''),
+                        "possession_year": r.get('possession_year'),
+                        "total_land_area": r.get('total_land_area', ''),
+                        "towers": r.get('towers', ''),
+                        "floors": r.get('floors', ''),
+                        "amenities": r.get('amenities', ''),
+                        "highlights": r.get('highlights', ''),
+                        "brochure_link": r.get('brochure_link', ''),
+                        "rm_contact": r.get('rm_contact', ''),
+                        "location_link": r.get('location_link', ''),
+                        "config_summary": r.get('config_summary', ''),
+                        "price_range": {
+                            "min": r.get('min_price_cr'),
+                            "max": r.get('max_price_cr'),
+                            "min_display": f"₹{r.get('min_price_cr', 0):.2f} Cr" if r.get('min_price_cr') else "TBD",
+                            "max_display": f"₹{r.get('max_price_cr', 0):.2f} Cr" if r.get('max_price_cr') else "TBD"
+                        },
+                        "matching_units": [],
+                        "unit_count": 0,
+                        "can_expand": False,
+                        "relevant_chunks": []
+                    })
+                except Exception as format_err:
+                    logger.error(f"Error formatting project: {format_err}")
+                    continue
             
             logger.info(f"Found {len(formatted)} matching projects")
             return formatted
