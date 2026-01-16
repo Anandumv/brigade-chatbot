@@ -254,6 +254,36 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
                 next_redirection="NODE 7"
             )
 
+    # --- UPSELL / HIGHER BUDGET INTERCEPTOR ---
+    if any(w in user_lower for w in ["slightly higher", "higher option", "increase budget", "premium", "more expensive", "above my budget", "stretch"]):
+        if merged_reqs.budget_max:
+            # Increase budget by 20%
+            new_budget = float(merged_reqs.budget_max) * 1.2
+            merged_reqs.budget_max = new_budget
+            state.requirements.budget_max = new_budget
+            
+            action = f"Got it! Let's stretch the budget slightly to **₹{new_budget:.2f} Cr** and see what premium options unlock for you. 💎"
+            
+            # Reset state for fresh search
+            state.selected_project_id = None 
+            state.selected_project_name = None
+            state.cached_project_details = None
+             
+            # Proceed to search with new budget
+            node = "NODE 2"
+            next_node = "NODE 2"
+            
+            # We continue execution to NODE 2 in this same call so the user gets results immediately
+        else:
+            # If no budget set yet
+            action = "I can definitely show you premium options. What's your max budget?"
+            return FlowResponse(
+                extracted_requirements=merged_reqs.dict(),
+                current_node="NODE 1",
+                system_action=action,
+                next_redirection="NODE 1"
+            )
+
     # --- SHOW MORE INTERCEPTOR ---
     if any(w in user_lower for w in ["show more", "more options", "see more", "other projects", "remaining"]):
         if state.last_shown_projects and len(state.last_shown_projects) > 3:
