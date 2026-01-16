@@ -524,6 +524,38 @@ Let me help find the best option:
 
 👉 **Which approach works best for you? Or shall we discuss specifics over a call?**
 """,
+            SalesIntent.FAQ_UNDER_CONSTRUCTION: """
+🏗️ **Great question! Here's why Under Construction is a smart choice:**
+
+**Key Benefits:**
+- 💰 **10-15% lower price** compared to ready-to-move properties
+- 📈 **Price appreciation** as construction progresses
+- 🎨 **Customization options** for interiors and layout
+- 💳 **Flexible payment plans** - pay in stages, not lump sum
+- 🆕 **Latest construction tech** with modern amenities
+
+**Safety nets:**
+- ✅ RERA registration ensures completion timeline
+- ✅ Escrow accounts protect your money
+- ✅ Reputed builders have strong track records
+
+The wait of 2-3 years often rewards you with 20-30% appreciation!
+
+👉 **Want me to show you some under construction projects with excellent RERA ratings?**
+""",
+            SalesIntent.FAQ_OTHER_LOCATION: """
+📍 **Open to exploring nearby locations? Smart move!**
+
+**Why nearby areas work better:**
+- 💰 **10-20% lower prices** for same quality
+- 🚗 **Same connectivity** once roads improve
+- 📈 **Higher appreciation potential** in emerging areas
+- 🏗️ **Better inventory** - more options to choose from
+
+Many of our clients initially wanted Whitefield but found better value in Sarjapur, Marathahalli, or Budigere!
+
+👉 **Shall I show you top projects in areas close to your preferred location?**
+""",
         }
         
         return fallbacks.get(intent, """
