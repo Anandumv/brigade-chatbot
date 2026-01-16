@@ -32,9 +32,10 @@ class HybridRetrievalService:
     def _init_tables(self):
         """Initialize Pixeltable table handles."""
         try:
-            self.projects_table = pxt.get_table('sales.projects')
-            self.units_table = pxt.get_table('sales.units')
-            logger.info("HybridRetrieval: Connected to Pixeltable sales tables")
+            self.projects_table = pxt.get_table('brigade.projects')
+            # Units are embedded in projects table, no separate units table
+            self.units_table = None
+            logger.info("HybridRetrieval: Connected to Pixeltable brigade.projects table")
         except Exception as e:
             logger.warning(f"Pixeltable tables not available: {e}")
             self.projects_table = None
