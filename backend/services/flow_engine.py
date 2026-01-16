@@ -349,35 +349,32 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
                 upsell_matches.append(f"{p['name']} ({p['budget_min']/100} Cr)")
 
         if matches:
-            # Build detailed response with property information
-            response_parts = ["I found these excellent matches:\n"]
+            # Build detailed response with property information using proper markdown
+            response_parts = ["I found these excellent matches:\n\n"]
 
             for i, proj in enumerate(match_details[:3], 1):  # Show top 3 in detail
-                response_parts.append(f"\n{i}. **{proj['name']}** ({proj['status']})")
-                response_parts.append(f"   📍 Location: {proj['location']}")
-                response_parts.append(f"   💰 Price Range: ₹{proj['budget_min']/100:.2f} - ₹{proj['budget_max']/100:.2f} Cr")
-                response_parts.append(f"   🏠 Configuration: {proj['configuration']}")
-                response_parts.append(f"   📅 Possession: {proj['possession_quarter']} {proj['possession_year']}")
+                response_parts.append(f"**{i}. {proj['name']}** ({proj['status']})\n")
+                response_parts.append(f"- 📍 Location: {proj['location']}\n")
+                response_parts.append(f"- 💰 Price Range: ₹{proj['budget_min']/100:.2f} - ₹{proj['budget_max']/100:.2f} Cr\n")
+                response_parts.append(f"- 🏠 Configuration: {proj['configuration']}\n")
+                response_parts.append(f"- 📅 Possession: {proj['possession_quarter']} {proj['possession_year']}\n")
 
-                if proj.get('usp'):
-                    response_parts.append(f"   ✨ USP: {proj['usp']}")
-
-                # Parse and show key amenities (first 3-4)
                 if proj.get('amenities'):
-                    amenities = proj['amenities'].replace("['", "").replace("']", "").replace("'", "")
-                    amenities_list = amenities.split(", ")[:4]
-                    response_parts.append(f"   🎯 Amenities: {', '.join(amenities_list)}")
+                    amenities = proj['amenities'].replace("[", "").replace("]", "").replace("'", "")
+                    response_parts.append(f"- 🎯 Amenities: {amenities[:100]}...\n")
 
                 if proj.get('rera_number'):
-                    response_parts.append(f"   📋 RERA: {proj['rera_number']}")
+                    response_parts.append(f"- 📋 RERA: {proj['rera_number']}\n")
+                
+                response_parts.append("\n")  # Extra line between projects
 
             # If more than 3 matches, mention them
             if len(matches) > 3:
-                response_parts.append(f"\n\nPlus {len(matches) - 3} more options available!")
+                response_parts.append(f"*Plus {len(matches) - 3} more options available!*\n\n")
 
-            response_parts.append("\n\nWould you like to schedule a site visit to see these properties? 🏡")
+            response_parts.append("Would you like to schedule a site visit to see these properties? 🏡")
 
-            action = "\n".join(response_parts)
+            action = "".join(response_parts)
             state.last_system_action = f"shown_matches:{len(matches)}"
             state.last_shown_projects = match_details[:10] # Store up to 10 projects
             next_node = "NODE 2A"
