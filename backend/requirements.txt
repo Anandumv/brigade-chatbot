@@ -24,7 +24,9 @@ pymupdf>=1.23.0  # Required for fitz in pixeltable
 jmespath>=1.0.0
 # lxml>=4.9.0  # Required for bs4 lxml parser in pixeltable (Already covered by line 16)
 # Pixeltable itself (installed with --no-deps in build command)
-# pixeltable>=0.2.0,<0.3.0
+# Pixeltable dependencies
+opencv-python-headless>=4.8.0
+scipy>=1.10.0
 
 # OpenAI
 openai>=1.40.0,<2.0.0
