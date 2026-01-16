@@ -483,37 +483,37 @@ How can I assist you today?"""
         )
 
         # If we should refuse due to no relevant info, try web search fallback
-        # DISABLED: Strict mode - only use internal seeded data
-        # if should_refuse and refusal_reason == "no_relevant_info":
-        #     logger.info("No internal docs found, trying web search fallback")
-        #     web_result = web_search_service.search_and_answer(
-        #         query=request.query,
-        #         topic_hint="Brigade Group real estate"
-        #     )
+        # ENABLED: For amenities and context pitching as requested
+        if should_refuse and refusal_reason == "no_relevant_info":
+            logger.info("No internal docs found, trying web search fallback for context/amenities")
+            web_result = web_search_service.search_and_answer(
+                query=request.query,
+                topic_hint="Brigade Group real estate Bangalore"
+            )
             
-        #     if web_result.get("answer") and web_result.get("is_external", False):
-        #         response_time_ms = int((time.time() - start_time) * 1000)
+            if web_result.get("answer") and web_result.get("is_external", False):
+                response_time_ms = int((time.time() - start_time) * 1000)
                 
-        #         # Log as answered with external source
-        #         if request.user_id:
-        #             await pixeltable_client.log_query(
-        #                 user_id=request.user_id,
-        #                 query=request.query,
-        #                 intent=intent,
-        #                 answered=True,
-        #                 confidence_score="Low (External)",
-        #                 response_time_ms=response_time_ms,
-        #                 project_id=request.project_id
-        #             )
+                # Log as answered with external source
+                if request.user_id:
+                    await pixeltable_client.log_query(
+                        user_id=request.user_id,
+                        query=request.query,
+                        intent=intent,
+                        answered=True,
+                        confidence_score="Low (External)",
+                        response_time_ms=response_time_ms,
+                        project_id=request.project_id
+                    )
                 
-        #         return ChatQueryResponse(
-        #             answer=web_result["answer"],
-        #             sources=[SourceInfo(**s) for s in web_result.get("sources", [])],
-        #             confidence=web_result.get("confidence", "Low"),
-        #             intent=intent,
-        #             refusal_reason=None,
-        #             response_time_ms=response_time_ms
-        #         )
+                return ChatQueryResponse(
+                    answer=web_result["answer"],
+                    sources=[SourceInfo(**s) for s in web_result.get("sources", [])],
+                    confidence=web_result.get("confidence", "Low"),
+                    intent=intent,
+                    refusal_reason=None,
+                    response_time_ms=response_time_ms
+                )
 
         # Original refusal logic for other reasons
         if should_refuse:
@@ -873,13 +873,8 @@ async def filtered_search(request: ChatQueryRequest):
 
         # Step 3: Check if any results found
         if not search_results["projects"]:
-            # Fallback to web search
-            logger.info("No matching projects found, falling back to web search")
-            web_result = web_search_service.search_and_answer(
-                query=request.query,
-                topic_hint="Real estate properties Bangalore"
-            )
-
+            logger.info("No matching projects found in database. Web fallback disabled for project discovery.")
+            
             response_time_ms = int((time.time() - start_time) * 1000)
 
             # Log query
@@ -888,8 +883,8 @@ async def filtered_search(request: ChatQueryRequest):
                     user_id=request.user_id,
                     query=request.query,
                     intent="structured_search",
-                    answered=True,
-                    confidence_score="Low (External)",
+                    answered=True, 
+                    confidence_score="Low (No Match)",
                     response_time_ms=response_time_ms
                 )
 
@@ -898,11 +893,8 @@ async def filtered_search(request: ChatQueryRequest):
                 "filters": filters.dict(exclude_none=True),
                 "matching_projects": 0,
                 "projects": [],
-                "web_fallback": {
-                    "answer": web_result.get("answer"),
-                    "sources": web_result.get("sources", [])
-                },
-                "search_method": "web_fallback",
+                "web_fallback": None,
+                "search_method": "pixeltable", 
                 "response_time_ms": response_time_ms
             }
 
