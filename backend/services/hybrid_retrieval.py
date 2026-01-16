@@ -110,41 +110,31 @@ class HybridRetrievalService:
             query_lower = query.lower()
             has_filters = False
             
-            # Search by project name (highest priority)
-            project_keywords = ['birla', 'brigade', 'prestige', 'evara', 'avalon', 'citrine', 'raintree', 'sobha']
-            for keyword in project_keywords:
-                if keyword in query_lower:
-                    q = q.where(projects.name.contains(keyword.title()) | projects.builder.contains(keyword.title()))
-                    has_filters = True
-                    logger.info(f"Applied keyword filter: {keyword}")
-                    break
+            # Apply filters from the filter extractor
+            # Location/locality filter
+            if filters.locality:
+                q = q.where(projects.location.contains(filters.locality))
+                has_filters = True
+                logger.info(f"Applied locality filter: {filters.locality}")
             
-            # Apply standard filters only if no project-specific search
-            if not has_filters:
-                # Location/locality filter
-                if filters.locality:
-                    q = q.where(projects.location.contains(filters.locality))
-                    has_filters = True
-                    logger.info(f"Applied locality filter: {filters.locality}")
-                
-                # Budget filter (price in Cr)
-                if filters.max_price_inr:
-                    max_cr = filters.max_price_inr / 10000000
-                    q = q.where(projects.min_price_cr <= max_cr)
-                    has_filters = True
-                    logger.info(f"Applied max price filter: {max_cr} Cr")
-                
-                if filters.min_price_inr:
-                    min_cr = filters.min_price_inr / 10000000
-                    q = q.where(projects.max_price_cr >= min_cr)
-                    has_filters = True
-                    logger.info(f"Applied min price filter: {min_cr} Cr")
-                
-                # Developer filter
-                if filters.developer_name:
-                    q = q.where(projects.builder.contains(filters.developer_name))
-                    has_filters = True
-                    logger.info(f"Applied developer filter: {filters.developer_name}")
+            # Developer filter
+            if filters.developer_name:
+                q = q.where(projects.builder.contains(filters.developer_name))
+                has_filters = True
+                logger.info(f"Applied developer filter: {filters.developer_name}")
+            
+            # Budget filter (price in Cr)
+            if filters.max_price_inr:
+                max_cr = filters.max_price_inr / 10000000
+                q = q.where(projects.min_price_cr <= max_cr)
+                has_filters = True
+                logger.info(f"Applied max price filter: {max_cr} Cr")
+            
+            if filters.min_price_inr:
+                min_cr = filters.min_price_inr / 10000000
+                q = q.where(projects.max_price_cr >= min_cr)
+                has_filters = True
+                logger.info(f"Applied min price filter: {min_cr} Cr")
             
             # Execute query
             results = q.collect()
