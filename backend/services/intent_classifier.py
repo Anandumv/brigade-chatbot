@@ -67,6 +67,11 @@ class IntentClassifier:
             logger.info(f"Detected sales_faq intent via keywords: {query[:50]}...")
             return "sales_faq"
 
+        # Priority 4: Detect project fact queries (fast keyword match)
+        if self._is_project_fact(query_lower):
+            logger.info(f"Detected project_fact intent via keywords: {query[:50]}...")
+            return "project_fact"
+
         # Priority 4: Detect sales pitch queries (fast keyword match)
         if self._is_sales_pitch(query_lower):
              logger.info(f"Detected sales_pitch intent via keywords: {query[:50]}...")
@@ -221,6 +226,22 @@ class IntentClassifier:
         """
         pitch_keywords = ["pitch", "why buy", "why should i", "give me a reason", "unique selling", "usp", "investment potential", "tell me about"]
         if any(kw in query_lower for kw in pitch_keywords):
+            return True
+        return False
+
+    def _is_project_fact(self, query_lower: str) -> bool:
+        """
+        Detect project fact queries (amenities, rera, location info).
+        """
+        fact_keywords = [
+            "amenities", "amenity", "facilities", "features", 
+            "rera", "possession", "handover", "completion",
+            "location", "where is", "address", "connectivity",
+            "floor plan", "master plan", "layout", "specifications",
+            "brochure", "price sheet", "payment plan",
+            "how many units", "total area", "acres", "size"
+        ]
+        if any(kw in query_lower for kw in fact_keywords):
             return True
         return False
 
