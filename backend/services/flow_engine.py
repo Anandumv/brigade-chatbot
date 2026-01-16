@@ -293,14 +293,14 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
 
     # --- NODE 1: Normalization Gate ---
     if node == "NODE 1":
-        if not (merged_reqs.configuration and merged_reqs.location and merged_reqs.budget_max):
+        # Proceed if we have at least one meaningful filter (location OR configuration OR budget)
+        has_any_filter = merged_reqs.configuration or merged_reqs.location or merged_reqs.budget_max
+        if not has_any_filter:
             action = f"I'd love to help! To find the best options, could you please share your preferred Configuration (e.g., 2BHK), Location, and Max Budget?"
             next_node = "NODE 1"
         else:
             next_node = "NODE 2"
-            # Auto-proceed to execution of Node 2 logic immediately if we have data? 
-            # For this step, we'll return and let the next loop handle Node 2 to show distinct steps, 
-            # OR we can just fall through. Let's fall through for efficiency.
+            # Fall through to Node 2 for efficiency
             node = "NODE 2"
 
     # --- NODE 2: Exact Match Query ---
