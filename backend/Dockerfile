@@ -17,11 +17,11 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy requirements first for caching
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --upgrade pip && pip install -r requirements.txt && pip install --no-deps pixeltable==0.2.30
 
 # Copy application code
-COPY . .
+COPY backend/ .
 
 # Expose port
 EXPOSE 8000
