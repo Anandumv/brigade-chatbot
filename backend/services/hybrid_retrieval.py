@@ -116,6 +116,19 @@ class HybridRetrievalService:
             # Filter in Python
             filtered_results = list(all_results)  # Start with all
             
+            # Apply city filter
+            # Logic: All projects are in Bangalore. 
+            # 1. If user asks for Bangalore, return all (don't filter out if 'Bangalore' string missing).
+            # 2. If user asks for Mumbai/Delhi, look for it strictly (will likely return 0).
+            if filters.city and filters.city.strip():
+                city_lower = filters.city.lower()
+                if city_lower != 'bangalore':
+                    filtered_results = [r for r in filtered_results 
+                                       if city_lower in str(r.get('location', '')).lower() or 
+                                          city_lower in str(r.get('zone', '')).lower() or
+                                          city_lower in str(r.get('full_address', '')).lower()]
+                    logger.info(f"After city filter '{filters.city}': {len(filtered_results)} results")
+
             # Apply locality filter
             if filters.locality and filters.locality.strip():
                 locality_lower = filters.locality.lower()
