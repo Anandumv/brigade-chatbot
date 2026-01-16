@@ -418,7 +418,7 @@ def _create_query_logs_table():
     logs = pxt.create_table('brigade.query_logs', {
         'query_id': pxt.String,
         'user_id': pxt.String,
-        'query': pxt.String,
+        'query_text': pxt.String,
         'intent': pxt.String,
         'answered': pxt.Bool,
         'confidence_score': pxt.String,
@@ -458,7 +458,7 @@ async def log_query(
         logs.insert([{
             'query_id': str(uuid.uuid4()),
             'user_id': user_id or 'anonymous',
-            'query': query,
+            'query_text': query,
             'intent': intent,
             'answered': answered,
             'confidence_score': confidence_score or '',
