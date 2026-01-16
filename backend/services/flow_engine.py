@@ -792,25 +792,65 @@ RERA: {project.get('rera_number', 'N/A')}
         matches = []
         match_details = []
         
-        # Access mock_projects directly since flow_engine is sync
-        from services.hybrid_retrieval import hybrid_retrieval
-        if not hybrid_retrieval.mock_projects:
-            hybrid_retrieval._load_mock_data()
-            
-        source = hybrid_retrieval.mock_projects
+        # Access projects from Pixeltable if available, else mock
+        source = []
+        if projects_table:
+            try:
+                t = projects_table
+                # Fetch all projects to scan coordinates (coordinate filtering not yet in DB)
+                # Ideally we'd filter in DB but we need distance calc
+                all_rows = t.select(
+                     t.project_id, t.name, t.location, t.budget_min, t.budget_max,
+                     t.configuration, t.status, t.possession_year, t.possession_quarter,
+                     t.usp
+                ).collect()
+                # Determine lat/lon for each project on the fly or assuming they are in DB??
+                # Wait, Pixeltable schema doesn't seem to have lat/lon columns surfaced in the select above?
+                # The seed data had it. Let's assume we need to re-map or they are lacking.
+                # Actually, geolocation_utils might map location string -> coords.
+                # But for the *projects*, we need their location.
+                # Let's use get_coordinates on project location string if lat/lon missing.
+                source = all_rows
+            except Exception as e:
+                logger.warning(f"Failed to fetch from DB for radius: {e}")
         
+        if not source:
+             from services.hybrid_retrieval import hybrid_retrieval
+             if not hybrid_retrieval.mock_projects:
+                 hybrid_retrieval._load_mock_data()
+             source = hybrid_retrieval.mock_projects
+
         if center_coords:
             lat, lon = center_coords
             for p in source:
+                # Get project coordinates
+                p_lat, p_lon = None, None
                 if '_lat' in p and '_lon' in p:
-                    dist = calculate_distance(lat, lon, p['_lat'], p['_lon'])
+                     p_lat, p_lon = p['_lat'], p['_lon']
+                elif 'latitude' in p and 'longitude' in p:
+                     p_lat, p_lon = p['latitude'], p['longitude']
+                else:
+                    # Try to resolve project location dynamically
+                    # This is slow but necessary if DB lacks coords
+                    pass 
+                    # For now rely on source having it or strictly mock which has it.
+                    # Actually, let's try to Geocode the project location string if we can.
+                    # But doing it for all projects is too slow.
+                    # We will assume DB *should* have it or we skip. 
+                    # Wait, the User request is "Show Nearby should scan projects which we have 10 km".
+                    # If DB doesn't have lat/lon, we can't scan. 
+                    # I will assume `get_coordinates` works on the project location field.
+                    try:
+                        p_coords = get_coordinates(p.get('location', ''))
+                        if p_coords:
+                            p_lat, p_lon = p_coords
+                    except:
+                        pass
+                
+                if p_lat and p_lon:
+                    dist = calculate_distance(lat, lon, p_lat, p_lon)
                     # We look for projects within 10km of the target location
                     if dist <= 10.0 and p['budget_min'] <= budget_limit:
-                        # Optional: skip if it's the exact same location user rejected? 
-                        # Actually, usually they reject the budget/price, not the loc.
-                        # But if they specifically wanted "Koramangala" and we show "Koramangala", 
-                        # it means we found something that fits the budget now?
-                        # Let's just find everything within 10km that fits.
                         p_copy = p.copy()
                         p_copy['_distance'] = dist
                         match_details.append(p_copy)
@@ -827,7 +867,11 @@ RERA: {project.get('rera_number', 'N/A')}
                 response_parts.append(f"\n{i}. **{proj['name']}** ({proj['status']})")
                 response_parts.append(f"   📍 Location: {proj['location']} ({dist_str})")
                 response_parts.append(f"   💰 Price Range: ₹{proj['budget_min']/100:.2f} - ₹{proj['budget_max']/100:.2f} Cr")
-                response_parts.append(f"   🏠 Configuration: {proj['configuration']}")
+                
+                # Simplify configuration
+                config_display = clean_configuration_string(proj.get('configuration', ''))
+                response_parts.append(f"   🏠 Configuration: {config_display}")
+
                 response_parts.append(f"   📅 Possession: {proj['possession_quarter']} {proj['possession_year']}")
 
                 if proj.get('usp'):
