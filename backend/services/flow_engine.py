@@ -6,6 +6,7 @@ import openai
 from config import settings
 from database.pixeltable_setup import get_projects_table
 import pixeltable as pxt
+import difflib
 
 logger = logging.getLogger(__name__)
 
@@ -318,6 +319,32 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
                 system_action=action,
                 next_redirection="NODE 2A"
             )
+
+    # --- FUZZY PROJECT NAME MATCHING (Handles typos like "Brigade avlon") ---
+    # If user input closely matches a project name in context, force project_selection intent
+    if state.last_shown_projects:
+        for p in state.last_shown_projects:
+            name = p.get('name', '').lower()
+            project_words = name.split()
+            user_words = user_lower.split()
+            
+            # Check if any significant user word matches a project word (fuzzy)
+            # e.g., "avlon" -> "avalon"
+            matched = False
+            for uw in user_words:
+                if len(uw) < 4: continue # Skip short words
+                # Check fuzzy match against project name words
+                close = difflib.get_close_matches(uw, project_words, n=1, cutoff=0.8)
+                if close:
+                    matched = True
+                    break
+            
+            if matched:
+                logger.info(f"Fuzzy match found: '{user_input}' -> '{name}'. Forcing project_selection.")
+                intent = "project_selection"
+                # We don't break here, we let the interceptor below handle the actual selection logic
+                # which iterates and selects.
+                break
 
     # --- PROJECT SELECTION INTERCEPTOR ---
     # Expanded keywords to cover more natural ways users ask about projects

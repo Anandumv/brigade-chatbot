@@ -135,6 +135,10 @@ class IntentClassifier:
         if any(w in query_lower for w in ["show more", "more options", "see more", "other projects", "remaining"]):
             return True
 
+        # Handle explicit project names / developers (ensure they route to flow engine)
+        if any(w in query_lower for w in ["brigade", "sobha", "prestige", "godrej", "purva", "sbr", "abhee", "mana", "century", "sumadhura", "vaswani", "dsr"]):
+             return True
+
         return False
 
     def _is_sales_faq(self, query_lower: str) -> bool:
