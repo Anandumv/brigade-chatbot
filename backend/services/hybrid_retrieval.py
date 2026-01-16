@@ -174,6 +174,27 @@ class HybridRetrievalService:
                                    if r.get('budget_max') is None or r.get('budget_max', 99999) >= min_lakhs]
                 logger.info(f"After min price filter {min_lakhs}L: {len(filtered_results)} results")
             
+            # Apply Possession Year filter
+            if filters.possession_year:
+                # Logic: Included if project possession year <= requested year (e.g. "Possession by 2027" -> 2025, 2026, 2027 projects)
+                # Or exact match? Usually "possession 2027" means "by 2027". 
+                # Let's go with exact match or earlier (ready by 2027 includes 2026).
+                target_year = filters.possession_year
+                filtered_results = [r for r in filtered_results 
+                                   if r.get('possession_year') and str(r.get('possession_year')).isdigit() and int(r.get('possession_year')) <= target_year]
+                logger.info(f"After possession filter <= {target_year}: {len(filtered_results)} results")
+
+            # Apply Area (Sqft) filter
+            if filters.min_area_sqft:
+                 filtered_results = [r for r in filtered_results 
+                                   if r.get('total_land_area') and str(r.get('total_land_area')).replace('Acres','').strip().replace('.','').isdigit()] 
+                 # Wait, total_land_area is in Acres usually in this schema. unit sizes are in units table (not here).
+                 # This filter might not work on project level unless we have unit size ranges.
+                 # Checking schema: 'configuration' string might have "1200 sqft". 
+                 # Or we skip project-level area filter for now if data missing.
+                 # Actually, let's skip area filter on project level to avoid false zeros, as unit sizes are complex.
+                 pass
+
             results = filtered_results
             logger.info(f"Final result count: {len(results)}")
             

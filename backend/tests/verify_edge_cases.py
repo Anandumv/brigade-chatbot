@@ -150,6 +150,15 @@ tests = [
         "check": check_project_search_valid
     },
 
+    # 2d-3. Possession Filter (Possession 2028)
+    # Checks if year logic works (fetching <= 2028 or similar)
+    {
+        "name": "Filter: Possession (2028)",
+        "endpoint": "/api/chat/filtered-search",
+        "payload": {"query": "Projects with possession by 2028", "session_id": "poss-2028"},
+        "check": check_project_search_valid
+    },
+
     # --- EXTENDED TESTING ---
     
     # 2e. Status Filter (Ready to Move)
