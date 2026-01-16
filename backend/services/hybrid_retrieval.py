@@ -129,6 +129,15 @@ class HybridRetrievalService:
                                           city_lower in str(r.get('full_address', '')).lower()]
                     logger.info(f"After city filter '{filters.city}': {len(filtered_results)} results")
 
+            # Apply Zone filter (North/South/East/West Bangalore)
+            if filters.area and filters.area.strip():
+                area_lower = filters.area.lower()
+                filtered_results = [r for r in filtered_results 
+                                   if area_lower in str(r.get('zone', '')).lower() or 
+                                      area_lower in str(r.get('location', '')).lower() or
+                                      area_lower in str(r.get('full_address', '')).lower()]
+                logger.info(f"After zone filter '{filters.area}': {len(filtered_results)} results")
+
             # Apply locality filter
             if filters.locality and filters.locality.strip():
                 locality_lower = filters.locality.lower()

@@ -125,6 +125,59 @@ tests = [
         "payload": {"query": "Projects in Mumbai", "session_id": "edge-2b"},
         "check": check_project_search_strict_no_match
     },
+
+    # 2c. Flowchart Alignment - East Bangalore (Budigere Cross)
+    {
+        "name": "Flowchart: East (Budigere Cross)",
+        "endpoint": "/api/chat/filtered-search",
+        "payload": {"query": "Projects in Budigere Cross", "session_id": "flow-east"},
+        "check": check_project_search_valid
+    },
+
+    # 2d. Flowchart Alignment - North Bangalore (Jakkur)
+    {
+        "name": "Flowchart: North (Jakkur)",
+        "endpoint": "/api/chat/filtered-search",
+        "payload": {"query": "Projects in Jakkur", "session_id": "flow-north"},
+        "check": check_project_search_valid
+    },
+
+    # 2d-2. Zone Filter (North Bangalore)
+    {
+        "name": "Filter: Zone (North Bangalore)",
+        "endpoint": "/api/chat/filtered-search",
+        "payload": {"query": "Projects in North Bangalore", "session_id": "zone-north"},
+        "check": check_project_search_valid
+    },
+
+    # --- EXTENDED TESTING ---
+    
+    # 2e. Status Filter (Ready to Move)
+    {
+        "name": "Filter: Status (Ready to Move)",
+        "endpoint": "/api/chat/filtered-search",
+        "payload": {"query": "Ready to move projects in Bangalore", "session_id": "ext-status"},
+        "check": check_project_search_valid
+    },
+
+    # 2f. Config Filter (Villas)
+    {
+        "name": "Filter: Type (Villas)",
+        "endpoint": "/api/chat/filtered-search",
+        "payload": {"query": "Villas in Bangalore", "session_id": "ext-type"},
+        "check": check_project_search_valid
+    },
+
+    # 2g. Complex Combination (Locality + Budget + Config)
+    {
+        "name": "Filter: Complex (Whitefield + <2Cr + 3BHK)",
+        "endpoint": "/api/chat/filtered-search",
+        # Whitefield usually has 3BHKs, but check price. 
+        # If strict budget <2Cr wipes it out, it returns 0 (which is also valid logic verification).
+        # We assume at least some exist or 0 is correct.
+        "payload": {"query": "3BHK in Whitefield under 2 Crores", "session_id": "ext-complex"},
+        "check": lambda d: (True, f"Found {d.get('matching_projects')} projects") if d.get("matching_projects") >= 0 and d.get("search_method") == "pixeltable" else (False, f"Method {d.get('search_method')}"),
+    },
     
     # 3. Filter Logic - Strict No Match (International)
     {

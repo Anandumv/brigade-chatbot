@@ -255,8 +255,11 @@ class FilterExtractor:
         # Extract possession year
         filters.possession_year = self._extract_possession_year(query_lower)
 
-        # Extract area/size
-        filters.min_area_sqft, filters.max_area_sqft = self._extract_area(query_lower)
+        # Extract area/size (sqft)
+        filters.min_area_sqft, filters.max_area_sqft = self._extract_size(query_lower)
+
+        # Extract zone (North/South/East/West Bangalore)
+        filters.area = self._extract_zone(query_lower)
 
         # Extract status
         filters.status = self._extract_status(query_lower)
@@ -383,7 +386,34 @@ class FilterExtractor:
 
         return None
 
-    def _extract_area(self, query: str) -> tuple[Optional[int], Optional[int]]:
+    def _extract_zone(self, query: str) -> Optional[str]:
+        """Extract zone: 'North Bangalore', 'South Bangalore'"""
+        zones = {
+            'north bangalore': 'North Bangalore',
+            'north bmr': 'North Bangalore',
+            'north': 'North Bangalore',
+            'south bangalore': 'South Bangalore',
+            'south': 'South Bangalore',
+            'east bangalore': 'East Bangalore',
+            'east': 'East Bangalore',
+            'west bangalore': 'West Bangalore',
+            'west': 'West Bangalore',
+            'central bangalore': 'Central Bangalore',
+            'central': 'Central Bangalore'
+        }
+        
+        # Check for explicit zone mentions
+        # We need to be careful not to match 'North' in 'Northern Lights' project name if possible, 
+        # but for now, simple keyword match if followed by Bangalore or just pure direction in context works.
+        # Flowchart specific zones are key.
+        
+        for key, value in zones.items():
+            # word boundary check
+            if re.search(r'\b' + re.escape(key) + r'\b', query):
+                return value
+        return None
+
+    def _extract_size(self, query: str) -> tuple[Optional[int], Optional[int]]:
         """Extract area range: 'above 1000 sqft' → (1000, None)"""
         min_area = None
         max_area = None
