@@ -294,15 +294,16 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
         # Try to find which project the user is referring to
         target_project = None
         
-        # 1. Exact or partial name match
-        for p in state.last_shown_projects:
-            name = p.get('name', '').lower()
-            if name in user_lower or any(word in user_lower for word in name.split()):
-                # Exclude very short words/numbers from partial match
-                significant_words = [w for w in name.split() if len(w) > 3]
-                if any(sw in user_lower for sw in significant_words):
-                    target_project = p
-                    break
+        # 1. Check against recently shown projects (session state)
+        if state.last_shown_projects:
+            for p in state.last_shown_projects:
+                name = p.get('name', '').lower()
+                if name in user_lower or any(word in user_lower for word in name.split()):
+                    # Exclude very short words/numbers from partial match
+                    significant_words = [w for w in name.split() if len(w) > 3]
+                    if any(sw in user_lower for sw in significant_words):
+                        target_project = p
+                        break
         
         # 2. Numbered selection fallback
         if not target_project and state.last_shown_projects:
@@ -313,11 +314,53 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
             elif "third" in user_lower or "three" in user_lower or "3" in user_lower and len(state.last_shown_projects) > 2:
                 target_project = state.last_shown_projects[2]
 
+        # 3. Database lookup fallback (for when session is empty or project not in recent list)
+        if not target_project and projects_table:
+            try:
+                t = projects_table
+                all_projects = t.select(
+                    t.project_id, t.name, t.location, t.budget_min, t.budget_max,
+                    t.configuration, t.status, t.possession_year, t.possession_quarter,
+                    t.rera_number, t.amenities, t.usp, t.description
+                ).collect()
+                
+                # Find project by name match
+                for p in all_projects:
+                    name = p.get('name', '').lower()
+                    significant_words = [w for w in name.split() if len(w) > 3]
+                    if any(sw in user_lower for sw in significant_words):
+                        target_project = p
+                        logger.info(f"Found project '{p.get('name')}' via database lookup")
+                        break
+            except Exception as e:
+                logger.warning(f"Database lookup for project failed: {e}")
+
         if target_project:
             state.selected_project_id = target_project.get('project_id')
             state.selected_project_name = target_project.get('name')
             state.cached_project_details = target_project
-            action = f"Excellent choice! Let me give you a detailed deep-dive into **{state.selected_project_name}**."
+            
+            # Generate detailed pitch for the selected project
+            proj = target_project
+            pitch_parts = [f"🏠 **{proj.get('name')}** - Here's everything you need to know:\n\n"]
+            pitch_parts.append(f"**📍 Location:** {proj.get('location')}\n")
+            pitch_parts.append(f"**💰 Price Range:** ₹{proj.get('budget_min', 0)/100:.2f} - ₹{proj.get('budget_max', 0)/100:.2f} Cr\n")
+            pitch_parts.append(f"**🏗️ Status:** {proj.get('status')}\n")
+            pitch_parts.append(f"**📅 Possession:** {proj.get('possession_quarter')} {proj.get('possession_year')}\n")
+            
+            if proj.get('rera_number'):
+                pitch_parts.append(f"**📋 RERA:** {proj.get('rera_number')}\n")
+            
+            if proj.get('usp'):
+                pitch_parts.append(f"\n**✨ Why this property?**\n{proj.get('usp')}\n")
+            
+            if proj.get('amenities'):
+                amenities = proj.get('amenities', '').replace("[", "").replace("]", "").replace("'", "")
+                pitch_parts.append(f"\n**🎯 Key Amenities:** {amenities[:150]}...\n")
+            
+            pitch_parts.append("\n👉 **Ready to see it in person? Schedule a site visit!**")
+            action = "".join(pitch_parts)
+            
             next_node = "NODE 2B"
             return FlowResponse(
                 extracted_requirements=merged_reqs.dict(),
