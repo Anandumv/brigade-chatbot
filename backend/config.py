@@ -140,16 +140,6 @@ INTENT_EXAMPLES = {
 
 # Sales FAQ keywords for quick detection
 # Note: Removed "under construction", "ready to move", "possession" to prevent overlap with objections
-SALES_FAQ_KEYWORDS = [
-    "stretch budget", "extend budget", "increase budget",
-    "other location", "different location", "alternate location",
-    "why under construction", "why buy under construction", "benefits of under construction",
-    "face to face", "meet in person", "schedule meeting",
-    "site visit", "visit site", "see property",
-    "pinclick value", "why pinclick", "about pinclick",
-]
-
-# Objection keywords for detection
 SALES_OBJECTION_KEYWORDS = [
     "too expensive", "costly", "high price", "can't afford",
     "out of budget", "beyond budget", "budget is less",
@@ -158,12 +148,20 @@ SALES_OBJECTION_KEYWORDS = [
     "don't trust", "scared of delay", "construction risk",
 ]
 
-# Property search detection keywords
+# Export keywords for fast classification
 PROPERTY_SEARCH_KEYWORDS = [
-    "show me", "list", "available", "options", "configurations",
-    "bhk", "bedroom", "units", "flats", "apartments",
-    "under", "budget", "price range", "affordable",
-    "ready to move", "possession", "immediate"
+    "bhk", "bedroom", "apartment", "flat", "villa", "plot", "residence",
+    "property", "home", "house", "project", "unit", "floor", "facing",
+    "sqft", "square feet", "budget", "price", "cost", "lakh", "crore",
+    "possession", "ready to move", "under construction", "move in",
+    "location", "area", "locality", "neighborhood", "zone", "whitefield",
+    "bangalore", "sarjapur", "north", "east", "south", "west"
+]
+
+SALES_FAQ_KEYWORDS = INTENT_EXAMPLES["sales_faq"] + [
+    "stretch", "budget", "location", "area", "meeting", "visit", "site",
+    "pinclick", "brokerage", "commission", "appointment", "schedule",
+    "nearby", "near me", "closest", "distance", "around here", "radius"
 ]
 
 # Refusal messages
