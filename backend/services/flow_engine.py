@@ -7,8 +7,29 @@ from config import settings
 from database.pixeltable_setup import get_projects_table
 import pixeltable as pxt
 import difflib
+import re
 
 logger = logging.getLogger(__name__)
+
+def clean_configuration_string(config_raw: str) -> str:
+    """Parses messy configuration strings to extract clean BHK types."""
+    if not config_raw: return "Details on Request"
+    
+    # Regex to find 2BHK, 3 BHK, 2.5BHK etc
+    # Matches: number + optional decimal + optional space + BHK
+    matches = re.findall(r"(\d+(?:\.\d+)?)\s*BHK", str(config_raw), re.IGNORECASE)
+    
+    if not matches:
+        return str(config_raw)
+        
+    # Deduplicate and sort numerically
+    try:
+        unique_bhk = sorted(list(set(float(m) for m in matches)))
+        # Format: 2.0 -> 2, 2.5 -> 2.5
+        formatted = [f"{g:g} BHK" for g in unique_bhk]
+        return ", ".join(formatted)
+    except Exception:
+        return str(config_raw)
 
 # --- SYSTEM PROMPT ---
 STRICT_SYSTEM_PROMPT = """
@@ -255,6 +276,15 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
                 system_action=action,
                 next_redirection="NODE 7"
             )
+        else:
+            # Nearby requested but no location context
+            action = "I can definitely help find nearby projects! 🌍 Which location or specific landmark should I search around?"
+            return FlowResponse(
+                extracted_requirements=merged_reqs.dict(),
+                current_node="NODE 1",
+                system_action=action,
+                next_redirection="NODE 1"
+            )
 
     # --- UPSELL / HIGHER BUDGET INTERCEPTOR ---
     if any(w in user_lower for w in ["slightly higher", "higher option", "increase budget", "premium", "more expensive", "above my budget", "stretch"]):
@@ -301,15 +331,7 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
             response_parts = ["Here are more options:\n\n"]
             for i, proj in enumerate(batch, start + 1):  # Continue numbering
                 # Simplify configuration
-                config_raw = proj.get('configuration', '')
-                bhk_types = []
-                for part in ['2 BHK', '2BHK', '3 BHK', '3BHK', '4 BHK', '4BHK', '2.5 BHK', '3.5 BHK']:
-                    if part.lower() in config_raw.lower():
-                        clean_type = part.replace('BHK', ' BHK').strip()
-                        if clean_type not in bhk_types:
-                            bhk_types.append(clean_type)
-                
-                config_display = ", ".join(bhk_types) if bhk_types else config_raw
+                config_display = clean_configuration_string(proj.get('configuration', ''))
                 
                 response_parts.append(f"**{i}. {proj['name']}** ({proj['status']})\n")
                 response_parts.append(f"   📍 {proj['location']}\n")
@@ -534,14 +556,7 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
                 response_parts.append(f"- 💰 Price Range: ₹{proj['budget_min']/100:.2f} - ₹{proj['budget_max']/100:.2f} Cr\n")
                 
                 # Simplify configuration - extract just BHK types
-                config_raw = proj.get('configuration', '')
-                bhk_types = []
-                for part in ['2 BHK', '2BHK', '3 BHK', '3BHK', '4 BHK', '4BHK', '2.5 BHK', '3.5 BHK']:
-                    if part.lower() in config_raw.lower():
-                        clean_type = part.replace('BHK', ' BHK').strip()
-                        if clean_type not in bhk_types:
-                            bhk_types.append(clean_type)
-                config_display = ', '.join(bhk_types) if bhk_types else 'Multiple Options'
+                config_display = clean_configuration_string(proj.get('configuration', ''))
                 response_parts.append(f"- 🏠 Configuration: {config_display}\n")
                 
                 response_parts.append(f"- 📅 Possession: {proj['possession_quarter']} {proj['possession_year']}\n")
