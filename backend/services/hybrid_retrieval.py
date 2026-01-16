@@ -134,16 +134,18 @@ class HybridRetrievalService:
             
             # Apply budget filter (price in Cr)
             if filters.max_price_inr:
-                max_cr = filters.max_price_inr / 10000000
+                # Convert max price (INR) to Lakhs for comparison
+                max_lakhs = filters.max_price_inr / 100000
                 filtered_results = [r for r in filtered_results 
-                                   if r.get('min_price_cr') is None or r.get('min_price_cr', 0) <= max_cr]
-                logger.info(f"After max price filter {max_cr}Cr: {len(filtered_results)} results")
+                                   if r.get('budget_min') is None or r.get('budget_min', 0) <= max_lakhs]
+                logger.info(f"After max price filter {max_lakhs}L: {len(filtered_results)} results")
             
             if filters.min_price_inr:
-                min_cr = filters.min_price_inr / 10000000
+                # Convert min price (INR) to Lakhs for comparison
+                min_lakhs = filters.min_price_inr / 100000
                 filtered_results = [r for r in filtered_results 
-                                   if r.get('max_price_cr') is None or r.get('max_price_cr', 999) >= min_cr]
-                logger.info(f"After min price filter {min_cr}Cr: {len(filtered_results)} results")
+                                   if r.get('budget_max') is None or r.get('budget_max', 99999) >= min_lakhs]
+                logger.info(f"After min price filter {min_lakhs}L: {len(filtered_results)} results")
             
             results = filtered_results
             logger.info(f"Final result count: {len(results)}")
@@ -152,12 +154,16 @@ class HybridRetrievalService:
             formatted = []
             for r in results:
                 try:
+                    # Calculate price in Cr from Lakhs
+                    min_cr = r.get('budget_min', 0) / 100.0 if r.get('budget_min') else None
+                    max_cr = r.get('budget_max', 0) / 100.0 if r.get('budget_max') else None
+                    
                     formatted.append({
                         "project_id": r.get('project_id', ''),
                         "project_name": r.get('name', ''),
-                        "developer_name": r.get('builder', ''),
+                        "developer_name": r.get('developer', ''), # Schema uses 'developer', not 'builder'
                         "location": r.get('location', ''),
-                        "city": r.get('city', ''),
+                        "city": r.get('zone', '') or r.get('location', ''), # Use zone or fallback
                         "locality": r.get('location', ''),
                         "status": r.get('status', ''),
                         "possession_year": r.get('possession_year'),
@@ -169,12 +175,12 @@ class HybridRetrievalService:
                         "brochure_link": r.get('brochure_link', ''),
                         "rm_contact": r.get('rm_contact', ''),
                         "location_link": r.get('location_link', ''),
-                        "config_summary": r.get('config_summary', ''),
+                        "config_summary": r.get('configuration', ''),
                         "price_range": {
-                            "min": r.get('min_price_cr'),
-                            "max": r.get('max_price_cr'),
-                            "min_display": f"₹{r.get('min_price_cr', 0):.2f} Cr" if r.get('min_price_cr') else "TBD",
-                            "max_display": f"₹{r.get('max_price_cr', 0):.2f} Cr" if r.get('max_price_cr') else "TBD"
+                            "min": min_cr,
+                            "max": max_cr,
+                            "min_display": f"₹{min_cr:.2f} Cr" if min_cr else "Price on request",
+                            "max_display": f"₹{max_cr:.2f} Cr" if max_cr else "Price on request"
                         },
                         "matching_units": [],
                         "unit_count": 0,
