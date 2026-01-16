@@ -117,11 +117,12 @@ class HybridRetrievalService:
                 has_filters = True
                 logger.info(f"Applied locality filter: {filters.locality}")
             
-            # Developer filter
+            # Developer filter - search both name and builder
             if filters.developer_name:
-                q = q.where(projects.builder.contains(filters.developer_name))
+                dev_query = filters.developer_name.split()[0] if filters.developer_name else ""  # Use first word (e.g., "Brigade" from "Brigade Group")
+                q = q.where(projects.name.contains(dev_query) | projects.builder.contains(dev_query))
                 has_filters = True
-                logger.info(f"Applied developer filter: {filters.developer_name}")
+                logger.info(f"Applied developer filter: {dev_query}")
             
             # Budget filter (price in Cr)
             if filters.max_price_inr:
