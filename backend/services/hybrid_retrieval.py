@@ -132,8 +132,11 @@ class HybridRetrievalService:
             # Apply locality filter
             if filters.locality and filters.locality.strip():
                 locality_lower = filters.locality.lower()
+                # Broaden search to include description/address since some projects are "near Jakkur"
                 filtered_results = [r for r in filtered_results 
-                                   if locality_lower in str(r.get('location', '')).lower()]
+                                   if locality_lower in str(r.get('location', '')).lower() or
+                                      locality_lower in str(r.get('full_address', '')).lower() or
+                                      locality_lower in str(r.get('description', '')).lower()]
                 logger.info(f"After locality filter '{filters.locality}': {len(filtered_results)} results")
             
             # Apply developer filter - search in name and builder
