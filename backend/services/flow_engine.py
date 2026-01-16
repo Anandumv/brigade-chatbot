@@ -440,8 +440,16 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
             # Fall through to Node 2 for efficiency
             node = "NODE 2"
 
-    # --- NODE 2: Exact Match Query ---
+    # --- NODE 2: SEARCH & RESULTS ---
     if node == "NODE 2":
+        # 1. Sanity Check for Budget
+        budget_warning = ""
+        if merged_reqs.budget_max and merged_reqs.budget_max > 50:
+            # Heuristic: If > 50 Cr, it's likely a typo or mixed units
+            budget_warning = f"_Note: I noticed a budget of **₹{merged_reqs.budget_max:,.0f} Cr**. I've listed all options within this range, but please clarify if you meant something else (like ₹1.5 Cr)._ 🧐\n\n"
+        
+        # 2. Run Search
+        # (Proceed with existing search logic)
         all_projects = []
         
         if projects_table:
@@ -505,9 +513,9 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
         if matches:
             # Build detailed response with property information using proper markdown
             if budget_relaxed:
-                response_parts = [f"I couldn't find matches within **₹{merged_reqs.budget_max} Cr**, but here are excellent options slightly above that range:\n\n"]
+                response_parts = [budget_warning + f"I couldn't find matches within **₹{merged_reqs.budget_max} Cr**, but here are excellent options slightly above that range:\n\n"]
             else:
-                response_parts = ["I found these excellent matches:\n\n"]
+                response_parts = [budget_warning + "I found these excellent matches:\n\n"]
 
             for i, proj in enumerate(match_details[:3], 1):  # Show top 3 in detail
                 response_parts.append(f"**{i}. {proj['name']}** ({proj['status']})\n")
