@@ -34,6 +34,13 @@ BANGALORE_COORDINATES: Dict[str, Tuple[float, float]] = {
     "frazer town": (13.0000, 77.6100),
     "rt nagar": (13.0180, 77.5930),
     "sahakar nagar": (13.0600, 77.5850),
+    # Broad zones (central point approximations)
+    "north bangalore": (13.0500, 77.6000),  # Near Hebbal/Yelahanka
+    "south bangalore": (12.8800, 77.6000),  # Near Bannerghatta
+    "east bangalore": (12.9600, 77.7200),   # Near Whitefield/Marathahalli
+    "west bangalore": (12.9800, 77.5200),   # Near Rajajinagar
+    "central bangalore": (12.9716, 77.5946), # City center (MG Road area)
+    "bangalore": (12.9716, 77.5946),        # Default Bangalore center
 }
 
 def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:

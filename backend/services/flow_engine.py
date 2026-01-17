@@ -323,11 +323,11 @@ Use needs_web_search=false for project_details (database has this) and investmen
 # --- NODE LOGIC ---
 def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
     # 1. Update Requirements (Merge new input with existing state)
-    old_reqs = state.requirements.copy()
+    old_reqs = state.requirements.model_copy()
     new_reqs = extract_requirements_llm(user_input)
     
     # Simple merge logic (new overrides old if present)
-    merged_reqs = old_reqs.copy(update={k: v for k, v in new_reqs.dict().items() if v is not None})
+    merged_reqs = old_reqs.model_copy(update={k: v for k, v in new_reqs.model_dump().items() if v is not None})
     state.requirements = merged_reqs
 
     # 2. Determine Node Logic
@@ -336,7 +336,7 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
     next_node = node
     
     # 3. Classify Intent for Interceptors
-    context = f"Current node: {node}. Extracted reqs: {merged_reqs.dict()}"
+    context = f"Current node: {node}. Extracted reqs: {merged_reqs.model_dump()}"
     classification = classify_user_intent(user_input, context)
     intent = classification.get("intent", "ambiguous")
 
@@ -377,7 +377,7 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
             # Proceed to NODE 7 logic immediately or return?
             # Let's return and let the next loop handle Node 7 results to keep it clean.
             return FlowResponse(
-                extracted_requirements=merged_reqs.dict(),
+                extracted_requirements=merged_reqs.model_dump(),
                 current_node="NODE 6_WAIT", # Transition state
                 system_action=action,
                 next_redirection="NODE 7"
@@ -386,7 +386,7 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
             # Nearby requested but no location context
             action = "I can definitely help find nearby projects! 🌍 Which location or specific landmark should I search around?"
             return FlowResponse(
-                extracted_requirements=merged_reqs.dict(),
+                extracted_requirements=merged_reqs.model_dump(),
                 current_node="NODE 1",
                 system_action=action,
                 next_redirection="NODE 1"
@@ -416,7 +416,7 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
             # If no budget set yet
             action = "I can definitely show you premium options. What's your max budget?"
             return FlowResponse(
-                extracted_requirements=merged_reqs.dict(),
+                extracted_requirements=merged_reqs.model_dump(),
                 current_node="NODE 1",
                 system_action=action,
                 next_redirection="NODE 1"
@@ -452,7 +452,7 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
             action = "".join(response_parts)
             
             return FlowResponse(
-                extracted_requirements=merged_reqs.dict(),
+                extracted_requirements=merged_reqs.model_dump(),
                 current_node=node,
                 system_action=action,
                 next_redirection="NODE 2A"
@@ -582,7 +582,7 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
             
             next_node = "NODE 2B"
             return FlowResponse(
-                extracted_requirements=merged_reqs.dict(),
+                extracted_requirements=merged_reqs.model_dump(),
                 current_node=node,
                 system_action=action,
                 next_redirection="NODE 2B"
@@ -1303,7 +1303,7 @@ Description: {project_facts.get('description', '')}
     elif node == "NODE 9":
         pitch = generate_contextual_response(
             user_input,
-            f"User prefers earlier possession than suggested projects. Current reqs: {merged_reqs.dict()}",
+            f"User prefers earlier possession than suggested projects. Current reqs: {merged_reqs.model_dump()}",
             "Explain the strategic benefits of investing in projects with a slightly later possession (e.g., lower entry price, better appreciation potential, flexible payment plans, and more choices). Be very persuasive."
         )
         action = f"{pitch}\n\nGiven these benefits, would you like to schedule a meeting to discuss the payment plan and potential ROI?"
@@ -1465,7 +1465,7 @@ We appreciate your interest, and I'm confident we'll find the perfect home for y
         next_node = "COMPLETED"  # Stay in completed state
 
 
-    extracted_dict = merged_reqs.dict()
+    extracted_dict = merged_reqs.model_dump()
     # Clean up output
     return FlowResponse(
         extracted_requirements=extracted_dict,

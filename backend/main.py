@@ -35,6 +35,7 @@ logging.info("Imports completed. Initializing FastAPI app...")
 from config import settings
 from services.flow_engine import FlowEngine, flow_engine
 from services.retrieval import retrieval_service # Deferred import to prevent hang
+from services.intelligent_fallback import intelligent_fallback
 
 from services.confidence_scorer import confidence_scorer
 from services.refusal_handler import refusal_handler
@@ -81,8 +82,8 @@ def is_property_search_query(query: str, intent: str, filters: Optional[Dict] = 
     - Contains search phrases like "show me", "find", "search for"
     """
     # Convert Pydantic model to dict if needed
-    if filters and hasattr(filters, 'dict'):
-        filters = filters.dict()
+    if filters and hasattr(filters, 'model_dump'):
+        filters = filters.model_dump()
     
     # Explicit property search intent
     if intent == "property_search":
@@ -645,107 +646,112 @@ async def chat_query(request: ChatQueryRequest):
 
 
         # ========================================
-        # SIMPLIFIED 3-PATH ROUTING
+        # SIMPLIFIED 2-PATH ROUTING
         # ========================================
-        # PATH 1: Property Search → Project cards
-        # PATH 2: Project Details → Structured info
-        # PATH 3: GPT Consultant → Continuous conversation (DEFAULT)
+        # Route based on data_source (not intent!)
+        # PATH 1: Database → Property search & facts
+        # PATH 2: GPT Sales Consultant → Everything else (DEFAULT)
         # ========================================
 
         # Check if unified consultant is enabled (feature flag)
         USE_UNIFIED_CONSULTANT = os.getenv("USE_UNIFIED_CONSULTANT", "true").lower() == "true"
 
-        # PATH 1: Property Search
-        if is_property_search_query(request.query, intent, filters):
-            logger.info("🔹 PATH 1: Property Search - showing project cards")
+        # PATH 1: Database Queries (property_search or project_facts)
+        if data_source == "database":
+            if intent == "property_search":
+                logger.info("🔹 PATH 1: Database - Property Search")
 
-            # Perform Hybrid Retrieval
-            search_results = await hybrid_retrieval.search_with_filters(
-                query=request.query,
-                filters=filters
-            )
-
-            # Update session with shown projects
-            if session:
-                session.last_shown_projects = search_results["projects"]
-                session_manager.save_session(session)
-                logger.info(f"Updated session with {len(search_results['projects'])} shown projects")
-
-            response_time_ms = int((time.time() - start_time) * 1000)
-
-            # Log the interaction
-            if request.user_id:
-                await pixeltable_client.log_query(
-                    user_id=request.user_id,
+                # Perform Hybrid Retrieval
+                search_results = await hybrid_retrieval.search_with_filters(
                     query=request.query,
+                    filters=filters
+                )
+
+                # Update session with shown projects
+                if session:
+                    session.last_shown_projects = search_results["projects"]
+                    session.last_intent = "property_search"
+                    session_manager.save_session(session)
+                    logger.info(f"Updated session with {len(search_results['projects'])} shown projects")
+
+                response_time_ms = int((time.time() - start_time) * 1000)
+
+                # Log the interaction
+                if request.user_id:
+                    await pixeltable_client.log_query(
+                        user_id=request.user_id,
+                        query=request.query,
+                        intent="property_search",
+                        answered=True,
+                        confidence_score="High",
+                        response_time_ms=response_time_ms,
+                        project_id=request.project_id
+                    )
+
+                return ChatQueryResponse(
+                    answer=f"I found {len(search_results['projects'])} projects matching your criteria. Here are the details:",
+                    projects=search_results["projects"],
+                    sources=[],
+                    confidence="High",
                     intent="property_search",
-                    answered=True,
-                    confidence_score="High",
+                    refusal_reason=None,
                     response_time_ms=response_time_ms,
-                    project_id=request.project_id
+                    suggested_actions=[]
                 )
+            
+            elif intent == "project_facts":
+                logger.info("🔹 PATH 1: Database - Project Facts (handled by factual interceptor above)")
+                # This is already handled by the factual query interceptor earlier (lines 438-505)
+                # If we reach here, fall through to GPT consultant
+                pass
 
-            return ChatQueryResponse(
-                answer=f"I found {len(search_results['projects'])} projects matching your criteria. Here are the details:",
-                projects=search_results["projects"],
-                sources=[],
-                confidence="High",
-                intent="property_search",
-                refusal_reason=None,
-                response_time_ms=response_time_ms,
-                suggested_actions=[]
-            )
+        # PATH 2: GPT Sales Consultant (DEFAULT for everything else)
+        # Handles: amenities, distances, advice, FAQs, objections, "more", greetings, all conversational queries
+        logger.info(f"🔹 PATH 2: GPT Sales Consultant - intent={intent}")
 
-        # PATH 2: Project Details/Facts (already handled by factual query interceptor above)
-        # This path is mostly handled earlier in the pipeline (lines 388-627)
-        # If we reach here with project_details intent, it means we need to handle it
-        elif is_project_details_query(request.query, intent):
-            logger.info("🔹 PATH 2: Project Details - already handled by interceptor")
-            # This should not happen often as factual queries are intercepted earlier
-            # If we get here, fall through to GPT consultant for contextual response
+        # Generate conversational response using unified consultant
+        response_text = await generate_consultant_response(
+            query=request.query,
+            session=session,
+            intent=intent
+        )
 
-        # PATH 3: GPT Conversational Consultant (DEFAULT)
-        # Handles: FAQs, objections, meeting requests, comparisons, greetings, and ALL other queries
-        if USE_UNIFIED_CONSULTANT:
-            logger.info(f"🔹 PATH 3: GPT Consultant - conversational response for intent={intent}")
+        # Update session
+        if session and request.session_id:
+            session_manager.add_message(request.session_id, "user", request.query)
+            session_manager.add_message(request.session_id, "assistant", response_text[:500])
+            session.last_intent = intent if intent != "unsupported" else "sales_conversation"
+            
+            # Update last_topic if provided in extraction
+            if extraction and extraction.get("topic"):
+                session.last_topic = extraction["topic"]
+                logger.info(f"Updated session.last_topic to: {session.last_topic}")
+            
+            session_manager.save_session(session)
 
-            # Generate conversational response using unified consultant
-            response_text = await generate_consultant_response(
+        response_time_ms = int((time.time() - start_time) * 1000)
+
+        # Log the interaction
+        if request.user_id:
+            await pixeltable_client.log_query(
+                user_id=request.user_id,
                 query=request.query,
-                session=session,
-                intent=intent
-            )
-
-            # Update session
-            if session and request.session_id:
-                session_manager.add_message(request.session_id, "user", request.query)
-                session_manager.add_message(request.session_id, "assistant", response_text[:500])
-                session.last_intent = f"gpt_consultant_{intent}"
-                session_manager.save_session(session)
-
-            response_time_ms = int((time.time() - start_time) * 1000)
-
-            # Log the interaction
-            if request.user_id:
-                await pixeltable_client.log_query(
-                    user_id=request.user_id,
-                    query=request.query,
-                    intent=f"gpt_consultant_{intent}",
-                    answered=True,
-                    confidence_score="High",
-                    response_time_ms=response_time_ms,
-                    project_id=request.project_id
-                )
-
-            return ChatQueryResponse(
-                answer=response_text,
-                sources=[],
-                confidence="High",
-                intent=f"gpt_consultant_{intent}",
-                refusal_reason=None,
+                intent=intent,
+                answered=True,
+                confidence_score="High",
                 response_time_ms=response_time_ms,
-                suggested_actions=[]
+                project_id=request.project_id
             )
+
+        return ChatQueryResponse(
+            answer=response_text,
+            sources=[],
+            confidence="High",
+            intent=intent,
+            refusal_reason=None,
+            response_time_ms=response_time_ms,
+            suggested_actions=[]
+        )
 
         # ========================================
         # FALLBACK TO OLD ROUTING (if feature flag disabled)
@@ -1285,12 +1291,31 @@ How can I assist you today?"""
                 # verified: search_with_filters returns dict with "projects": [formatted_dict...]
                 # So we can pass it directly.
             else:
-                result = {
-                    "answer": "I couldn't find any projects matching those specific criteria. You might want to try broadening your search (e.g., different location or budget).",
-                    "confidence": "High",
-                    "sources": []
-                }
-                full_projects = []
+                # Try intelligent fallback suggestions
+                logger.info("No exact matches found, trying intelligent fallback...")
+                fallback_results = await intelligent_fallback.find_intelligent_alternatives(
+                    filters=filters,
+                    original_query=request.query,
+                    max_results=3
+                )
+                
+                if fallback_results["alternatives"]:
+                    logger.info(f"Found {len(fallback_results['alternatives'])} fallback alternatives")
+                    result = {
+                        "answer": fallback_results["answer"],
+                        "confidence": "Medium",
+                        "sources": fallback_results["sources"]
+                    }
+                    full_projects = fallback_results["projects"]
+                else:
+                    # Truly no alternatives available
+                    logger.info("No alternatives found either")
+                    result = {
+                        "answer": "I couldn't find any projects matching those specific criteria. You might want to try broadening your search (e.g., different location or budget).",
+                        "confidence": "High",
+                        "sources": []
+                    }
+                    full_projects = []
 
         # B. Comparison
         elif intent == "comparison":
@@ -1620,7 +1645,7 @@ async def filtered_search(request: ChatQueryRequest):
 
         # Step 1: Extract filters from query
         filters = filter_extractor.extract_filters(request.query)
-        logger.info(f"Extracted filters: {filters.dict(exclude_none=True)}")
+        logger.info(f"Extracted filters: {filters.model_dump(exclude_none=True)}")
         
 
 
@@ -1632,10 +1657,71 @@ async def filtered_search(request: ChatQueryRequest):
 
         # Step 3: Check if any results found
         if not search_results["projects"]:
-            logger.info("No matching projects found in database. Web fallback disabled for project discovery.")
+            logger.info("No matching projects found in database. Trying intelligent fallback...")
+            
+            # Try intelligent fallback suggestions
+            fallback_results = await intelligent_fallback.find_intelligent_alternatives(
+                filters=filters,
+                original_query=request.query,
+                max_results=3
+            )
             
             response_time_ms = int((time.time() - start_time) * 1000)
-
+            
+            if fallback_results["alternatives"]:
+                logger.info(f"Found {len(fallback_results['alternatives'])} fallback alternatives")
+                
+                # Format fallback projects for this endpoint's response format
+                formatted_fallbacks = []
+                for project in fallback_results["projects"]:
+                    formatted_fallbacks.append({
+                        "project_id": project.get("project_id"),
+                        "project_name": project.get("project_name"),
+                        "developer_name": project.get("developer_name"),
+                        "location": project.get("location"),
+                        "full_address": project.get("location"),
+                        "rera_number": project.get("rera_number"),
+                        "status": project.get("status"),
+                        "matching_unit_count": 1,
+                        "price_range": {
+                            "min_inr": project.get("budget_min", 0) * 100000,  # Convert lakhs to INR
+                            "max_inr": project.get("budget_max", 0) * 100000,
+                            "min_display": f"₹{project.get('budget_min', 0)/100:.2f} Cr",
+                            "max_display": f"₹{project.get('budget_max', 0)/100:.2f} Cr"
+                        },
+                        "configurations": [project.get("configuration", "N/A")],
+                        "highlights": f"Located {project.get('_distance', 'N/A')} km away. {project.get('description', '')}",
+                        "amenities": project.get("amenities", ""),
+                        "can_expand": True,
+                        "_is_fallback": True,  # Mark as fallback suggestion
+                        "_distance": project.get("_distance")
+                    })
+                
+                # Log query
+                if request.user_id:
+                    await pixeltable_client.log_query(
+                        user_id=request.user_id,
+                        query=request.query,
+                        intent="structured_search_with_fallback",
+                        answered=True,
+                        confidence_score="Medium (Fallback)",
+                        response_time_ms=response_time_ms
+                    )
+                
+                return {
+                    "query": request.query,
+                    "filters": filters.model_dump(exclude_none=True),
+                    "matching_projects": len(formatted_fallbacks),
+                    "projects": formatted_fallbacks,
+                    "fallback_message": fallback_results["answer"],
+                    "is_fallback": True,
+                    "search_method": "intelligent_fallback",
+                    "response_time_ms": response_time_ms
+                }
+            
+            # No alternatives either
+            logger.info("No alternatives found either")
+            
             # Log query
             if request.user_id:
                 await pixeltable_client.log_query(
@@ -1649,7 +1735,7 @@ async def filtered_search(request: ChatQueryRequest):
 
             return {
                 "query": request.query,
-                "filters": filters.dict(exclude_none=True),
+                "filters": filters.model_dump(exclude_none=True),
                 "matching_projects": 0,
                 "projects": [],
                 "web_fallback": None,
@@ -1839,7 +1925,7 @@ async def agent_flow_query(request: ChatQueryRequest):
         response = execute_flow(state, request.query)
         
         # Save state
-        session.flow_state = state.dict()
+        session.flow_state = state.model_dump()
         
         return response
         

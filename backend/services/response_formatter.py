@@ -192,6 +192,132 @@ class ResponseFormatter:
             confidence=confidence,
             intent=intent
         )
+    
+    def format_fallback_suggestions(
+        self,
+        original_query: str,
+        alternatives: List[Dict],
+        filters: Dict
+    ) -> FormattedResponse:
+        """
+        Format intelligent fallback suggestions with value-focused sales pitches.
+        
+        Used when no exact matches found but nearby alternatives exist.
+        
+        Args:
+            original_query: User's original search query
+            alternatives: List of alternative project dictionaries
+            filters: Extracted filters from query
+            
+        Returns:
+            FormattedResponse with formatted suggestions and sales pitches
+        """
+        if not alternatives:
+            return FormattedResponse(
+                format_type="formatted_text",
+                answer="I couldn't find any projects matching those criteria. Please try adjusting your search parameters.",
+                structured_data=None,
+                sources=[],
+                confidence="Low",
+                intent="property_search"
+            )
+        
+        filter_desc = self._describe_filters(filters)
+        location_name = filters.get('locality') or filters.get('area') or filters.get('city', 'that area')
+        
+        # Build header
+        answer = f"🔍 **No exact matches found {filter_desc}**, but here are {len(alternatives)} excellent alternatives nearby:\n\n"
+        
+        # Format each alternative with value pitch
+        for idx, project in enumerate(alternatives, 1):
+            budget_min = project.get('budget_min', 0) / 100  # Convert lakhs to Cr
+            budget_max = project.get('budget_max', 0) / 100
+            distance = project.get('_distance', 'N/A')
+            
+            # Project header
+            answer += f"**{idx}. 🏠 {project.get('name')}**"
+            if distance != 'N/A':
+                answer += f" ({distance:.1f} km from {location_name})"
+            answer += "\n"
+            
+            # Location
+            answer += f"📍 {project.get('location')}\n"
+            
+            # Price range
+            answer += f"💰 ₹{budget_min:.2f} - ₹{budget_max:.2f} Cr"
+            
+            # Configuration
+            if project.get('configuration'):
+                answer += f" | {project.get('configuration')[:50]}"
+            answer += "\n"
+            
+            # Status and possession
+            if project.get('status'):
+                answer += f"🏗️ {project.get('status')}"
+            if project.get('possession_quarter') and project.get('possession_year'):
+                answer += f" | Possession: {project.get('possession_quarter')} {project.get('possession_year')}"
+            answer += "\n"
+            
+            # Value pitch (if available from intelligent fallback)
+            if project.get('_value_pitch'):
+                answer += f"\n**💡 Why consider this:**\n{project.get('_value_pitch')}\n"
+            else:
+                # Generate simple value statement
+                value_points = []
+                
+                # Budget advantage
+                if filters.get('max_price_inr'):
+                    requested_budget_cr = filters['max_price_inr'] / 10000000
+                    if budget_min < requested_budget_cr:
+                        savings = requested_budget_cr - budget_min
+                        value_points.append(f"₹{savings:.2f} Cr more affordable")
+                
+                # Proximity
+                if distance != 'N/A' and distance <= 10:
+                    value_points.append(f"Just {distance:.1f} km away")
+                
+                # Amenities
+                if project.get('amenities'):
+                    amenities_preview = project.get('amenities')[:60]
+                    value_points.append(amenities_preview)
+                
+                if value_points:
+                    answer += f"\n**💡 Value:** {' • '.join(value_points)}\n"
+            
+            # Highlights/USP
+            if project.get('description'):
+                desc_preview = project.get('description')[:120]
+                if len(project.get('description', '')) > 120:
+                    desc_preview += "..."
+                answer += f"✨ {desc_preview}\n"
+            
+            answer += "\n---\n\n"
+        
+        # Call to action
+        answer += "📞 **Interested?** Would you like to:\n"
+        answer += "• Schedule a **site visit** to any of these projects?\n"
+        answer += "• Get **detailed pricing** and floor plans?\n"
+        answer += "• Explore **similar projects** in other locations?\n"
+        
+        return FormattedResponse(
+            format_type="structured_list",
+            answer=answer,
+            structured_data={
+                "projects": alternatives,
+                "total_count": len(alternatives),
+                "filters_applied": filters,
+                "is_fallback": True
+            },
+            sources=[{
+                "document": f"{alt.get('name', 'Project')} Data",
+                "section": "Alternative Suggestions",
+                "page": None,
+                "excerpt": f"Alternative project suggestion",
+                "similarity": 0.7
+            } for alt in alternatives],
+            confidence="Medium",
+            intent="property_search"
+        )
 
     def _describe_filters(self, filters: Dict) -> str:
         """

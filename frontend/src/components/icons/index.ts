@@ -28,6 +28,12 @@ export {
     Building2,
     MapPin,
 
+    // ProjectCard icons
+    Phone,
+    Info,
+    IndianRupee,
+    Calendar,
+
     // AdminDashboard icons
     BarChart3,
     MessageSquare,

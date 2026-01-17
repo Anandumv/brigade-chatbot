@@ -104,7 +104,7 @@ class HybridRetrievalService:
         if filters is None:
             filters = filter_extractor.extract_filters(query)
         
-        logger.info(f"Extracted filters: {filters.dict(exclude_none=True)}")
+        logger.info(f"Extracted filters: {filters.model_dump(exclude_none=True)}")
 
         # Query Pixeltable or Mock Data
         if self.projects_table:
@@ -124,7 +124,7 @@ class HybridRetrievalService:
         return {
             "projects": results,
             "total_matching_projects": len(results),
-            "filters_used": filters.dict(exclude_none=True),
+            "filters_used": filters.model_dump(exclude_none=True),
             "search_method": "pixeltable"
         }
 
@@ -265,17 +265,26 @@ class HybridRetrievalService:
                         "location": r.get('location', ''),
                         "city": r.get('zone', '') or r.get('location', ''),
                         "locality": r.get('location', ''),
+                        "zone": r.get('zone', ''),
                         "status": r.get('status', ''),
                         "possession_year": r.get('possession_year'),
+                        "possession_quarter": r.get('possession_quarter', ''),
                         "total_land_area": r.get('total_land_area', ''),
                         "towers": r.get('towers', ''),
                         "floors": r.get('floors', ''),
                         "amenities": r.get('amenities', ''),
                         "highlights": r.get('highlights', ''),
+                        "description": r.get('description', ''),
+                        "usp": r.get('usp', ''),
                         "brochure_link": r.get('brochure_link', ''),
+                        "brochure_url": r.get('brochure_url', ''),
                         "rm_contact": r.get('rm_contact', ''),
+                        "rm_details": r.get('rm_details', {}),
                         "location_link": r.get('location_link', ''),
                         "config_summary": r.get('configuration', ''),
+                        "configuration": r.get('configuration', ''),
+                        "rera_number": r.get('rera_number', ''),
+                        "registration_process": r.get('registration_process', ''),
                         "price_range": {
                             "min": min_cr,
                             "max": max_cr,
@@ -284,7 +293,7 @@ class HybridRetrievalService:
                         },
                         "matching_units": [],
                         "unit_count": 0,
-                        "can_expand": False,
+                        "can_expand": True,
                         "relevant_chunks": []
                     })
                 except Exception as format_err:
@@ -490,18 +499,37 @@ class HybridRetrievalService:
                 formatted.append({
                     "id": r.get('project_id', r.get('name')),
                     "name": r.get('name'),
-                    "developer": r.get('builder', 'Brigade Group'),
+                    "developer": r.get('developer', r.get('builder', 'Brigade Group')),
+                    "project_id": r.get('project_id', r.get('name')),
                     "project_name": r.get('name'),
-                    "developer_name": r.get('builder', 'Brigade Group'),
+                    "developer_name": r.get('developer', r.get('builder', 'Brigade Group')),
                     "location": r.get('location'),
+                    "zone": r.get('zone', ''),
+                    "city": r.get('zone', '') or r.get('location', ''),
+                    "locality": r.get('location', ''),
                     "price_range": price_range,
                     "configuration": r.get('configuration', '2, 3 BHK'),
+                    "config_summary": r.get('configuration', '2, 3 BHK'),
                     "status": r.get('status', 'Under Construction'),
                     "possession_year": str(r.get('possession_year', '')),
+                    "possession_quarter": r.get('possession_quarter', ''),
                     "image_url": img,
                     "usp": r.get('usp', []),
                     "full_address": r.get('full_address'),
-                    "highlights": r.get('description', '')
+                    "highlights": r.get('description', ''),
+                    "description": r.get('description', ''),
+                    "amenities": r.get('amenities', ''),
+                    "rera_number": r.get('rera_number', ''),
+                    "brochure_url": r.get('brochure_url', ''),
+                    "brochure_link": r.get('brochure_url', ''),
+                    "rm_details": r.get('rm_details', {}),
+                    "rm_contact": r.get('rm_details', {}).get('contact', ''),
+                    "registration_process": r.get('registration_process', ''),
+                    "total_land_area": r.get('total_land_area', ''),
+                    "towers": r.get('towers', ''),
+                    "floors": r.get('floors', ''),
+                    "location_link": r.get('location_link', ''),
+                    "can_expand": True
                 })
             
             logger.info(f"Mock Query Final Count: {len(formatted)}")

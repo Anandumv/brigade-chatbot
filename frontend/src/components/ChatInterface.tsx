@@ -302,29 +302,57 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                                                     {message.projects.map((project, idx) => {
                                                         // Adapter to map backend fields to frontend ProjectCard props
                                                         const adaptProjectData = (apiProject: any) => {
-                                                            const minCr = (apiProject.budget_min || 0) / 100;
-                                                            const maxCr = (apiProject.budget_max || 0) / 100;
-
-                                                            let priceInfo = 'Price on Request';
-                                                            if (minCr > 0) {
-                                                                if (maxCr > minCr) {
-                                                                    priceInfo = `₹${minCr.toFixed(2)} Cr - ₹${maxCr.toFixed(2)} Cr`;
-                                                                } else {
-                                                                    priceInfo = `Starting ₹${minCr.toFixed(2)} Cr`;
+                                                            // Handle price range - can be object or need to calculate
+                                                            let priceInfo: any = apiProject.price_range;
+                                                            
+                                                            if (!priceInfo || typeof priceInfo === 'string') {
+                                                                const minCr = (apiProject.budget_min || 0) / 100;
+                                                                const maxCr = (apiProject.budget_max || 0) / 100;
+                                                                
+                                                                let priceDisplay = 'Price on Request';
+                                                                if (minCr > 0) {
+                                                                    if (maxCr > minCr) {
+                                                                        priceDisplay = `₹${minCr.toFixed(2)} Cr - ₹${maxCr.toFixed(2)} Cr`;
+                                                                    } else {
+                                                                        priceDisplay = `Starting ₹${minCr.toFixed(2)} Cr`;
+                                                                    }
                                                                 }
+                                                                priceInfo = priceDisplay;
                                                             }
 
                                                             return {
-                                                                project_name: apiProject.name || 'Unknown Project',
-                                                                developer_name: apiProject.developer || apiProject.builder || 'Brigade Group',
+                                                                id: apiProject.id || apiProject.project_id || '',
+                                                                name: apiProject.name || 'Unknown Project',
+                                                                project_id: apiProject.project_id || apiProject.id,
+                                                                project_name: apiProject.name || apiProject.project_name || 'Unknown Project',
+                                                                developer: apiProject.developer || apiProject.builder || 'Brigade Group',
+                                                                developer_name: apiProject.developer_name || apiProject.developer || apiProject.builder || 'Brigade Group',
                                                                 location: apiProject.location || 'Bangalore',
+                                                                zone: apiProject.zone,
+                                                                city: apiProject.city || apiProject.zone,
+                                                                locality: apiProject.locality || apiProject.location,
                                                                 price_range: priceInfo,
-                                                                configuration: apiProject.configuration || '2, 3 BHK',
+                                                                configuration: apiProject.configuration || apiProject.config_summary || '2, 3 BHK',
+                                                                config_summary: apiProject.config_summary || apiProject.configuration,
                                                                 status: apiProject.status || 'Active',
                                                                 possession_year: apiProject.possession_year?.toString(),
+                                                                possession_quarter: apiProject.possession_quarter,
                                                                 rera_number: apiProject.rera_number,
                                                                 image_url: apiProject.image_url,
                                                                 usp: apiProject.usp || [],
+                                                                description: apiProject.description || apiProject.highlights,
+                                                                amenities: apiProject.amenities,
+                                                                highlights: apiProject.highlights,
+                                                                brochure_url: apiProject.brochure_url || apiProject.brochure_link,
+                                                                brochure_link: apiProject.brochure_link || apiProject.brochure_url,
+                                                                rm_details: apiProject.rm_details,
+                                                                rm_contact: apiProject.rm_contact,
+                                                                registration_process: apiProject.registration_process,
+                                                                total_land_area: apiProject.total_land_area,
+                                                                towers: apiProject.towers,
+                                                                floors: apiProject.floors,
+                                                                location_link: apiProject.location_link,
+                                                                can_expand: apiProject.can_expand
                                                             };
                                                         };
 

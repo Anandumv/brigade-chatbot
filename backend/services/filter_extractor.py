@@ -272,7 +272,7 @@ class FilterExtractor:
         # Extract property type
         filters.property_type = self._extract_property_type(query_lower)
 
-        logger.info(f"Extracted filters: {filters.dict(exclude_none=True)}")
+        logger.info(f"Extracted filters: {filters.model_dump(exclude_none=True)}")
 
         return filters
 

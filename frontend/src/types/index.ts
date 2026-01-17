@@ -9,12 +9,51 @@ export interface SourceInfo {
     content_preview: string;
 }
 
+export interface RMDetails {
+    name?: string;
+    contact?: string;
+}
+
+export interface PriceRange {
+    min?: number;
+    max?: number;
+    min_display?: string;
+    max_display?: string;
+}
+
 export interface ProjectInfo {
     id: string;
     name: string;
     developer: string;
     location?: string;
     status?: string;
+    project_id?: string;
+    project_name?: string;
+    developer_name?: string;
+    zone?: string;
+    city?: string;
+    locality?: string;
+    possession_year?: string | number;
+    possession_quarter?: string;
+    configuration?: string;
+    config_summary?: string;
+    price_range?: PriceRange | string;
+    description?: string;
+    amenities?: string;
+    highlights?: string;
+    usp?: string | string[];
+    rera_number?: string;
+    brochure_url?: string;
+    brochure_link?: string;
+    image_url?: string;
+    rm_details?: RMDetails;
+    rm_contact?: string;
+    registration_process?: string;
+    total_land_area?: string;
+    towers?: string;
+    floors?: string;
+    location_link?: string;
+    can_expand?: boolean;
 }
 
 export interface PersonaInfo {

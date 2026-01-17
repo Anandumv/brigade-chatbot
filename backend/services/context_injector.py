@@ -264,22 +264,44 @@ def enrich_query_with_context(
     enriched = query
     was_enriched = False
     
-    # Strategy 1: Add last discussed project
+    # PRIORITY 1: Check if last intent was conversational (not project-specific)
+    # If user was discussing topics/FAQs, continue that conversation
+    conversational_intents = [
+        "sales_faq", "sales_objection", "greeting", 
+        "faq_budget_stretch", "faq_pinclick_value",
+        "unsupported",  # when it was generic advice
+        "gpt_consultant"  # unified consultant responses
+    ]
+    
+    if session.last_intent:
+        # Check if last intent was conversational
+        is_conversational = any(intent in session.last_intent for intent in conversational_intents)
+        
+        if is_conversational and session.last_topic:
+            # Continue the topic conversation
+            enriched = f"{query} regarding {session.last_topic}"
+            was_enriched = True
+            logger.info(f"Context Injection: Continuing topic conversation - '{query}' → '{enriched}'")
+            return enriched, was_enriched
+    
+    # PRIORITY 2: If last intent was project-specific, use project context
+    # Strategy 1: Add last discussed project (only if recent context is project-related)
     if session.interested_projects:
         last_project = session.interested_projects[-1]
         enriched = f"{query} about {last_project}"
         was_enriched = True
         logger.info(f"Context Injection: Added project context - '{query}' → '{enriched}'")
+        return enriched, was_enriched
     
-    # Strategy 2: Add topic context if available
-    elif session.last_topic and not session.interested_projects:
-        # If we have a topic but no project, add topic context
+    # PRIORITY 3: If no project context but have topic, use topic
+    if session.last_topic:
         enriched = f"{query} regarding {session.last_topic}"
         was_enriched = True
         logger.info(f"Context Injection: Added topic context - '{query}' → '{enriched}'")
+        return enriched, was_enriched
     
-    # Strategy 3: Add filter context if available
-    elif session.current_filters and not session.interested_projects:
+    # PRIORITY 4: Add filter context if available
+    if session.current_filters:
         # Build filter context string
         filter_parts = []
         if session.current_filters.get('configuration'):
