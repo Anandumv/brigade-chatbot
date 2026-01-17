@@ -1,14 +1,15 @@
 """
 GPT Content Generator for Real Estate Insights.
 
+Uses MASTER PROMPT from master_prompt.py for consistent Sales Advisor responses.
 Generates persuasive, fact-grounded content about projects beyond basic database fields.
-Used for investment pitches, sustainability elaboration, location advantages, etc.
 """
 
 import logging
 from typing import Dict, Optional
 from openai import OpenAI
 from config import settings
+from services.master_prompt import get_content_prompt, get_objection_prompt, get_meeting_prompt, get_general_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -26,27 +27,31 @@ def generate_insights(
     user_requirements: Optional[Dict] = None
 ) -> str:
     """
-    Generate persuasive insights about a project beyond basic facts.
+    Generate persuasive insights using MASTER SALES ADVISOR PROMPT.
 
     Topics handled:
-    - "sustainability": Elaborate on green certifications, eco-friendly features
-    - "investment": ROI potential, appreciation, market trends (with disclaimers)
-    - "location_advantages": Connectivity, upcoming infrastructure, neighborhood quality
-    - "amenities_benefits": How amenities improve lifestyle
-    - "general_selling_points": Overall persuasive pitch
-    - "general": Auto-detect what user wants to know more about
-
-    Args:
-        project_facts: Database record with name, developer, location, price, RERA, amenities, USP
-        topic: What aspect to elaborate on
-        query: Original user query for context
-        user_requirements: User's search criteria (config, budget, location preferences)
+    - "sustainability": Green features explained in money/health terms
+    - "investment": ROI potential with market risk disclaimers
+    - "location_advantages": Connectivity, infrastructure, neighborhood
+    - "amenities_benefits": How amenities improve daily lifestyle
+    - "general_selling_points": 2-3 strongest selling points
+    - "meeting_scheduling": Meeting options and how to schedule
+    - "objection_*": Handle objections (budget, location, possession, trust)
 
     Returns:
-        Persuasive content string (200-500 words)
+        Speakable, action-oriented content (no fluff, decision-focused)
     """
 
-    system_prompt = _build_content_generation_prompt(project_facts, topic, user_requirements)
+    # Use master prompt library
+    if topic.startswith("objection_"):
+        objection_type = topic.replace("objection_", "")
+        system_prompt = get_objection_prompt(objection_type, query)
+    elif topic == "meeting_scheduling":
+        system_prompt = get_meeting_prompt(query)
+    elif project_facts.get("name") in ["Pinclick Real Estate", "Meeting Request"]:
+        system_prompt = get_general_prompt(query)
+    else:
+        system_prompt = get_content_prompt(project_facts, topic, query, user_requirements)
 
     try:
         response = client.chat.completions.create(
