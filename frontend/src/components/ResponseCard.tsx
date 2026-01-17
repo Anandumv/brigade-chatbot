@@ -61,7 +61,8 @@ export function ResponseCard({
 
     // Custom renderer for tables
     const components = {
-        table: ({ children }: { children: React.ReactNode }) => {
+        table: (props: any) => {
+            const { children } = props;
             return (
                 <div className="my-4">
                     <button
