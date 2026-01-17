@@ -543,7 +543,7 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
             
             if proj.get('amenities'):
                 amenities = proj.get('amenities', '').replace("[", "").replace("]", "").replace("'", "")
-                pitch_parts.append(f"\n**🎯 Key Amenities:** {amenities[:150]}...\n")
+                pitch_parts.append(f"\n**🎯 Key Amenities:** {amenities}\n")
             
             pitch_parts.append("\n👉 **Ready to see it in person? Schedule a site visit!**")
             action = "".join(pitch_parts)
@@ -659,9 +659,6 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
 
                 if proj.get('amenities'):
                     amenities = proj['amenities'].replace("[", "").replace("]", "").replace("'", "")
-                    # Truncate amenities nicely
-                    if len(amenities) > 60:
-                        amenities = amenities[:60].rsplit(' ', 1)[0] + "..."
                     response_parts.append(f"- 🎯 Amenities: {amenities}\n")
 
                 response_parts.append("\n")  # Extra line between projects
