@@ -356,7 +356,6 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                                     { icon: '🏠', text: '3BHK in Whitefield under 1.5 Cr' },
                                     { icon: '💰', text: 'How to stretch my budget?' },
                                     { icon: '🏗️', text: 'Why buy Under Construction?' },
-                                    { icon: '🤝', text: 'Schedule site visit' },
                                 ].map((suggestion, idx) => (
                                     <button
                                         key={idx}

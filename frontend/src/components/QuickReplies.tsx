@@ -56,12 +56,10 @@ export const QUICK_REPLY_SETS = {
     initial: [
         { label: 'Show 2BHK options', icon: '🏠', value: 'Show me 2BHK options', variant: 'secondary' as const },
         { label: 'Budget advice', icon: '💰', value: 'How to stretch my budget?', variant: 'secondary' as const },
-        { label: 'Schedule visit', icon: '📅', value: 'Schedule a site visit', variant: 'primary' as const },
     ],
     afterPropertySearch: [
         { label: 'More details', icon: '📋', value: 'Tell me more about this project', variant: 'secondary' as const },
         { label: 'Compare options', icon: '⚖️', value: 'Compare with other projects', variant: 'secondary' as const },
-        { label: 'Book site visit', icon: '🚗', value: 'I want to visit this project', variant: 'primary' as const },
     ],
     afterFAQ: [
         { label: 'Yes, schedule meeting', icon: '✅', value: 'Yes, let\'s schedule a meeting', variant: 'primary' as const },
@@ -74,7 +72,6 @@ export const QUICK_REPLY_SETS = {
         { label: 'Still concerned', icon: '🤔', value: 'I still have concerns', variant: 'secondary' as const },
     ],
     meetingCTA: [
-        { label: 'Schedule now', icon: '📅', value: 'Schedule a meeting for tomorrow', variant: 'primary' as const },
         { label: 'Call me back', icon: '📱', value: 'Please call me back', variant: 'accent' as const },
         { label: 'Later', icon: '⏰', value: 'I\'ll think about it', variant: 'secondary' as const },
     ],
