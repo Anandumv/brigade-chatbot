@@ -300,6 +300,3 @@ Query: "Too expensive for me"
 
 Now classify the user's query following these rules. Return ONLY valid JSON, no other text.
 """
-
-
-def classify_intent_gpt_first(
