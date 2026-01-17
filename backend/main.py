@@ -315,61 +315,87 @@ async def chat_query(request: ChatQueryRequest):
                 logger.info(f"Fuzzy matched project: '{matched_project_name}'")
                 project = get_project_from_database(matched_project_name)
                 
-                if project:
-                    # Override intent to project_details and show project info
-                    intent = "project_details"
-                    extraction["project_name"] = project.get("name")
-                    logger.info(f"Overriding to project_details for: {project.get('name')}")
-                    
-                    # Generate project details response directly
-                    from services.flow_engine import clean_configuration_string, format_configuration_table
-                    
-                    proj = project
-                    response_parts = [f"🏠 **{proj.get('name')}** - Here's everything you need to know:\n\n"]
-                    
-                    if proj.get('developer'):
-                        response_parts.append(f"**🏗️ Developer:** {proj.get('developer')}\n")
-                    
-                    response_parts.append(f"**📍 Location:** {proj.get('location')}\n")
-                    
-                    budget_min = proj.get('budget_min', 0) / 100 if proj.get('budget_min') else 0
-                    budget_max = proj.get('budget_max', 0) / 100 if proj.get('budget_max') else 0
-                    response_parts.append(f"**💰 Price Range:** ₹{budget_min:.2f} - ₹{budget_max:.2f} Cr\n")
-                    
-                    if proj.get('configuration'):
-                        config_table = format_configuration_table(proj.get('configuration', ''))
-                        response_parts.append(f"**🛏️ Configurations:**\n{config_table}\n")
-                    
-                    response_parts.append(f"**📊 Status:** {proj.get('status')}\n")
-                    response_parts.append(f"**📅 Possession:** {proj.get('possession_quarter', '')} {proj.get('possession_year', '')}\n")
-                    
-                    if proj.get('rera_number'):
-                        response_parts.append(f"**📋 RERA:** {proj.get('rera_number')}\n")
-                    
-                    if proj.get('usp') and len(proj.get('usp', '')) > 5:
-                        response_parts.append(f"\n**✨ Why this property?**\n{proj.get('usp')}\n")
-                    
-                    if proj.get('amenities'):
-                        amenities = proj.get('amenities', '').replace("[", "").replace("]", "").replace("'", "")
-                        response_parts.append(f"\n**🎯 Key Amenities:** {amenities}\n")
-                    
-                    response_parts.append("\n👉 **Ready to see it in person? Schedule a site visit!**")
-                    
-                    response_time_ms = int((time.time() - start_time) * 1000)
-                    
-                    # Record interest
-                    if request.session_id:
-                        session_manager.record_interest(request.session_id, proj.get('name'))
-                    
-                    return ChatQueryResponse(
-                        answer="".join(response_parts),
-                        sources=[],
-                        confidence="High",
+            # Determine if this is a generic request or a specific question
+            # Simple heuristic: if query length is short and contains "details", "info", "about", it's generic.
+            # If it contains specific keywords like "price", "location", "amenities", "distance", etc., let GPT handle it.
+            is_general_request = is_project_detail_request(request.query) and len(request.query.split()) < 10
+
+            if is_general_request:
+                # Override intent to project_details and show project info
+                intent = "project_details"
+                extraction["project_name"] = project.get("name")
+                logger.info(f"Overriding to project_details for: {project.get('name')}")
+                
+                # Generate project details response directly
+                from services.flow_engine import clean_configuration_string, format_configuration_table
+                
+                proj = project
+                response_parts = [f"🏠 **{proj.get('name')}** - Here's everything you need to know:\n\n"]
+                
+                if proj.get('developer'):
+                    response_parts.append(f"**🏗️ Developer:** {proj.get('developer')}\n")
+                
+                response_parts.append(f"**📍 Location:** {proj.get('location')}\n")
+                
+                budget_min = proj.get('budget_min', 0) / 100 if proj.get('budget_min') else 0
+                budget_max = proj.get('budget_max', 0) / 100 if proj.get('budget_max') else 0
+                response_parts.append(f"**💰 Price Range:** ₹{budget_min:.2f} - ₹{budget_max:.2f} Cr\n")
+                
+                if proj.get('configuration'):
+                    config_table = format_configuration_table(proj.get('configuration', ''))
+                    response_parts.append(f"**🛏️ Configurations:**\n{config_table}\n")
+                
+                response_parts.append(f"**📊 Status:** {proj.get('status')}\n")
+                response_parts.append(f"**📅 Possession:** {proj.get('possession_quarter', '')} {proj.get('possession_year', '')}\n")
+                
+                if proj.get('rera_number'):
+                    response_parts.append(f"**📋 RERA:** {proj.get('rera_number')}\n")
+                
+                if proj.get('usp') and len(proj.get('usp', '')) > 5:
+                    response_parts.append(f"\n**✨ Why this property?**\n{proj.get('usp')}\n")
+                
+                if proj.get('amenities'):
+                    amenities = proj.get('amenities', '').replace("[", "").replace("]", "").replace("'", "")
+                    response_parts.append(f"\n**🎯 Key Amenities:** {amenities}\n")
+                
+                response_parts.append("\n👉 **Ready to see it in person? Schedule a site visit!**")
+                
+                response_time_ms = int((time.time() - start_time) * 1000)
+                
+                # Record interest
+                try:
+                    flow_engine.record_interaction(
+                        session_id=request.session_id,
+                        user_query=request.query,
                         intent="project_details",
-                        refusal_reason=None,
-                        response_time_ms=response_time_ms,
-                        suggested_actions=["Schedule site visit", "Compare projects", "More details"]
+                        response="\n".join(response_parts),
+                        project_name=project.get("name")
                     )
+                except Exception as e:
+                    logger.error(f"Failed to record interaction: {e}")
+
+                return ChatResponse(
+                    response_id=f"resp_{int(time.time())}",
+                    message="\n".join(response_parts),
+                    intent="project_details",
+                    confidence=1.0,  # High confidence for direct match
+                    sources=[{
+                        "source_type": "database",
+                        "document_name": "projects_table",
+                        "similarity_score": 1.0,
+                        "content_preview": f"Details for {project.get('name')}"
+                    }],
+                    system_action="Showing Project Details",
+                    response_time_ms=response_time_ms
+                )
+            else:
+                # Specific question ("distance of airport from avalon")
+                # Route to GPT but inject project name so generator knows context
+                logger.info(f"Specific project question detected for: {project.get('name')}")
+                intent = "more_info_request"
+                data_source = "gpt_generation"
+                extraction["project_name"] = project.get("name")
+                extraction["topic"] = "specific_query"
 
         # Extract and merge filters early (needed for context and search)
         filters = filter_extractor.extract_filters(request.query)
