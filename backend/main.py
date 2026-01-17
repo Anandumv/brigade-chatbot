@@ -322,7 +322,7 @@ async def chat_query(request: ChatQueryRequest):
                     logger.info(f"Overriding to project_details for: {project.get('name')}")
                     
                     # Generate project details response directly
-                    from services.flow_engine import clean_configuration_string
+                    from services.flow_engine import clean_configuration_string, format_configuration_table
                     
                     proj = project
                     response_parts = [f"🏠 **{proj.get('name')}** - Here's everything you need to know:\n\n"]
@@ -337,8 +337,8 @@ async def chat_query(request: ChatQueryRequest):
                     response_parts.append(f"**💰 Price Range:** ₹{budget_min:.2f} - ₹{budget_max:.2f} Cr\n")
                     
                     if proj.get('configuration'):
-                        config_display = clean_configuration_string(proj.get('configuration', ''))
-                        response_parts.append(f"**🛏️ Configuration:** {config_display}\n")
+                        config_table = format_configuration_table(proj.get('configuration', ''))
+                        response_parts.append(f"**🛏️ Configurations:**\n{config_table}\n")
                     
                     response_parts.append(f"**📊 Status:** {proj.get('status')}\n")
                     response_parts.append(f"**📅 Possession:** {proj.get('possession_quarter', '')} {proj.get('possession_year', '')}\n")

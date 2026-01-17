@@ -32,9 +32,35 @@ def clean_configuration_string(config_raw: str) -> str:
     except Exception:
         return str(config_raw)
 
+def format_configuration_table(config_raw: str) -> str:
+    """Parses config string into a markdown table."""
+    if not config_raw: return ""
+    
+    # Extract groups like {2BHK, 1200, 1.2Cr}
+    groups = re.findall(r"\{([^}]+)\}", str(config_raw))
+    
+    if not groups:
+        # Fallback to existing clean string if no groups found
+        cleaned = clean_configuration_string(config_raw)
+        return f"**Config:** {cleaned}"
+        
+    # Build table
+    table_lines = []
+    table_lines.append("\n| Configuration | Size (sq.ft) | Price |")
+    table_lines.append("| :--- | :--- | :--- |")
+    
+    for group in groups:
+        parts = [p.strip() for p in group.split(',')]
+        if len(parts) >= 3:
+            config, size, price = parts[0], parts[1], parts[2]
+            table_lines.append(f"| {config} | {size} | {price} |")
+        elif len(parts) >= 1:
+            table_lines.append(f"| {parts[0]} | - | - |")
+             
+    return "\n".join(table_lines) + "\n"
+
 # --- SYSTEM PROMPT ---
 STRICT_SYSTEM_PROMPT = """
-ROLE
 ROLE
 You are an AI Sales Agent for Pinclick.
 You speak directly to the customer.
@@ -729,9 +755,9 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
                 response_parts.append(f"- 📍 Location: {proj['location']}\n")
                 response_parts.append(f"- 💰 Price: ₹{proj['budget_min']/100:.2f} - ₹{proj['budget_max']/100:.2f} Cr\n")
 
-                # Simplify configuration - extract just BHK types
-                config_display = clean_configuration_string(proj.get('configuration', ''))
-                response_parts.append(f"- 🏠 Config: {config_display}\n")
+                # Show full configuration table (Config, Size, Price) as requested by user
+                config_table = format_configuration_table(proj.get('configuration', ''))
+                response_parts.append(f"- 🏠 **Configurations:**\n{config_table}\n")
 
                 response_parts.append(f"- 📅 Possession: {proj['possession_quarter']} {proj['possession_year']}\n")
 
