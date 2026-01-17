@@ -31,7 +31,13 @@
     "rera_number": "Pending",
     "description": "RGA Tech Park, Wipro Office, NPS, Harvest International School, Manipal Hospital, Mother hood Hospital",
     "amenities": "75% open spaces, 50+ Amenities",
-    "usp": ""
+    "usp": "",
+    "brochure_url": "https://www.birlaestates.com/projects/birla-evara/brochure.pdf",
+    "rm_details": {
+      "name": "Amit Kumar",
+      "contact": "+91 98765 43210"
+    },
+    "registration_process": "1. **EOI Submission**: Submit Expression of Interest (EOI) with a token amount of ₹5 Lakhs.\n2. **KYC Verification**: Provide Pan Card and Aadhar Card for verification.\n3. **Unit Allocation**: Units are allocated on a first-come-first-serve basis during the pre-launch event.\n4. **Booking**: Pay 10% of the agreement value (less token amount) to confirm booking.\n5. **Agreement**: Sale Agreement signed within 14 days of booking."
   },
   {
     "project_id": "sobha-neopolis",
