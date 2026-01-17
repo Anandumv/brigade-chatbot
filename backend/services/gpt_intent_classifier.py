@@ -142,18 +142,24 @@ def _build_system_prompt() -> str:
    - objection_type: For sales_objection (budget, location, possession, trust)
 
 **4. Return JSON format:**
+   - **CONFIDENCE SCORING:**
+     * "location of [Project]", "price of [Project]" -> confidence: 0.95 (Extremely High)
+     * "tell me about [Project]" -> confidence: 0.95 (Extremely High)
+     * "2BHK in Whitefield" -> confidence: 0.95 (Extremely High)
+     * "show me flats" -> confidence: 0.9 (High)
+
 ```json
 {
   "intent": "property_search|project_details|more_info_request|...",
   "data_source": "database|gpt_generation|hybrid",
-  "confidence": 0.85,
-  "reasoning": "brief explanation of why this classification",
+  "confidence": 0.95,
+  "reasoning": "User asked for specific attribute (location) of a named entity (Birla Evara), which is a direct fact query.",
   "extraction": {
     "configuration": "2BHK",
     "budget_max": 200,
     "location": "Whitefield",
     "project_name": "Brigade Citrine",
-    "topic": "sustainability"
+    "topic": "location"
   }
 }
 ```
