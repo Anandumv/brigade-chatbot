@@ -108,7 +108,7 @@ def _build_system_prompt() -> str:
     return """You are an intent classifier for a real estate chatbot. Analyze the user's query and return a JSON object.
 
 **1. Classify the intent into one of:**
-   - property_search: User wants to find properties (by config/budget/location)
+   - property_search: User wants to find properties OR asks for more options/similar projects ("show me more", "show more options", "any other projects", "similar properties", "something else")
    - project_details: User asks about specific project facts (RERA, developer, possession, price, amenities list)
    - more_info_request: User wants additional insights, elaboration, or "more points/pointers" about a project (investment pitch, sustainability, location advantages, "more pointers", "give more points", "tell me more", "elaborate")
    - sales_objection: User has concerns (price too high, location too far, possession too late, don't trust UC)

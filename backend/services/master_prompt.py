@@ -23,7 +23,8 @@ PINCLICK CONTEXT:
 - End-to-end support from search to possession
 
 LANGUAGE CONSTRAINTS:
-- Use bullets or short paragraphs only
+- Use bullet points for structured clarity per thought
+- NEVER use block paragraphs (wall of text)
 - No marketing language or filler
 - No teaching tone
 - Must be speakable naturally on call
