@@ -219,6 +219,81 @@ def fetch_nearby_amenities(project_name: str, location: str) -> str:
         logger.error(f"Failed to fetch nearby amenities: {e}")
         return ""
 
+def classify_followup_intent(user_input: str, project_name: str, project_location: str) -> dict:
+    """
+    Classify user's follow-up question about a selected project using LLM.
+
+    Returns dict with:
+    - intent: str (location_info, amenities_nearby, investment_pitch, project_details, site_visit, objection, unclear)
+    - needs_web_search: bool (whether external data would help)
+    - confidence: float (0-1)
+    """
+    try:
+        client = openai.OpenAI(
+            api_key=settings.openai_api_key,
+            base_url=settings.openai_base_url
+        )
+
+        response = client.chat.completions.create(
+            model=settings.effective_gpt_model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": f"""Analyze the sales agent's question about {project_name} in {project_location}.
+
+Classify the intent into ONE of these categories:
+
+1. **location_info** - Questions about area, connectivity, neighborhood quality, infrastructure
+   Examples: "How's the area?", "What about connectivity?", "Is the location good?"
+
+2. **amenities_nearby** - Specific requests for nearby facilities (schools, hospitals, malls, metro)
+   Examples: "Any schools nearby?", "What's around?", "Shopping options?"
+
+3. **investment_pitch** - Questions about ROI, appreciation, why buy, market potential
+   Examples: "Why should they buy?", "Good investment?", "Price appreciation?"
+
+4. **project_details** - Specific questions about the project itself (specs, features, developer)
+   Examples: "Who's the developer?", "How many towers?", "What about parking?"
+
+5. **site_visit** - Ready to schedule or discussing visit
+   Examples: "Let's schedule", "When can we visit?", "Book a tour"
+
+6. **objection** - Concerns about price, location, timeline
+   Examples: "Too expensive", "Too far", "Takes too long"
+
+7. **unclear** - Vague or unrelated
+   Examples: "Hmm", "Maybe", "What else?"
+
+Return JSON:
+{{
+  "intent": "<category>",
+  "needs_web_search": true/false,
+  "confidence": 0.0-1.0,
+  "reasoning": "brief explanation"
+}}
+
+Use needs_web_search=true for location_info and amenities_nearby (external data helps).
+Use needs_web_search=false for project_details (database has this) and investment_pitch (LLM can generate)."""
+                },
+                {"role": "user", "content": user_input}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.1
+        )
+
+        result = json.loads(response.choices[0].message.content)
+        logger.info(f"Follow-up intent classified: {result.get('intent')} (confidence: {result.get('confidence')})")
+        return result
+
+    except Exception as e:
+        logger.error(f"Follow-up intent classification failed: {e}")
+        return {
+            "intent": "unclear",
+            "needs_web_search": False,
+            "confidence": 0.5,
+            "reasoning": "Classification failed"
+        }
+
 # --- NODE LOGIC ---
 def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
     # ... (Lines 172-309 remain unchanged, assuming minimal edits to previous nodes unless they were static)
@@ -398,39 +473,6 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
                 # We don't break here, we let the interceptor below handle the actual selection logic
                 # which iterates and selects.
                 break
-
-    # --- MORE INFORMATION INTERCEPTOR (Web Search for Amenities) ---
-    # When user asks for "more pointers", "more information", "nearby amenities" on a selected project
-    if state.selected_project_name and any(phrase in user_lower for phrase in [
-        "more pointer", "show more", "more information", "more detail", "nearby",
-        "amenities around", "what's near", "location advantage", "tell me more"
-    ]):
-        logger.info(f"User requesting additional information about {state.selected_project_name}")
-
-        # Fetch nearby amenities using web search
-        project_location = state.cached_project_details.get('location', '') if state.cached_project_details else ''
-
-        if project_location:
-            nearby_info = fetch_nearby_amenities(state.selected_project_name, project_location)
-
-            if nearby_info:
-                action = f"**{state.selected_project_name}** - Additional Location Insights:\n{nearby_info}\n\n👉 **Would you like to schedule a site visit to experience the location firsthand?**"
-            else:
-                # Fallback if web search fails
-                action = generate_contextual_response(
-                    user_input,
-                    f"User wants more information about {state.selected_project_name} in {project_location}. Focus on location connectivity, future development, and lifestyle benefits.",
-                    "Provide a compelling location pitch highlighting connectivity, nearby IT hubs, upcoming infrastructure, and lifestyle advantages. Be specific and persuasive."
-                )
-        else:
-            action = "I'd be happy to provide more details! What specific aspects would you like to know more about - location connectivity, appreciation potential, or amenities?"
-
-        return FlowResponse(
-            extracted_requirements=merged_reqs.dict(),
-            current_node="NODE 2B",
-            system_action=action,
-            next_redirection="NODE 2B"
-        )
 
     # --- PROJECT SELECTION INTERCEPTOR ---
     # Expanded keywords to cover more natural ways users ask about projects
@@ -689,19 +731,110 @@ RERA: {project.get('rera_number', 'N/A')}
         )
         next_node = "NODE 2B_WAIT"
 
-    # --- NODE 2B_WAIT: Post-Pitch Handler ---
+    # --- NODE 2B_WAIT: Post-Pitch Handler (Smart Follow-up with LLM + Web Search) ---
     elif node == "NODE 2B_WAIT":
-        l_input = user_input.lower()
-        if any(w in l_input for w in ["yes", "visit", "schedule", "ok", "sure", "book"]):
-            action = f"That's great! I'm confident you'll find **{state.selected_project_name}** even more impressive in person. Let's schedule your site visit."
-            next_node = "FACE_TO_FACE"
+        if not state.selected_project_name:
+            # Safety: No project selected, ask them to select
+            action = "Which project would you like to know more about?"
+            next_node = "NODE 2A"
         else:
-            action = generate_contextual_response(
+            # Classify the follow-up intent using LLM
+            project_location = state.cached_project_details.get('location', '') if state.cached_project_details else ''
+
+            intent_result = classify_followup_intent(
                 user_input,
-                f"User has just seen a detailed pitch for {state.selected_project_name}.",
-                "Answer any follow-up questions about the project or gently nudge again for a site visit."
+                state.selected_project_name,
+                project_location
             )
-            next_node = "NODE 2B_WAIT"
+
+            followup_intent = intent_result.get("intent")
+            needs_web = intent_result.get("needs_web_search", False)
+
+            logger.info(f"NODE 2B_WAIT: Followup intent='{followup_intent}', needs_web={needs_web}")
+
+            # Handle based on classified intent
+            if followup_intent == "site_visit":
+                action = f"That's great! I'm confident you'll find **{state.selected_project_name}** even more impressive in person. Let's schedule your site visit."
+                next_node = "FACE_TO_FACE"
+
+            elif followup_intent in ["location_info", "amenities_nearby"] and needs_web:
+                # Fetch external data via web search
+                if project_location:
+                    logger.info(f"Fetching nearby amenities for {state.selected_project_name} via web search")
+                    nearby_info = fetch_nearby_amenities(state.selected_project_name, project_location)
+
+                    if nearby_info:
+                        # Combine web data with LLM-generated pitch
+                        action = generate_contextual_response(
+                            user_input,
+                            f"User asked about {state.selected_project_name} in {project_location}. External data: {nearby_info[:500]}",
+                            "Answer their specific question using the external amenity data provided. Be specific with names and distances. Then ask about scheduling a site visit."
+                        )
+                    else:
+                        # Web search failed, use LLM only
+                        action = generate_contextual_response(
+                            user_input,
+                            f"User wants info about {state.selected_project_name} in {project_location}. Focus on location benefits.",
+                            "Provide a compelling answer about location/connectivity/neighborhood. Be persuasive about area advantages."
+                        )
+                else:
+                    action = "I'd be happy to tell you more about the location! What specific aspects are you interested in?"
+
+                next_node = "NODE 2B_WAIT"  # Stay to handle more questions
+
+            elif followup_intent == "investment_pitch":
+                # Generate investment-focused pitch using LLM
+                action = generate_persuasion_text(
+                    "Investment Benefits",
+                    f"Client asking about investment potential of {state.selected_project_name} in {project_location}. Highlight ROI, appreciation, market demand, infrastructure development."
+                )
+                next_node = "NODE 2B_WAIT"
+
+            elif followup_intent == "project_details":
+                # Answer from database facts + LLM
+                project_facts = state.cached_project_details or {}
+                facts_context = f"""
+Project: {state.selected_project_name}
+Location: {project_facts.get('location')}
+Developer: {project_facts.get('developer', 'Premium Developer')}
+Status: {project_facts.get('status')}
+Configuration: {project_facts.get('configuration')}
+Amenities: {project_facts.get('amenities', '')}
+RERA: {project_facts.get('rera_number', 'Registered')}
+Description: {project_facts.get('description', '')}
+"""
+                action = generate_contextual_response(
+                    user_input,
+                    facts_context,
+                    "Answer their specific question using the project data. Be factual and specific."
+                )
+                next_node = "NODE 2B_WAIT"
+
+            elif followup_intent == "objection":
+                # Detect type of objection and route appropriately
+                if any(w in user_input.lower() for w in ["expensive", "budget", "cost", "price"]):
+                    action = "I understand your concern about the pricing. Let me explain the value proposition..."
+                    next_node = "NODE 3"  # Budget objection flow
+                elif any(w in user_input.lower() for w in ["far", "location", "distance"]):
+                    action = "I hear you about the location. Let me show you why this area is actually a great choice, or we can explore nearby options."
+                    next_node = "NODE 6"  # Location flexibility
+                else:
+                    # Generic objection handling
+                    action = generate_contextual_response(
+                        user_input,
+                        f"User has an objection about {state.selected_project_name}.",
+                        "Address their concern empathetically, provide reassurance, and ask if they'd like to explore alternatives or proceed with a site visit."
+                    )
+                    next_node = "NODE 2B_WAIT"
+
+            else:  # unclear or other
+                # Generic smart response
+                action = generate_contextual_response(
+                    user_input,
+                    f"User has a question about {state.selected_project_name}.",
+                    "Answer helpfully and guide them towards scheduling a site visit."
+                )
+                next_node = "NODE 2B_WAIT"
 
     # --- NODE 3: Budget Flexibility (Ask Question) ---
     elif node == "NODE 3":
