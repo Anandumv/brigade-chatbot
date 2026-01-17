@@ -161,7 +161,10 @@ PROPERTY_SEARCH_KEYWORDS = [
 SALES_FAQ_KEYWORDS = INTENT_EXAMPLES["sales_faq"] + [
     "stretch", "budget", "location", "area", "meeting", "visit", "site",
     "pinclick", "brokerage", "commission", "appointment", "schedule",
-    "nearby", "near me", "closest", "distance", "around here", "radius"
+    "nearby", "near me", "closest", "distance", "around here", "radius",
+    # Natural language follow-up queries (route to flow engine for LLM understanding)
+    "more pointers", "pointers", "tell me more", "more details", "more information",
+    "what else", "anything else", "elaborate", "explain more", "more about"
 ]
 
 # Refusal messages
