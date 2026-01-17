@@ -41,6 +41,9 @@ class ConversationSession(BaseModel):
 
     # Flow Engine State (Strict Agent Mode)
     flow_state: Optional[Dict[str, Any]] = None
+    
+    # Context Tracking
+    last_intent: Optional[str] = None  # To contextually handle "show more" etc.
 
 
 class SessionManager:

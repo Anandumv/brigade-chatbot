@@ -182,6 +182,16 @@ The customer wants to know about Pinclick's value. Key points:
 - 4.8/5 customer satisfaction rating
 - Zero complaints on RERA platform
 End by offering to connect with recent customers for testimonials.
+""",
+
+    SalesIntent.FAQ_BUDGET_STRETCH: """
+The customer is asking about stretching their budget. Be supportive and analytical:
+- Explain that real estate is a long-term asset; 10-15% stretch now often means 30-40% better returns or asset quality.
+- Focus on EMI impact: A ₹10L stretch is often just ~₹8-9k/month extra in EMI, which is manageable for most IT professionals.
+- Suggest "Value Buying": Getting a larger carpet area or better location now saves upgrading costs later (stamp duty, registration again).
+- Mention Developer Subvention Plans or Flexible Payment Plans if applicable.
+- Ask: "Would you be open to seeing options slightly above budget if the location/ROI justifies it?"
+End by offering to show high-value options just above their range.
 """
 }
 
@@ -342,7 +352,7 @@ class IntelligentSalesHandler:
                     "possession": SalesIntent.OBJECTION_POSSESSION,
                     "trust": SalesIntent.OBJECTION_UNDER_CONSTRUCTION,
                 },
-                "sales_faq": SalesIntent.FAQ_PINCLICK_VALUE,
+                # "sales_faq": SalesIntent.FAQ_PINCLICK_VALUE, # REMOVED: Do not blindly map all FAQs to Pinclick Value
                 "site_visit": SalesIntent.FAQ_SITE_VISIT,
                 "meeting_request": SalesIntent.REQUEST_MEETING,
                 "property_search": SalesIntent.PROPERTY_QUERY,
@@ -354,6 +364,9 @@ class IntelligentSalesHandler:
                 mapped_intent = intent_mapping["sales_objection"].get(objection_type, SalesIntent.OBJECTION_BUDGET)
                 logger.info(f"GPT classified sales intent: {mapped_intent.value}")
                 return mapped_intent
+            elif gpt_intent == "sales_faq":
+                # Fall through to keyword matching for specific FAQs (Budget, Location, etc.)
+                pass
             elif gpt_intent in intent_mapping:
                 mapped_intent = intent_mapping[gpt_intent]
                 logger.info(f"GPT classified sales intent: {mapped_intent.value}")

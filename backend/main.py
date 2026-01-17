@@ -300,6 +300,19 @@ async def chat_query(request: ChatQueryRequest):
             data_source = "database"  # Default to database for fallback
             logger.info(f"Keyword fallback intent: {intent}")
 
+        # Contextual Override for "Show More" / "Tell me more"
+        # If user asks to elaborate on a previous non-search topic, force it to 'more_info_request'
+        show_more_patterns = ["show more", "tell me more", "more details", "elaborate", "continue", "go on"]
+        is_show_more = any(p in request.query.lower() for p in show_more_patterns) and len(request.query.split()) < 5
+        
+        if is_show_more and request.session_id:
+             session = session_manager.get_or_create_session(request.session_id)
+             if session.last_intent in ["sales_faq", "sales_objection", "more_info_request", "faq_budget_stretch", "faq_pinclick_value"]:
+                 logger.info(f"Contextual Override: 'Show more' mapped to more_info_request (prev: {session.last_intent})")
+                 intent = "more_info_request"
+                 # Start specific logic for elaboration
+                 # We rely on intelligent sales handler or more_info_request handler to pick this up
+
         # Step 1.5: FUZZY PROJECT NAME DETECTION
         # Intercept queries like "need details of avalon" or "more info on folium"
         from services.fuzzy_matcher import (
@@ -472,6 +485,13 @@ How can I assist you today?"""
                         project_id=request.project_id
                     )
                 
+                if request.session_id:
+                    session = session_manager.get_or_create_session(request.session_id)
+                    # Update session with new intent (e.g. faq_budget_stretch) using sales_intent from intelligent handler
+                    intent_val = sales_intent.value if hasattr(sales_intent, "value") else "sales_faq"
+                    session.last_intent = intent_val
+                    session_manager.save_session(session)
+
                 return ChatQueryResponse(
                     answer=response_text,
                     sources=[],
