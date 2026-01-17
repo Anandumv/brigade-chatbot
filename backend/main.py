@@ -403,12 +403,30 @@ How can I assist you today?"""
                 )
 
         # Step 1.8: Handle more_info_request with GPT content generation
-        if intent == "more_info_request" and data_source in ["gpt_generation", "hybrid"]:
-            logger.info(f"Routing more_info_request to GPT content generator (data_source={data_source})")
+        # Also catch "more pointers" / "tell me more" queries even if data_source isn't explicitly gpt_generation
+        more_info_keywords = ["more pointers", "tell me more", "more about", "more details", "elaborate", "explain more"]
+        is_more_info_query = any(kw in request.query.lower() for kw in more_info_keywords)
+        
+        if (intent == "more_info_request" and data_source in ["gpt_generation", "hybrid"]) or is_more_info_query:
+            logger.info(f"Routing more_info_request to GPT content generator (data_source={data_source}, is_more_info_query={is_more_info_query})")
             
-            # Get project from extraction or session
+            # Get project from extraction, query text, or session
             project_name = extraction.get("project_name")
             topic = extraction.get("topic", "general_selling_points")
+            
+            # Try to extract project name from query if not in extraction
+            if not project_name:
+                query_lower = request.query.lower()
+                # Common project keywords to match
+                project_keywords = ["avalon", "citrine", "neopolis", "brigade", "sobha", "prestige", "godrej", "birla"]
+                for keyword in project_keywords:
+                    if keyword in query_lower:
+                        project_name = keyword.title()  # e.g., "avalon" -> "Avalon"
+                        if keyword == "avalon":
+                            project_name = "Brigade Avalon"
+                        elif keyword == "citrine":
+                            project_name = "Brigade Citrine"
+                        break
             
             if not project_name and request.session_id:
                 session = session_manager.get_or_create_session(request.session_id)
@@ -421,15 +439,15 @@ How can I assist you today?"""
                     from database.pixeltable_setup import get_projects_table
                     projects_table = get_projects_table()
                     
-                    # Query for project by name
-                    results = list(projects_table.where(
-                        projects_table.name.contains(project_name)
-                    ).limit(1).collect())
-                    
-                    if results:
-                        project_facts = results[0]
+                    if projects_table:
+                        # Query for project by name
+                        results = list(projects_table.where(
+                            projects_table.name.contains(project_name)
+                        ).limit(1).collect())
                         
-                        if data_source == "gpt_generation":
+                        if results:
+                            project_facts = results[0]
+                            
                             # Pure GPT generation for insights
                             response_text = generate_insights(
                                 project_facts=project_facts,
@@ -437,39 +455,33 @@ How can I assist you today?"""
                                 query=request.query,
                                 user_requirements=session_state.get("requirements")
                             )
-                        else:  # hybrid
-                            # Combine DB facts with GPT persuasion
-                            response_text = enhance_with_gpt(
-                                project_facts=project_facts,
-                                query=request.query
-                            )
-                        
-                        response_time_ms = int((time.time() - start_time) * 1000)
-                        
-                        # Record interest in this project
-                        if request.session_id:
-                            session_manager.record_interest(request.session_id, project_name)
-                        
-                        if request.user_id:
-                            await pixeltable_client.log_query(
-                                user_id=request.user_id,
-                                query=request.query,
-                                intent=f"gpt_{data_source}_{topic}",
-                                answered=True,
-                                confidence_score="High",
+                            
+                            response_time_ms = int((time.time() - start_time) * 1000)
+                            
+                            # Record interest in this project
+                            if request.session_id:
+                                session_manager.record_interest(request.session_id, project_name)
+                            
+                            if request.user_id:
+                                await pixeltable_client.log_query(
+                                    user_id=request.user_id,
+                                    query=request.query,
+                                    intent=f"gpt_more_info_{topic}",
+                                    answered=True,
+                                    confidence_score="High",
+                                    response_time_ms=response_time_ms,
+                                    project_id=request.project_id
+                                )
+                            
+                            return ChatQueryResponse(
+                                answer=response_text,
+                                sources=[],
+                                confidence="High",
+                                intent="gpt_more_info",
+                                refusal_reason=None,
                                 response_time_ms=response_time_ms,
-                                project_id=request.project_id
+                                suggested_actions=["Schedule site visit", "Compare with other projects", "Get pricing details"]
                             )
-                        
-                        return ChatQueryResponse(
-                            answer=response_text,
-                            sources=[],
-                            confidence="High",
-                            intent=f"gpt_{data_source}",
-                            refusal_reason=None,
-                            response_time_ms=response_time_ms,
-                            suggested_actions=["Schedule site visit", "Compare with other projects", "Get pricing details"]
-                        )
                 except Exception as e:
                     logger.error(f"GPT content generation failed: {e}")
                     # Fall through to flow engine
