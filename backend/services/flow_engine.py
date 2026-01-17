@@ -639,9 +639,20 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
             cap = float(budget_cap) * 100 if budget_cap else float('inf')
             
             for p in projects:
-                # Filter Location
+                # Filter Location (Broad Match: Location > Description > USP)
                 p_loc = p['location'].lower()
-                if loc_term and loc_term not in p_loc: continue
+                p_desc = str(p.get('description', '')).lower()
+                p_usp = str(p.get('usp', '')).lower()
+                
+                if loc_term:
+                    # Check if location term matches ANY relevant field
+                    # landmarks like "Airport" or "Manyata" might be in description/USP
+                    matches_loc = loc_term in p_loc
+                    matches_desc = loc_term in p_desc
+                    matches_usp = loc_term in p_usp
+                    
+                    if not (matches_loc or matches_desc or matches_usp): 
+                        continue
                 
                 # Filter Config (Normalize: remove spaces and dots)
                 p_conf_norm = p['configuration'].lower().replace(" ", "").replace(".", "")
