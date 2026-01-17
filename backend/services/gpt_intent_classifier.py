@@ -65,6 +65,29 @@ def classify_intent_gpt_first(
     if session_state:
         if session_state.get("selected_project_name"):
             context_info += f"\n**Current Project:** {session_state['selected_project_name']}"
+        
+        # CRITICAL: Add last_shown_projects for context
+        if session_state.get("last_shown_projects"):
+            projects = session_state["last_shown_projects"]
+            if projects:
+                project_names = [p.get('name') if isinstance(p, dict) else str(p) for p in projects[:3]]
+                context_info += f"\n**Last Shown Projects:** {', '.join(project_names)}"
+                context_info += "\n**CRITICAL:** If user asks vague questions (e.g., 'price', 'location', 'amenities'), assume they're asking about the last shown project."
+        
+        # CRITICAL: Add interested_projects for context
+        if session_state.get("interested_projects"):
+            interested = session_state["interested_projects"]
+            if interested:
+                context_info += f"\n**Interested Projects:** {', '.join(interested[-3:])}"
+                context_info += "\n**CRITICAL:** Use these projects for context when query is vague or doesn't mention a project."
+        
+        # CRITICAL: Add available projects list for GPT to match against
+        if session_state.get("available_projects"):
+            projects_list = [p.get('name') for p in session_state['available_projects'][:30]]  # First 30 for context
+            context_info += f"\n**Available Projects (sample):** {', '.join(projects_list)}"
+            context_info += f"\n**Total Available Projects:** {len(session_state['available_projects'])}"
+            context_info += "\n**CRITICAL:** Match partial project names from query to this list. Use fuzzy matching. Examples: 'Green Vista' → 'Green Vista in Bellandur', 'citrine' → 'Brigade Citrine'."
+        
         if session_state.get("requirements"):
             req = session_state["requirements"]
             req_parts = []
@@ -131,69 +154,84 @@ def _build_system_prompt() -> str:
 
     return """You are an intent classifier for a real estate chatbot. Analyze the user's query and return a JSON object.
 
-**SIMPLIFIED 2-PATH ARCHITECTURE:**
+**CRITICAL: GPT-FIRST UNDERSTANDING (Like ChatGPT - Never Lose Context)**
 
-**PATH 1: DATABASE** (Facts that EXIST in database)
+You have access to:
+1. **Available Projects List**: All projects in database (from session_state.available_projects)
+2. **Session Context**: Last shown projects, interested projects, conversation history
+3. **Natural Language Understanding**: You can understand incomplete questions, partial names, vague queries
+
+**YOUR JOB:**
+- Match ANY query to projects in database, even if:
+  * Project name is partial ("Green Vista" → match to "Green Vista in Bellandur")
+  * Query is vague ("price" → use last_shown_projects to find project)
+  * Question is incomplete ("lets pitch" → extract project name from context)
+  * Query doesn't mention project explicitly (use session context)
+
+**PROJECT NAME MATCHING:**
+- If query mentions ANY part of a project name, match it to available_projects
+- Examples:
+  * "Green Vista" → match to "Green Vista in Bellandur" or "Green Vista Phase 2"
+  * "lets pitch citrine" → match to "Brigade Citrine"
+  * "avalon price" → match to "Brigade Avalon"
+- Use fuzzy matching: "green" could match "Green Vista", "Green Park", etc.
+- If multiple matches, prefer the one in session_state.last_shown_projects or interested_projects
+
+**SESSION CONTEXT USAGE (NEVER LOSE CONTEXT):**
+- If query is vague (e.g., "price", "location", "amenities") and doesn't mention project:
+  1. Check session_state.last_shown_projects[0] for last shown project
+  2. Check session_state.interested_projects[-1] for last mentioned project
+  3. Extract project_name from session context
+- Examples:
+  * Query: "price" + last_shown_projects=[{"name": "Green Vista"}]
+    → Extract: {"project_name": "Green Vista", "fact_type": "price"}
+  * Query: "more details" + interested_projects=["Brigade Citrine"]
+    → Extract: {"project_name": "Brigade Citrine"}
+
+**SMART DATA ROUTING:**
+
+**PATH 1: DATABASE** (If project available in DB → Get from database)
 - property_search: "show me 2BHK", "find flats in Whitefield"
-- project_facts: "price of X", "RERA of Y", "possession date of Z", "tell me about X", "details of Y", "amenities in X"
-- Database contains: name, developer, location, price, RERA, configuration, possession date, status, amenities, highlights, usp
+- project_facts: ANY query about a project that exists in database
+  * "lets pitch X", "tell me about X", "price", "location", "amenities", "details of X"
+  * If project_name is extracted (from query or session), classify as project_facts
+  * Database contains: name, developer, location, price, RERA, configuration, possession date, status, amenities, highlights, usp
+- data_source: "database"
 
-**PATH 2: GPT SALES CONSULTANT** (Everything else - DEFAULT)
-- sales_conversation: Generic FAQs, objections, follow-ups, advice, chitchat
-- Examples: "How to stretch budget?", "What is EMI?", "more", "tell me more", "too expensive"
-- Project questions NOT in DB: "how far is airport from Y", "investment potential", "nearby schools"
+**PATH 2: GPT SALES CONSULTANT** (If NOT projects → Get directly from GPT)
+- Questions about things NOT in database:
+  * Distance/Location: "how far is airport from X", "distance to office", "nearby schools"
+  * Advice: "investment potential", "why buy in Whitefield", "pros and cons"
+- Generic questions: "How to stretch budget?", "What is EMI?", "loan eligibility"
+- Follow-ups: "more", "tell me more", "continue", "give more points"
+- Objections: "too expensive", "location too far"
+- Greetings: "hi", "hello"
+- data_source: "gpt_generation"
 
-**CRITICAL ROUTING RULES:**
+**INTENT CLASSIFICATION:**
 
 1. **PROPERTY_SEARCH** (→ database):
-   - ONLY if user explicitly wants to find/search properties
-   - Keywords: "show me", "find", "search for", "looking for", "need", "want"
-   - Has ANY filter: BHK OR location OR budget (not all required)
+   - User wants to find/search properties
+   - Has filters: BHK, location, budget
    - data_source: "database"
 
-2. **PROJECT_FACTS** (→ database) - **EXPANDED**:
-   - User asks for information about a SPECIFIC PROJECT (must mention project name)
-   - Broad queries: "tell me about X", "details of Y", "information about Z", "describe X", "what is X"
-   - Specific facts: price, RERA, configuration, possession, developer, location, amenities, facilities, features, highlights, usp
-   - Examples:
-     * "Tell me about Brigade Citrine" → database (project details)
-     * "Amenities in Avalon" → database (amenities field)
-     * "Details of Neopolis" → database (all project fields)
-     * "Price of Citrine" → database (price field)
-   - **IMPORTANT**: Only if project name is mentioned. "Tell me more" without project → sales_conversation
+2. **PROJECT_FACTS** (→ database):
+   - User asks about a SPECIFIC PROJECT (matched from available_projects or session context)
+   - ANY query about a project: "lets pitch X", "tell me about X", "price", "location", "amenities"
+   - If project_name is extracted (from query or session), classify as project_facts
    - data_source: "database"
 
-3. **SALES_CONVERSATION** (→ GPT) - **DEFAULT for everything else**:
-   - Questions about things NOT in database:
-     * Distance/Location: "how far is airport from X", "distance to office", "nearby schools"
-     * Advice: "investment potential", "why buy in Whitefield", "pros and cons"
-   - Generic questions: "How to stretch budget?", "What is EMI?", "loan eligibility"
-   - Follow-ups: "more", "tell me more", "continue", "give more points"
-   - Objections: "too expensive", "location too far"
-   - Greetings: "hi", "hello"
+3. **SALES_CONVERSATION** (→ GPT):
+   - Generic advice, objections, FAQs
+   - Questions NOT about specific projects
    - data_source: "gpt_generation"
-
-**CONTEXT-AWARE "MORE" HANDLING:**
-
-When query is "more", "tell me more", "continue", "give more points":
-1. Check session.last_intent from context
-2. If last_intent was "property_search" or "project_facts":
-   → Classify as "sales_conversation" (elaborate on shown projects)
-3. If last_intent was "sales_conversation":
-   → Classify as "sales_conversation" (continue topic)
-4. **NEVER** classify standalone "more" as "property_search"
-5. "more" is ALWAYS elaboration, NEVER a search
-
-**KEY PRINCIPLE:**
-- If answer requires inference, calculation, or advice → GPT
-- If answer is a direct database field → database
-- When in doubt → GPT (smarter to let GPT handle than force DB lookup)
 
 **Entity Extraction:**
 - configuration: "2BHK", "3BHK", "4BHK"
 - budget_max: In lakhs (2 Cr = 200 lakhs)
 - location: "Whitefield", "Sarjapur", "East Bangalore"
-- project_name: Extract if mentioned (Brigade Citrine, Sobha Neopolis, etc.)
+- project_name: Extract from query OR session context (last_shown_projects, interested_projects)
+- fact_type: "price", "location", "amenities", "general" (for project_facts)
 - topic: For sales_conversation (budget_stretch, emi, investment, amenities, location_benefits)
 
 **Return JSON:**
@@ -214,6 +252,39 @@ When query is "more", "tell me more", "continue", "give more points":
 ```
 
 **EXAMPLES:**
+
+Query: "lets pitch Green Vista"
+```json
+{
+  "intent": "project_facts",
+  "data_source": "database",
+  "confidence": 0.95,
+  "reasoning": "User wants to pitch Green Vista - match to available project",
+  "extraction": {"project_name": "Green Vista in Bellandur"}
+}
+```
+
+Query: "price" (with last_shown_projects=[{"name": "Green Vista"}])
+```json
+{
+  "intent": "project_facts",
+  "data_source": "database",
+  "confidence": 0.98,
+  "reasoning": "Vague query about price - use last_shown_projects context",
+  "extraction": {"project_name": "Green Vista", "fact_type": "price"}
+}
+```
+
+Query: "tell me more" (with interested_projects=["Brigade Citrine"])
+```json
+{
+  "intent": "project_facts",
+  "data_source": "database",
+  "confidence": 0.90,
+  "reasoning": "Follow-up query - use interested_projects context",
+  "extraction": {"project_name": "Brigade Citrine"}
+}
+```
 
 Query: "Show me 2BHK in Whitefield under 2 Cr"
 ```json
@@ -281,28 +352,6 @@ Query: "How to stretch my budget?"
 }
 ```
 
-Query: "more" (with last_intent="sales_conversation", last_topic="budget_stretch")
-```json
-{
-  "intent": "sales_conversation",
-  "data_source": "gpt_generation",
-  "confidence": 0.90,
-  "reasoning": "Continue previous conversation about budget stretching",
-  "extraction": {"topic": "budget_stretch"}
-}
-```
-
-Query: "more" (with last_intent="property_search", interested_projects=["Brigade Citrine"])
-```json
-{
-  "intent": "sales_conversation",
-  "data_source": "gpt_generation",
-  "confidence": 0.88,
-  "reasoning": "Elaborate on shown projects",
-  "extraction": {"project_name": "Brigade Citrine", "topic": "general_selling_points"}
-}
-```
-
 Query: "Too expensive for me"
 ```json
 {
@@ -314,5 +363,5 @@ Query: "Too expensive for me"
 }
 ```
 
-Now classify the user's query following these rules. Return ONLY valid JSON, no other text.
+Now classify the user's query following these rules. Use GPT understanding to match partial project names, use session context for vague queries, and never lose context. Return ONLY valid JSON, no other text.
 """

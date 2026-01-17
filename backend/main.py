@@ -809,6 +809,25 @@ async def chat_query(request: ChatQueryRequest):
         # Get conversation history and session state for context
         conversation_history = []
         session_state = {}
+        
+        # CRITICAL: Get list of all projects from database for GPT to match against
+        available_projects = []
+        try:
+            from database.pixeltable_setup import get_projects_table
+            projects_table = get_projects_table()
+            if projects_table:
+                all_projects = projects_table.select(
+                    projects_table.name,
+                    projects_table.location
+                ).collect()
+                available_projects = [
+                    {"name": p.get("name"), "location": p.get("location")}
+                    for p in all_projects
+                ]
+                logger.info(f"✅ Loaded {len(available_projects)} projects for GPT matching")
+        except Exception as e:
+            logger.warning(f"Could not load projects for GPT: {e}")
+        
         if session:
             # Format messages for GPT context (now 10 turns for better context)
             conversation_history = [
@@ -820,7 +839,12 @@ async def chat_query(request: ChatQueryRequest):
                 "requirements": session.current_filters,
                 "last_intent": session.last_intent,
                 "last_topic": session.last_topic,
-                "conversation_phase": session.conversation_phase
+                "conversation_phase": session.conversation_phase,
+                # CRITICAL: Add last_shown_projects and interested_projects for context
+                "last_shown_projects": session.last_shown_projects if hasattr(session, 'last_shown_projects') and session.last_shown_projects else [],
+                "interested_projects": session.interested_projects,
+                # CRITICAL: Add available projects list for GPT to match against
+                "available_projects": available_projects
             }
         
         # GPT-first classification with data source selection and enhanced context
@@ -838,6 +862,33 @@ async def chat_query(request: ChatQueryRequest):
         
         # Initialize project_name early to avoid UnboundLocalError in property_search handler
         project_name = extraction.get("project_name") if extraction else None
+        
+        # CRITICAL: If GPT extracted a project name, save it to session context
+        if project_name and session and request.session_id:
+            # Save to interested_projects
+            if project_name not in session.interested_projects:
+                session_manager.record_interest(request.session_id, project_name)
+                logger.info(f"✅ Saved project '{project_name}' to interested_projects")
+            
+            # Also try to get full project details and save to last_shown_projects
+            try:
+                from database.pixeltable_setup import get_projects_table
+                projects_table = get_projects_table()
+                if projects_table:
+                    results = list(projects_table.where(
+                        projects_table.name.contains(project_name)
+                    ).limit(1).collect())
+                    if results:
+                        project_dict = dict(results[0])
+                        if not hasattr(session, 'last_shown_projects') or not session.last_shown_projects:
+                            session.last_shown_projects = []
+                        existing_names = {p.get('name') for p in session.last_shown_projects if isinstance(p, dict) and p.get('name')}
+                        if project_dict.get('name') and project_dict.get('name') not in existing_names:
+                            session.last_shown_projects.insert(0, project_dict)
+                            session_manager.save_session(session)
+                            logger.info(f"✅ Saved project '{project_name}' to last_shown_projects")
+            except Exception as e:
+                logger.warning(f"Could not save project to last_shown_projects: {e}")
         
         logger.info(f"GPT Classification: intent={intent}, data_source={data_source}, confidence={gpt_confidence}")
         
@@ -1115,6 +1166,16 @@ async def chat_query(request: ChatQueryRequest):
                     session_manager.add_message(request.session_id, "user", original_query)
                     session_manager.add_message(request.session_id, "assistant", answer_text[:500])
                     session.last_intent = "project_details"
+                    
+                    # CRITICAL: Save project to last_shown_projects
+                    if project and project.get('name'):
+                        if not hasattr(session, 'last_shown_projects') or not session.last_shown_projects:
+                            session.last_shown_projects = []
+                        existing_names = {p.get('name') for p in session.last_shown_projects if isinstance(p, dict) and p.get('name')}
+                        if project.get('name') not in existing_names:
+                            session.last_shown_projects.insert(0, project)
+                            logger.info(f"✅ Saved project '{project.get('name')}' to last_shown_projects")
+                    
                     session_manager.save_session(session)
                 
                 coaching_prompt = _get_coaching_for_response(
@@ -1785,6 +1846,17 @@ async def chat_query(request: ChatQueryRequest):
                                 session_manager.add_message(request.session_id, "assistant", response_text[:500])
                                 session.last_intent = "project_facts"
                                 session_manager.record_interest(request.session_id, project.get('name'))
+                                
+                                # CRITICAL: Save project to last_shown_projects
+                                project_dict = dict(project)  # Convert to dict if needed
+                                if project_dict.get('name'):
+                                    if not hasattr(session, 'last_shown_projects') or not session.last_shown_projects:
+                                        session.last_shown_projects = []
+                                    existing_names = {p.get('name') for p in session.last_shown_projects if isinstance(p, dict) and p.get('name')}
+                                    if project_dict.get('name') not in existing_names:
+                                        session.last_shown_projects.insert(0, project_dict)
+                                        logger.info(f"✅ Saved project '{project_dict.get('name')}' to last_shown_projects")
+                                
                                 session_manager.save_session(session)
 
                             logger.info(f"✅ Returned database project details for: {project.get('name')}")
