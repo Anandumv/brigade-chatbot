@@ -358,6 +358,19 @@ async def chat_query(request: ChatQueryRequest):
                     amenities = proj.get('amenities', '').replace("[", "").replace("]", "").replace("'", "")
                     response_parts.append(f"\n**🎯 Key Amenities:** {amenities}\n")
                 
+                # Brochure Download
+                if proj.get('brochure_url'):
+                    response_parts.append(f"\n[📄 **Download Brochure**]({proj.get('brochure_url')})\n")
+                
+                # RM Details
+                rm = proj.get('rm_details', {})
+                if rm:
+                    response_parts.append(f"\n👤 **Relationship Manager:** {rm.get('name', 'Expert')} ({rm.get('contact', '')})\n")
+                
+                # Registration Process
+                if proj.get('registration_process'):
+                    response_parts.append(f"\n📝 **Registration Process:**\n{proj.get('registration_process')}\n")
+                
                 response_parts.append("\n👉 **Ready to see it in person? Schedule a site visit!**")
                 
                 response_time_ms = int((time.time() - start_time) * 1000)

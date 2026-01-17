@@ -813,7 +813,13 @@
     "rera_number": "Pending",
     "description": "Project located in a strategically prime location at the crux of multiple key areas of North Bangalore, with a major national highway, business parks and shopping malls all within a 20-30 minute drive.\nClose Proximity to Multiple expansive communities, Bhartiya City township, Kogilu cross, Yelahanka, Devanahalli KIADB Aerospace Park, IFCI Financial City, upcoming metro stations, Bangalore International Airport, and the Bellary Road (NH4) national highway.",
     "amenities": "70\u201380% of total area dedicated to open/green space, 20000 sq ft clubhouse with premium amenities",
-    "usp": ""
+    "usp": "",
+    "brochure_url": "https://www.godrejproperties.com/assets/images/godrej_woods_brochure.pdf",
+    "rm_details": {
+      "name": "Sarah Lee",
+      "contact": "+91 98765 11223"
+    },
+    "registration_process": "1. KYC Submission\n2. EOI Amount (5L)\n3. Unit Selection"
   },
   {
     "project_id": "winds-of-change-by-ckpc",

@@ -25,6 +25,7 @@ PINCLICK CONTEXT:
 LANGUAGE CONSTRAINTS:
 - Use bullet points for structured clarity per thought
 - NEVER use block paragraphs (wall of text)
+- **Bold** key numbers, prices, configs, and features (e.g. **2BHK**, **₹1.5 Cr**)
 - No marketing language or filler
 - No teaching tone
 - Must be speakable naturally on call
