@@ -64,6 +64,6 @@ export default function AdminPage() {
 }
 
 export const metadata = {
-    title: 'Admin Dashboard - Pinclick Genie',
-    description: 'Analytics and management for Pinclick Genie',
+    title: 'Admin Dashboard - Pin Click Sales Assist',
+    description: 'Analytics and management for Pin Click Sales Assist',
 };

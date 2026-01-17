@@ -11,13 +11,13 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-    title: 'Pinclick Genie | Your Real Estate Assistant',
-    description: 'Pinclick Genie - Expert AI assistant for property information.',
-    keywords: ['Pinclick', 'real estate', 'property', 'genie', 'AI chatbot', 'Bangalore'],
+    title: 'Pin Click Sales Assist | Your AI Sales Copilot',
+    description: 'Pin Click Sales Assist - Your AI Sales Copilot for property information.',
+    keywords: ['Pinclick', 'real estate', 'property', 'sales assist', 'AI chatbot', 'Bangalore'],
     authors: [{ name: 'Pinclick' }],
     openGraph: {
-        title: 'Pinclick Genie',
-        description: 'Your expert AI real estate assistant',
+        title: 'Pin Click Sales Assist',
+        description: 'Your AI Sales Copilot. Ask about projects, prices, or anything related to your client requirement',
         type: 'website',
     },
 };

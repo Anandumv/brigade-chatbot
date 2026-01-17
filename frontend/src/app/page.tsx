@@ -22,6 +22,6 @@ export default async function Home() {
 
 // Metadata for the page
 export const metadata = {
-    title: 'Pinclick Genie - Chat',
-    description: 'Your expert AI real estate assistant',
+    title: 'Pin Click Sales Assist - Chat',
+    description: 'Your AI Sales Copilot. Ask about projects, prices, or anything related to your client requirement',
 };

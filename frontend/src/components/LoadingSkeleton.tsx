@@ -12,7 +12,7 @@ export function LoadingSkeleton() {
                 <div className="h-4 w-64 bg-gray-200 rounded mx-auto animate-pulse" />
 
                 {/* Loading text */}
-                <p className="text-sm text-gray-500 mt-4">Loading Pinclick Genie...</p>
+                <p className="text-sm text-gray-500 mt-4">Loading Pin Click Sales Assist...</p>
             </div>
         </div>
     );

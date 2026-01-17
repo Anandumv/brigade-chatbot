@@ -308,7 +308,7 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
             <div className="flex-shrink-0 py-4 bg-white/80 backdrop-blur-md border-b border-gray-200 flex justify-center items-center z-10 sticky top-0">
                 <a href="/" className="font-semibold text-gray-800 tracking-tight flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer">
                     <Sparkles className="w-4 h-4 text-orange-500" />
-                    Pinclick Genie
+                    Pin Click Sales Assist
                 </a>
             </div>
 
@@ -330,10 +330,10 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                                 <Sparkles className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
                             </div>
                             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">
-                                Pinclick Genie
+                                Pin Click Sales Assist
                             </h1>
                             <p className="text-gray-500 max-w-sm sm:max-w-md text-sm sm:text-base px-4 leading-relaxed">
-                                Your AI sales assistant. Ask about properties, prices, or schedule visits instantly.
+                                Your AI Sales Copilot. Ask about projects, prices, or anything related to your client requirement
                             </p>
                         </div>
 
@@ -582,7 +582,7 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                                 value={input}
                                 onChange={(e) => setInput(e.target.value)}
                                 onKeyDown={handleKeyDown}
-                                placeholder="Message Pinclick Genie..."
+                                placeholder="Message Pin Click Sales Assist..."
                                 className="w-full resize-none bg-transparent border-0 focus:ring-0 text-gray-800 placeholder-gray-400 py-3 max-h-48 text-[15px]"
                                 rows={1}
                                 style={{ minHeight: '52px' }}
@@ -600,7 +600,7 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                         </form>
                     </div>
                     <p className="text-center text-[10px] text-gray-400 mt-2">
-                        Pinclick Genie can make mistakes. Check important info.
+                        Pin Click Sales Assist can make mistakes. Check important info.
                     </p>
                 </div>
             </div>
