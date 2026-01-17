@@ -403,9 +403,6 @@ async def chat_query(request: ChatQueryRequest):
                     response_time_ms=0, # Calculated later if needed or placeholder
                     suggested_actions=[]
                 )
-                    system_action="Showing Project Details",
-                    response_time_ms=response_time_ms
-                )
             else:
                 # Specific question ("distance of airport from avalon")
                 # Route to GPT but inject project name so generator knows context
