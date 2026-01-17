@@ -1373,7 +1373,7 @@ async def chat_query(request: ChatQueryRequest):
                 
                 except Exception as e:
                     logger.error(f"Error in proactive nudging: {e}")
-            # Don't fail the request if nudging fails
+                    # Don't fail the request if nudging fails
                 
                 # ========================================
                 # 🆕 SCHEDULING INTENT DETECTION
