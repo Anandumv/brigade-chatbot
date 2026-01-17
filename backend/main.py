@@ -289,6 +289,30 @@ async def admin_refresh_projects(x_admin_key: str = Header(None)):
             'possession_quarter': pxt.String,
             'status': pxt.String,
             'rera_number': pxt.String,
+            'description': pxt.String,
+            'amenities': pxt.String,
+            'usp': pxt.String,
+            'rm_details': pxt.Json,
+            'brochure_url': pxt.String,
+            'registration_process': pxt.String,
+        }
+        
+        projects = pxt.create_table('brigade.projects', schema)
+        logger.info("Created fresh projects table")
+        
+        # Load from JSON
+        seed_file = os.path.join(os.path.dirname(__file__), 'data', 'seed_projects.json')
+        if os.path.exists(seed_file):
+            with open(seed_file, 'r') as f:
+                seed_data = json.load(f)
+            projects.insert(seed_data)
+            return {"status": "success", "message": f"Loaded {len(seed_data)} projects"}
+        else:
+            return {"status": "error", "message": "Seed file not found"}
+    
+    except Exception as e:
+        logger.error(f"Error refreshing projects: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ========================================
