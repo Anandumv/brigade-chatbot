@@ -152,7 +152,7 @@ def _build_system_prompt() -> str:
    - data_source: "database"
 
 2. **PROJECT_FACTS** (→ database) - **EXPANDED**:
-   - User asks for ANY information about a SPECIFIC project
+   - User asks for information about a SPECIFIC PROJECT (must mention project name)
    - Broad queries: "tell me about X", "details of Y", "information about Z", "describe X", "what is X"
    - Specific facts: price, RERA, configuration, possession, developer, location, amenities, facilities, features, highlights, usp
    - Examples:
@@ -160,6 +160,7 @@ def _build_system_prompt() -> str:
      * "Amenities in Avalon" → database (amenities field)
      * "Details of Neopolis" → database (all project fields)
      * "Price of Citrine" → database (price field)
+   - **IMPORTANT**: Only if project name is mentioned. "Tell me more" without project → sales_conversation
    - data_source: "database"
 
 3. **SALES_CONVERSATION** (→ GPT) - **DEFAULT for everything else**:
