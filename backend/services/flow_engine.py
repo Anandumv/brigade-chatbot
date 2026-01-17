@@ -559,23 +559,36 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
             if proj.get('rera_number'):
                 pitch_parts.append(f"**📋 RERA:** {proj.get('rera_number')}\n")
             
-            # Description if available
+            # Description if available (as bullets)
             if proj.get('description') and len(proj.get('description', '')) > 10:
                 desc = proj.get('description', '')[:300]
                 if len(proj.get('description', '')) > 300:
                     desc += "..."
-                pitch_parts.append(f"\n**📝 About:**\n{desc}\n")
+                parts = [s.strip() for s in desc.split('. ') if s.strip()]
+                bullet_desc = '• ' + '\n• '.join(parts) if parts else '• ' + desc
+                pitch_parts.append(f"\n**📝 About:**\n{bullet_desc}\n")
             
             if proj.get('usp'):
-                pitch_parts.append(f"\n**✨ Why this property?**\n{proj.get('usp')}\n")
+                usp_val = proj.get('usp')
+                if isinstance(usp_val, list):
+                    parts = [str(p).strip() for p in usp_val if p]
+                else:
+                    parts = [p.strip() for p in re.split(r'[,;|\n]', str(usp_val or '')) if p.strip()]
+                bullet_usp = '• ' + '\n• '.join(parts) if parts else '• ' + str(usp_val or '')
+                pitch_parts.append(f"\n**✨ Why this property?**\n{bullet_usp}\n")
             
             if proj.get('amenities'):
-                amenities = proj.get('amenities', '').replace("[", "").replace("]", "").replace("'", "")
-                pitch_parts.append(f"\n**🎯 Key Amenities:** {amenities}\n")
+                amenities_raw = proj.get('amenities', '').replace("[", "").replace("]", "").replace("'", "")
+                parts = [p.strip() for p in re.split(r'[,;|\n]', amenities_raw) if p.strip()]
+                bullet_amenities = '• ' + '\n• '.join(parts) if parts else '• ' + amenities_raw
+                pitch_parts.append(f"\n**🎯 Key Amenities:**\n{bullet_amenities}\n")
             
-            # Highlights if available
+            # Highlights if available (as bullets)
             if proj.get('highlights') and len(proj.get('highlights', '')) > 10:
-                pitch_parts.append(f"\n**💎 Highlights:** {proj.get('highlights')}\n")
+                hl = proj.get('highlights', '')
+                parts = [p.strip() for p in re.split(r'[,;|\n]', str(hl)) if p.strip()]
+                bullet_hl = '• ' + '\n• '.join(parts) if parts else '• ' + str(hl)
+                pitch_parts.append(f"\n**💎 Highlights:**\n{bullet_hl}\n")
             
             pitch_parts.append("\n👉 **Ready to see it in person? Schedule a site visit!**")
             action = "".join(pitch_parts)

@@ -25,6 +25,7 @@ PINCLICK CONTEXT:
 LANGUAGE CONSTRAINTS:
 - Use bullet points for structured clarity per thought
 - NEVER use block paragraphs (wall of text)
+- **Every response: bullet points only. Bold main points. For sales people on calls.**
 - **Bold** key numbers, prices, configs, and features (e.g. **2BHK**, **₹1.5 Cr**)
 - No marketing language or filler
 - No teaching tone
@@ -299,6 +300,7 @@ PROJECT FACTS (from database - do not invent):
 CLIENT QUERY: {query}
 
 RESPONSE REQUIREMENTS:
+- **Format: bullet points only. Bold project name, price, key benefits.**
 - Speakable on call (no complex sentences)
 - Action-oriented (what client should do next)
 - Specific (use data from facts, don't invent)
@@ -397,7 +399,7 @@ CUSTOMER SAID: {query}
 
 RESPOND WITH:
 1. Short acknowledgment (1 sentence)
-2. Reframe using specific projects (2-3 bullets)
+2. Reframe using specific projects (2-3 bullets). Use bullets; **bold** main points.
 3. Clear question to move forward
 """
 
@@ -414,6 +416,7 @@ def get_meeting_prompt(query: str) -> str:
 CLIENT QUERY: {query}
 
 RESPOND:
+- Use bullets; **bold** main points. For sales people on calls.
 - Explain meeting options clearly
 - Mention benefits (exclusive offers, see actual property)
 - Ask for preferred date/time
@@ -504,7 +507,7 @@ CUSTOMER ASKED: {query}
 3. Vary your language - avoid sounding scripted
 4. End with clear next action tied to their specific situation
 
-RESPOND:
+RESPOND (use bullets; **bold** main points):
 """
 
     return prompt
@@ -521,7 +524,7 @@ If truly off-topic, politely redirect to property search, project info, or sched
 
 CLIENT QUERY: {query}
 
-RESPOND:
+RESPOND (use bullets; **bold** main points):
 - Brief, helpful answer if possible
 - Redirect to what you can help with
 - Suggest a clear next action

@@ -11,7 +11,8 @@ import {
     Info,
     Home,
     CheckCircle,
-    Navigation
+    Navigation,
+    ExternalLink
 } from 'lucide-react';
 import { ProjectInfo } from '@/types';
 
@@ -129,7 +130,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onShowNearby 
     };
 
     return (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-all duration-200 w-full max-w-md mb-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-all duration-200 w-full mb-4">
             {project.image_url && (
                 <div className="h-48 sm:h-40 w-full bg-gray-100 relative">
                     <img
@@ -184,6 +185,59 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onShowNearby 
                         </div>
                     )}
                 </div>
+
+                {/* Quick info: RM contact, location link, brochure link */}
+                {(project.rm_details?.name || project.rm_details?.contact || project.rm_contact || project.location_link || project.brochure_url || project.brochure_link) && (
+                    <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap items-center gap-2">
+                        {/* RM contact: Call + WhatsApp */}
+                        {(project.rm_details?.contact || project.rm_contact) && (
+                            <>
+                                {project.rm_details?.name && (
+                                    <span className="text-xs text-gray-500">RM: {project.rm_details.name}</span>
+                                )}
+                                <a
+                                    href={`tel:${project.rm_details?.contact || project.rm_contact}`}
+                                    className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline px-2 py-1 rounded bg-blue-50 hover:bg-blue-100 transition-colors"
+                                >
+                                    <Phone className="w-3 h-3" />
+                                    Call
+                                </a>
+                                <a
+                                    href={`https://wa.me/${(project.rm_details?.contact || project.rm_contact)?.replace(/[^0-9]/g, '')}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-xs text-green-600 hover:underline px-2 py-1 rounded bg-green-50 hover:bg-green-100 transition-colors"
+                                >
+                                    WhatsApp
+                                </a>
+                            </>
+                        )}
+                        {/* Location link */}
+                        {project.location_link && (
+                            <a
+                                href={project.location_link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 transition-colors"
+                            >
+                                <ExternalLink className="w-3 h-3" />
+                                View on map
+                            </a>
+                        )}
+                        {/* Brochure link */}
+                        {(project.brochure_url || project.brochure_link) && (
+                            <a
+                                href={project.brochure_url || project.brochure_link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 transition-colors"
+                            >
+                                <FileText className="w-3 h-3" />
+                                Brochure
+                            </a>
+                        )}
+                    </div>
+                )}
 
                 {/* USP Preview */}
                 {uspList.length > 0 && (

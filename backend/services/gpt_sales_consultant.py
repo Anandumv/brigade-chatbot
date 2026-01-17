@@ -358,6 +358,11 @@ CONVERSATION STYLE:
 - End with relevant next step
 - 🆕 ADAPT TONE based on their sentiment and emotions
 
+FORMATTING (CRITICAL - for sales people on calls):
+- ALWAYS use BULLET POINTS (• or -) for every idea. NEVER write long paragraphs.
+- BOLD main points: project names, prices, key benefits, numbers, configs (e.g. **SBR Minara**, **₹1.35 Cr**, **2BHK**).
+- One idea per bullet. Easy to scan while on a call.
+
 WHAT YOU HAVE ACCESS TO:
 - Projects shown to them (in context above)
 - Their requirements and budget
@@ -402,19 +407,18 @@ RESPOND NATURALLY:
         # Fallback response
         if context.get("last_shown_projects"):
             project_name = context["last_shown_projects"][0]["name"]
-            return f"""I'd be happy to discuss {project_name} in more detail.
-
-This is an excellent property that matches your requirements. Based on what you've shared, I think it offers great value in terms of location, amenities, and pricing.
-
-Would you like to know more about specific aspects like the location advantages, investment potential, or amenities? Or shall we schedule a site visit?"""
+            return f"""• I'd be happy to discuss **{project_name}** in more detail.
+• **Great value** on location, amenities, and pricing for your requirements.
+• I can share more on **location advantages**, **investment potential**, or **amenities**.
+• Or we can **schedule a site visit**—just say when works for you."""
         else:
-            return """I'm here to help you find the perfect property in Bangalore!
+            return """• I'm here to help you find the perfect property in **Bangalore**!
 
 I can assist with:
-- Property search based on your budget and preferences
-- Project details and comparisons
-- Location insights and connectivity
-- Investment advice and ROI potential
-- Site visit scheduling
+- **Property search** (budget, config, location)
+- **Project details** and comparisons
+- **Location insights** and connectivity
+- **Investment advice** and ROI potential
+- **Site visit** scheduling
 
 What would you like to explore?"""

@@ -6,6 +6,7 @@ Formats property search results with EMI, pitch points, and sales tools.
 from typing import Dict, List, Any, Literal, Optional
 from pydantic import BaseModel
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -123,17 +124,31 @@ class ResponseFormatter:
             if unit_count > 2:
                 answer += f"  ➕ *+{unit_count - 2} more units*\n"
 
-            # KEY HIGHLIGHTS for sales pitch
+            # KEY HIGHLIGHTS for sales pitch (as bullets)
             if project.get('highlights'):
-                highlights = project['highlights'][:200]  # Truncate long text
-                if highlights:
-                    answer += f"\n✨ **Pitch Points:** {highlights}\n"
+                raw = project['highlights']
+                if isinstance(raw, list):
+                    parts = [str(h).strip() for h in raw[:15] if h]
+                else:
+                    parts = [p.strip() for p in re.split(r'[,;|\n]', str(raw)[:300]) if p.strip()]
+                if parts:
+                    bullet_hl = '• ' + '\n• '.join(parts)
+                    answer += f"\n✨ **Pitch Points:**\n{bullet_hl}\n"
+                else:
+                    answer += f"\n✨ **Pitch Points:** • {str(raw)[:200]}\n"
 
-            # AMENITIES summary
+            # AMENITIES summary (as bullets)
             if project.get('amenities'):
-                amenities = project['amenities'][:150]  # Truncate
-                if amenities:
-                    answer += f"🎯 **Amenities:** {amenities}\n"
+                raw = project['amenities']
+                if isinstance(raw, list):
+                    parts = [str(a).strip() for a in raw[:15] if a]
+                else:
+                    parts = [p.strip() for p in re.split(r'[,;|\n]', str(raw)[:250]) if p.strip()]
+                if parts:
+                    bullet_am = '• ' + '\n• '.join(parts)
+                    answer += f"\n🎯 **Amenities:**\n{bullet_am}\n"
+                else:
+                    answer += f"🎯 **Amenities:** • {str(raw)[:150]}\n"
 
             # SALES ACTION - RM Contact & Brochure
             answer += "\n📞 **Quick Actions:**\n"
@@ -289,7 +304,7 @@ class ResponseFormatter:
                 desc_preview = project.get('description')[:120]
                 if len(project.get('description', '')) > 120:
                     desc_preview += "..."
-                answer += f"✨ {desc_preview}\n"
+                answer += f"✨ • {desc_preview}\n"
             
             answer += "\n---\n\n"
         

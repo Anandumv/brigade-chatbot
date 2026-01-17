@@ -189,6 +189,11 @@ TONE:
 - Focus on benefits relevant to this persona
 - Acknowledge their specific situation
 - Build trust through transparency
+
+FORMATTING:
+- Use BULLET POINTS only. No paragraphs.
+- Bold main points: project name, price, key benefits.
+- For sales people on calls: one point per bullet, scannable.
 """
 
     def _build_context(self, chunks: List[Dict[str, Any]]) -> str:

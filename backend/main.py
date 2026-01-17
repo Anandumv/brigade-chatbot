@@ -1054,203 +1054,371 @@ async def chat_query(request: ChatQueryRequest):
             filters = filter_extractor.merge_filters(filters, request.filters)
         
         # ========================================
-        # 🆕 SHOW NEARBY DETECTION
-        # Handle "show nearby" queries with 10km radius search
+        # 🆕 CONTEXT PERSISTENCE - Always update session context
         # ========================================
-        query_lower = request.query.lower()
-        nearby_keywords = ["show nearby", "nearby", "nearby properties", "properties nearby", 
-                          "within 10km", "within 10 km", "show me nearby", "find nearby"]
+        # CRITICAL: Always update session context when filters are used
+        if filters and session:
+            if not hasattr(session, 'current_filters') or not session.current_filters:
+                session.current_filters = {}
+            # Convert filters to dict if needed
+            filters_dict = filters.model_dump(exclude_none=True) if hasattr(filters, 'model_dump') else (filters if isinstance(filters, dict) else {})
+            session.current_filters.update(filters_dict)
+            session_manager.save_session(session)
+            logger.info(f"✅ Context preserved: Updated current_filters")
         
-        is_nearby_query = any(keyword in query_lower for keyword in nearby_keywords)
+        # ========================================
+        # 🆕 INTENT UNDERSTANDING & CONTEXT EXTRACTION
+        # Understand what user is asking and where context is
+        # ========================================
         
-        if is_nearby_query:
-            logger.info("🔍 Detected 'show nearby' query")
+        def parse_location_string(location_str: str) -> Optional[str]:
+            """Parse location string to extract main locality name."""
+            if not location_str:
+                return None
+            # Split by comma and take first part
+            location_parts = location_str.split(',')
+            location_name = location_parts[0].strip()
+            # Remove common suffixes
+            location_name = location_name.replace(' Road', '').replace(' road', '')
+            location_name = location_name.replace(' Phase 1', '').replace(' Phase 2', '')
+            return location_name.strip()
+        
+        def extract_question_topic(query_lower: str) -> Optional[str]:
+            """Extract topic from specific question."""
+            if 'school' in query_lower:
+                return "schools"
+            elif 'amenit' in query_lower:
+                return "amenities"
+            elif 'distance' in query_lower or 'far' in query_lower or 'near' in query_lower:
+                return "distance"
+            elif 'airport' in query_lower:
+                return "airport"
+            elif 'metro' in query_lower:
+                return "metro"
+            return None
+        
+        def understand_query_intent(query: str, conversation_context: dict) -> dict:
+            """
+            Understand what user is asking for ANY query type.
+            Returns intent information with context requirements.
+            """
+            query_lower = query.lower()
             
-            # Extract location from multiple sources (priority order)
-            location_name = None
+            # Nearby/More Options Intent
+            if any(re.search(pattern, query_lower) for pattern in [
+                r"(what|show|find|any|tell).*?(else|other|more).*?(nearby|around|close|near|available)",
+                r"(available|option|property).*?(nearby|around|close|near)",
+                r"similar.*?(location|area|place)"
+            ]):
+                return {
+                    "intent_type": "nearby_properties",
+                    "intent_subtype": None,
+                    "needs_context": True,
+                    "context_type": "location",
+                    "confidence": 0.8,
+                    "reasoning": "User wants nearby properties or more options"
+                }
             
-            # 1. Explicit mention in query ("show nearby Whitefield")
-            location_patterns = [
-                r"show nearby\s+(\w+)",
-                r"nearby\s+(\w+)",
-                r"within 10km\s+of\s+(\w+)",
-                r"within 10 km\s+of\s+(\w+)"
-            ]
-            for pattern in location_patterns:
-                match = re.search(pattern, query_lower, re.IGNORECASE)
-                if match:
-                    location_name = match.group(1).strip()
-                    logger.info(f"Extracted location from query: {location_name}")
-                    break
+            # More Details Intent
+            if any(re.search(pattern, query_lower) for pattern in [
+                r"(tell|give|show).*?(more|details|information)",
+                r"continue",
+                r"expand"
+            ]):
+                return {
+                    "intent_type": "more_details",
+                    "intent_subtype": None,
+                    "needs_context": True,
+                    "context_type": "project",
+                    "confidence": 0.8,
+                    "reasoning": "User wants more details about last shown project/topic"
+                }
             
-            # 2. From filters
-            if not location_name and filters:
-                if hasattr(filters, 'locality') and filters.locality:
-                    location_name = filters.locality
-                    logger.info(f"Extracted location from filters.locality: {location_name}")
-                elif hasattr(filters, 'area') and filters.area:
-                    location_name = filters.area
-                    logger.info(f"Extracted location from filters.area: {location_name}")
-                elif hasattr(filters, 'location') and filters.location:
-                    location_name = filters.location
-                    logger.info(f"Extracted location from filters.location: {location_name}")
+            # Specific Question Intent
+            if any(word in query_lower for word in ["school", "amenit", "distance", "far", "near", "airport", "metro"]):
+                return {
+                    "intent_type": "specific_question",
+                    "intent_subtype": extract_question_topic(query_lower),
+                    "needs_context": True,
+                    "context_type": "project",
+                    "confidence": 0.7,
+                    "reasoning": f"User asking about specific aspect: {extract_question_topic(query_lower)}"
+                }
             
-            # 3. From request filters
-            if not location_name and request.filters:
-                location_name = request.filters.get('location') or request.filters.get('locality') or request.filters.get('area')
-                if location_name:
-                    logger.info(f"Extracted location from request.filters: {location_name}")
+            # Similar/Comparison Intent
+            if any(re.search(pattern, query_lower) for pattern in [
+                r"similar",
+                r"alternative",
+                r"compare",
+                r"like.*?(this|that)"
+            ]):
+                return {
+                    "intent_type": "similar_properties",
+                    "intent_subtype": None,
+                    "needs_context": True,
+                    "context_type": "project",
+                    "confidence": 0.7,
+                    "reasoning": "User wants similar or alternative properties"
+                }
             
-            # 4. From session (last project shown or current filters)
-            if not location_name and session:
-                # Check last shown projects
-                if hasattr(session, 'last_shown_projects') and session.last_shown_projects:
-                    last_project = session.last_shown_projects[0] if isinstance(session.last_shown_projects, list) else None
+            # General query (fallback)
+            return {
+                "intent_type": "general_query",
+                "intent_subtype": None,
+                "needs_context": False,
+                "context_type": None,
+                "confidence": 0.5,
+                "reasoning": "General query, no specific intent detected"
+            }
+        
+        def extract_query_context(session, conversation_history, request, intent_result: dict) -> dict:
+            """
+            Extract relevant context for ANY query type based on intent.
+            CRITICAL: Always check persistent context first - it should NEVER be lost.
+            """
+            context = {
+                "location": None,
+                "project": None,
+                "topic": None,
+                "filters": None,
+                "source": None,
+                "confidence": 0.0,
+                "context_persisted": False
+            }
+            
+            # If intent needs location context
+            if intent_result.get("context_type") == "location":
+                # Priority 1: Last shown projects (PERSISTENT CONTEXT - should always be available)
+                if session and hasattr(session, 'last_shown_projects') and session.last_shown_projects:
+                    last_project = session.last_shown_projects[0]
                     if last_project and isinstance(last_project, dict):
                         project_location = last_project.get('location') or last_project.get('full_address')
                         if project_location:
-                            # Parse location string to extract locality (e.g., "Whitefield, East Bangalore" -> "Whitefield")
-                            location_parts = project_location.split(',')
-                            location_name = location_parts[0].strip()
-                            logger.info(f"Extracted location from last shown project: {location_name}")
+                            context["location"] = parse_location_string(project_location)
+                            context["project"] = last_project
+                            context["source"] = "last_shown_projects"
+                            context["confidence"] = 0.9
+                            context["context_persisted"] = True
+                            logger.info(f"✅ Using PERSISTENT context: location from last_shown_projects")
                 
-                # Check session current filters
-                if not location_name and hasattr(session, 'current_filters') and session.current_filters:
-                    location_name = session.current_filters.get('location') or session.current_filters.get('locality')
-                    if location_name:
-                        logger.info(f"Extracted location from session.current_filters: {location_name}")
+                # Priority 2: Current filters (PERSISTENT CONTEXT - should always be available)
+                if not context["location"] and session and hasattr(session, 'current_filters'):
+                    context["location"] = session.current_filters.get('location') or session.current_filters.get('locality')
+                    if context["location"]:
+                        context["filters"] = session.current_filters
+                        context["source"] = "current_filters"
+                        context["confidence"] = 0.7
+                        context["context_persisted"] = True
+                        logger.info(f"✅ Using PERSISTENT context: location from current_filters")
             
-            # 5. From last message's projects (if available in conversation history)
-            if not location_name and conversation_history:
-                # Look for last assistant message with projects
-                for msg in reversed(conversation_history):
-                    if msg.get('role') == 'assistant' and 'projects' in msg.get('content', '').lower():
-                        # Try to extract from message content (basic pattern matching)
-                        location_match = re.search(r'(\w+),?\s+(?:East|West|North|South)?\s*Bangalore', msg.get('content', ''), re.IGNORECASE)
-                        if location_match:
-                            location_name = location_match.group(1).strip()
-                            logger.info(f"Extracted location from last message: {location_name}")
+            # If intent needs project context
+            elif intent_result.get("context_type") == "project":
+                # Priority 1: Last shown projects (PERSISTENT CONTEXT - should always be available)
+                if session and hasattr(session, 'last_shown_projects') and session.last_shown_projects:
+                    context["project"] = session.last_shown_projects[0]
+                    project_location = context["project"].get('location') or context["project"].get('full_address')
+                    if project_location:
+                        context["location"] = parse_location_string(project_location)
+                    context["source"] = "last_shown_projects"
+                    context["confidence"] = 0.9
+                    context["context_persisted"] = True
+                    logger.info(f"✅ Using PERSISTENT context: project from last_shown_projects")
+            
+            # If intent needs topic context
+            elif intent_result.get("context_type") == "topic":
+                if session and hasattr(session, 'last_topic'):
+                    context["topic"] = session.last_topic
+                    context["source"] = "session_last_topic"
+                    context["confidence"] = 0.8
+                    context["context_persisted"] = True
+            
+            return context
+        
+        # Understand intent for this query
+        intent_result = understand_query_intent(request.query, {
+            "last_shown_projects": session.last_shown_projects if session else None,
+            "conversation_history": conversation_history,
+            "last_topic": session.last_topic if session else None
+        })
+        
+        logger.info(f"🧠 Intent understood: {intent_result['intent_type']} (confidence: {intent_result['confidence']}, reasoning: {intent_result['reasoning']})")
+        
+        # Handle intent-based queries with context extraction
+        if intent_result["needs_context"]:
+            # Extract context based on intent
+            context_result = extract_query_context(session, conversation_history, request, intent_result)
+            
+            # Handle nearby properties intent
+            if intent_result["intent_type"] == "nearby_properties":
+                logger.info("🔍 Detected nearby properties intent")
+                
+                # Extract location - use context first, then explicit mention
+                location_name = context_result.get("location")
+                
+                # Check for explicit location in query (takes priority)
+                query_lower = request.query.lower()
+                location_patterns = [
+                    r"(nearby|around|near|close to)\s+([\w\s]+?)(?:\s|$)",
+                    r"within 10km\s+of\s+([\w\s]+)",
+                    r"within 10 km\s+of\s+([\w\s]+)"
+                ]
+                for pattern in location_patterns:
+                    match = re.search(pattern, query_lower, re.IGNORECASE)
+                    if match:
+                        explicit_location = match.group(2 if len(match.groups()) > 1 else 1).strip()
+                        if explicit_location:
+                            location_name = parse_location_string(explicit_location)
+                            logger.info(f"Extracted explicit location from query: {location_name}")
                             break
-            
-            # Parse location name to extract main locality (e.g., "Whitefield, East Bangalore" -> "Whitefield")
-            if location_name:
-                # Remove common suffixes and clean up
-                location_name = location_name.split(',')[0].strip()
-                location_name = location_name.replace(' Road', '').replace(' road', '').strip()
-            
-            # If location found, perform radius search
-            if location_name:
-                try:
-                    from services.hybrid_retrieval import hybrid_retrieval
-                    from utils.geolocation_utils import get_coordinates
+                
+                # If location found, perform radius search
+                if location_name:
+                    try:
+                        from services.hybrid_retrieval import hybrid_retrieval
+                        from utils.geolocation_utils import get_coordinates
                     
-                    # Verify location has coordinates
-                    coords = get_coordinates(location_name)
-                    if not coords:
-                        logger.warning(f"Could not find coordinates for location: {location_name}")
-                        # Try to find similar location
-                        location_name_lower = location_name.lower()
-                        for key in ['whitefield', 'sarjapur', 'marathahalli', 'bellandur', 'koramangala', 
-                                   'hebbal', 'yelahanka', 'electronic city', 'bannerghatta']:
-                            if key in location_name_lower or location_name_lower in key:
-                                location_name = key
-                                coords = get_coordinates(location_name)
-                                if coords:
-                                    logger.info(f"Found similar location: {location_name}")
-                                    break
-                    
-                    if coords:
-                        logger.info(f"🔍 Searching for projects within 10km of {location_name}")
+                        # Verify location has coordinates
+                        coords = get_coordinates(location_name)
+                        if not coords:
+                            logger.warning(f"Could not find coordinates for location: {location_name}")
+                            # Try to find similar location
+                            location_name_lower = location_name.lower()
+                            for key in ['whitefield', 'sarjapur', 'marathahalli', 'bellandur', 'koramangala', 
+                                       'hebbal', 'yelahanka', 'electronic city', 'bannerghatta']:
+                                if key in location_name_lower or location_name_lower in key:
+                                    location_name = key
+                                    coords = get_coordinates(location_name)
+                                    if coords:
+                                        logger.info(f"Found similar location: {location_name}")
+                                        break
                         
-                        # Get projects within 10km radius
-                        nearby_projects = await hybrid_retrieval.get_projects_within_radius(
-                            location_name=location_name,
-                            radius_km=10.0
-                        )
-                        
-                        # Exclude current/reference project if we have one
-                        if session and hasattr(session, 'last_shown_projects') and session.last_shown_projects:
-                            if isinstance(session.last_shown_projects, list) and len(session.last_shown_projects) > 0:
-                                ref_project = session.last_shown_projects[0]
-                                if isinstance(ref_project, dict):
-                                    ref_name = ref_project.get('name')
-                                    if ref_name:
-                                        nearby_projects = [p for p in nearby_projects if p.get('name') != ref_name]
-                                        logger.info(f"Excluded reference project: {ref_name}")
-                        
-                        # Apply additional filters if provided (budget, configuration)
-                        if filters:
-                            filtered_projects = []
-                            for project in nearby_projects:
-                                # Budget filter
-                                if hasattr(filters, 'max_price_inr') and filters.max_price_inr:
-                                    project_price = project.get('budget_min', 0) * 100000  # Convert lakhs to INR
-                                    if project_price > filters.max_price_inr:
-                                        continue
-                                
-                                # Configuration filter
-                                if hasattr(filters, 'configuration') and filters.configuration:
-                                    config = project.get('configuration', '').lower()
-                                    filter_config = filters.configuration.lower()
-                                    if filter_config not in config:
-                                        continue
-                                
-                                filtered_projects.append(project)
+                        if coords:
+                            logger.info(f"🔍 Searching for projects within 10km of {location_name}")
                             
-                            nearby_projects = filtered_projects
-                        
-                        if nearby_projects:
-                            logger.info(f"✅ Found {len(nearby_projects)} projects within 10km of {location_name}")
-                            
-                            # Update session
-                            if session:
-                                session.last_shown_projects = nearby_projects
-                                session.last_intent = "property_search"
-                                session_manager.save_session(session)
-                            
-                            response_time_ms = int((time.time() - start_time) * 1000)
-                            
-                            # Log interaction
-                            if request.user_id:
-                                try:
-                                    await pixeltable_client.log_query(
-                                        user_id=request.user_id,
-                                        query=request.query,
-                                        intent="property_search",
-                                        answered=True,
-                                        confidence_score="High",
-                                        response_time_ms=response_time_ms,
-                                        project_id=request.project_id
-                                    )
-                                except Exception as e:
-                                    logger.error(f"Failed to log query: {e}")
-                            
-                            # Format response
-                            distance_info = f" (closest: {nearby_projects[0].get('_distance', 'N/A')} km)"
-                            answer_text = f"I found {len(nearby_projects)} properties within 10km of {location_name}{distance_info}. Here are the details:"
-                            
-                            return ChatQueryResponse(
-                                answer=answer_text,
-                                projects=nearby_projects,
-                                sources=[],
-                                confidence="High",
-                                intent="property_search",
-                                refusal_reason=None,
-                                response_time_ms=response_time_ms,
-                                suggested_actions=[]
+                            # Get projects within 10km radius
+                            nearby_projects = await hybrid_retrieval.get_projects_within_radius(
+                                location_name=location_name,
+                                radius_km=10.0
                             )
+                            
+                            # Exclude current/reference project if we have one
+                            if session and hasattr(session, 'last_shown_projects') and session.last_shown_projects:
+                                if isinstance(session.last_shown_projects, list) and len(session.last_shown_projects) > 0:
+                                    ref_project = session.last_shown_projects[0]
+                                    if isinstance(ref_project, dict):
+                                        ref_name = ref_project.get('name')
+                                        if ref_name:
+                                            nearby_projects = [p for p in nearby_projects if p.get('name') != ref_name]
+                                            logger.info(f"Excluded reference project: {ref_name}")
+                            
+                            # Apply additional filters if provided (budget, configuration)
+                            if filters:
+                                filtered_projects = []
+                                for project in nearby_projects:
+                                    # Budget filter
+                                    if hasattr(filters, 'max_price_inr') and filters.max_price_inr:
+                                        project_price = project.get('budget_min', 0) * 100000  # Convert lakhs to INR
+                                        if project_price > filters.max_price_inr:
+                                            continue
+                                    
+                                    # Configuration filter
+                                    if hasattr(filters, 'configuration') and filters.configuration:
+                                        config = project.get('configuration', '').lower()
+                                        filter_config = filters.configuration.lower()
+                                        if filter_config not in config:
+                                            continue
+                                    
+                                    filtered_projects.append(project)
+                                
+                                nearby_projects = filtered_projects
+                            
+                            if nearby_projects:
+                                logger.info(f"✅ Found {len(nearby_projects)} projects within 10km of {location_name}")
+                                
+                                # CRITICAL: Always update session context when projects are shown
+                                if session:
+                                    # ALWAYS update last_shown_projects (never lose this context)
+                                    session.last_shown_projects = nearby_projects
+                                    session.last_intent = "property_search"
+                                    # Also update current_filters with location if not already set
+                                    if not hasattr(session, 'current_filters') or not session.current_filters:
+                                        session.current_filters = {}
+                                    if location_name and 'location' not in session.current_filters:
+                                        session.current_filters['location'] = location_name
+                                    session_manager.save_session(session)
+                                    logger.info(f"✅ Context preserved: Updated last_shown_projects with {len(nearby_projects)} nearby projects")
+                                
+                                response_time_ms = int((time.time() - start_time) * 1000)
+                                
+                                # Log interaction
+                                if request.user_id:
+                                    try:
+                                        await pixeltable_client.log_query(
+                                            user_id=request.user_id,
+                                            query=request.query,
+                                            intent="property_search",
+                                            answered=True,
+                                            confidence_score="High",
+                                            response_time_ms=response_time_ms,
+                                            project_id=request.project_id
+                                        )
+                                    except Exception as e:
+                                        logger.error(f"Failed to log query: {e}")
+                                
+                                # Format response
+                                distance_info = f" (closest: {nearby_projects[0].get('_distance', 'N/A')} km)"
+                                answer_text = f"I found {len(nearby_projects)} properties within 10km of {location_name}{distance_info}. Here are the details:"
+                                
+                                return ChatQueryResponse(
+                                    answer=answer_text,
+                                    projects=nearby_projects,
+                                    sources=[],
+                                    confidence="High",
+                                    intent="property_search",
+                                    refusal_reason=None,
+                                    response_time_ms=response_time_ms,
+                                    suggested_actions=[]
+                                )
+                            else:
+                                logger.info(f"No projects found within 10km of {location_name}")
+                                # Fall through to GPT consultant to handle gracefully
                         else:
-                            logger.info(f"No projects found within 10km of {location_name}")
-                            # Fall through to GPT consultant to handle gracefully
-                    else:
-                        logger.warning(f"Could not find coordinates for location: {location_name}")
+                            logger.warning(f"Could not find coordinates for location: {location_name}")
+                            # Fall through to GPT consultant
+                    except Exception as e:
+                        logger.error(f"Error in nearby search: {e}", exc_info=True)
                         # Fall through to GPT consultant
-                except Exception as e:
-                    logger.error(f"Error in nearby search: {e}", exc_info=True)
-                    # Fall through to GPT consultant
-            else:
-                logger.info("No location found in context for nearby search")
-                # Fall through to GPT consultant to ask for location
+                else:
+                    # No location found in context
+                    logger.info("No location found in context for nearby search")
+                    response_time_ms = int((time.time() - start_time) * 1000)
+                    return ChatQueryResponse(
+                        answer="• I'd be happy to show you **nearby properties**.\n• Please specify the **location** (e.g. **Whitefield**, **Sarjapur**).\n• Try: *'what else is available near Whitefield'* or *'show me properties around Sarjapur'*.",
+                        projects=[],
+                        sources=[],
+                        confidence="Medium",
+                        intent="property_search",
+                        refusal_reason=None,
+                        response_time_ms=response_time_ms,
+                        suggested_actions=[]
+                    )
+            
+            # Handle other intent types (more_details, specific_question, similar_properties)
+            # For now, let them fall through to GPT consultant with context
+            elif intent_result["intent_type"] in ["more_details", "specific_question", "similar_properties"]:
+                # Context is already extracted in context_result
+                # These will be handled by GPT consultant with context injection
+                logger.info(f"🧠 Intent '{intent_result['intent_type']}' will be handled by GPT consultant with context")
+                if context_result.get("context_persisted"):
+                    logger.info(f"✅ Context available for intent: {context_result.get('source')}")
+        
+        # CRITICAL: Always preserve context when generating responses
+        # Even if query doesn't explicitly mention location/project, use context
+        if session:
+            if hasattr(session, 'last_shown_projects') and session.last_shown_projects:
+                logger.info(f"✅ Context available: {len(session.last_shown_projects)} projects in context")
+            if hasattr(session, 'current_filters') and session.current_filters:
+                logger.info(f"✅ Context available: Filters = {session.current_filters}")
         
         # Create conversation context
         context = ConversationContext(
@@ -1291,12 +1459,19 @@ async def chat_query(request: ChatQueryRequest):
                         filters=filters
                     )
 
-                # Update session with shown projects
+                # CRITICAL: Always update session context when projects are shown
                 if session:
+                    # ALWAYS update last_shown_projects (never lose this context)
                     session.last_shown_projects = search_results["projects"]
                     session.last_intent = "property_search"
+                    # Also update current_filters if filters were used
+                    if filters:
+                        if not hasattr(session, 'current_filters') or not session.current_filters:
+                            session.current_filters = {}
+                        filters_dict = filters.model_dump(exclude_none=True) if hasattr(filters, 'model_dump') else (filters if isinstance(filters, dict) else {})
+                        session.current_filters.update(filters_dict)
                     session_manager.save_session(session)
-                    logger.info(f"Updated session with {len(search_results['projects'])} shown projects")
+                    logger.info(f"✅ Context preserved: Updated last_shown_projects with {len(search_results['projects'])} projects")
 
                 response_time_ms = int((time.time() - start_time) * 1000)
 
@@ -2200,7 +2375,7 @@ How can I assist you today?"""
                 response_time_ms = int((time.time() - start_time) * 1000)
                 
                 return ChatQueryResponse(
-                    answer="I'm here to help with property search, project details, and arranging site visits. How can I assist you today?",
+                    answer="• I'm here to help with **property search**, **project details**, and **site visits**.\n• How can I assist you today?",
                     sources=[],
                     confidence="Low",
                     intent=intent,

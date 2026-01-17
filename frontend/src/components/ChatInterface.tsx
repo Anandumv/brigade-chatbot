@@ -9,7 +9,7 @@ import { ResponseCard } from './ResponseCard';
 import { ProjectCard } from './ProjectCard';
 import { FilterPanel } from './FilterPanel';
 import { QuickReplies, getQuickRepliesForIntent } from './QuickReplies';
-import { Send, Loader2, Sparkles, User, AlertCircle, Zap, Calendar } from '@/components/icons';
+import { Send, Loader2, Sparkles, User, AlertCircle, Zap } from '@/components/icons';
 // Phase 1: Scheduling components
 import { ScheduleVisitModal, CallbackRequestButton } from './scheduling';
 // Phase 2: Enhanced UX components
@@ -385,8 +385,8 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                 </a>
             </div>
 
-            {/* Chat Area - Mobile optimized with safe areas */}
-            <div className="flex-1 overflow-y-auto w-full max-w-3xl mx-auto px-4 sm:px-6 pb-32 sm:pb-36">
+            {/* Chat Area - Mobile optimized with safe areas, full width for project cards */}
+            <div className="flex-1 overflow-y-auto w-full max-w-4xl mx-auto px-4 sm:px-6 pb-32 sm:pb-36">
                 {/* Phase 2: Welcome Back Banner */}
                 {showWelcomeBanner && userProfile && userProfile.is_returning_user && (
                     <div className="pt-4">
@@ -532,7 +532,7 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                                             )}
 
                                             {message.projects && message.projects.length > 0 && (
-                                                <div className="mt-4 flex flex-col gap-4">
+                                                <div className="mt-4 flex flex-col gap-4 w-full">
                                                     {message.projects.map((project, idx) => {
                                                         // Adapter to map backend fields to frontend ProjectCard props
                                                         const adaptProjectData = (apiProject: any) => {
@@ -593,22 +593,11 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                                                         const adaptedProject = adaptProjectData(project);
                                                         
                                                         return (
-                                                            <div key={idx} className="relative">
+                                                            <div key={idx} className="relative w-full">
                                                                 <ProjectCard
                                                                     project={adaptedProject}
                                                                     onShowNearby={handleShowNearby}
                                                                 />
-                                                                {/* Phase 1: Schedule Visit Button */}
-                                                                <button
-                                                                    onClick={() => {
-                                                                        setSelectedProjectForSchedule(adaptedProject);
-                                                                        setShowScheduleModal(true);
-                                                                    }}
-                                                                    className="mt-3 w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 text-sm font-medium"
-                                                                >
-                                                                    <Calendar className="w-4 h-4" />
-                                                                    Schedule Site Visit
-                                                                </button>
                                                             </div>
                                                         );
                                                     })}

@@ -290,11 +290,7 @@ class IntelligentFallbackService:
 Generate a response that:
 1. Opens with empathy ("While we don't have exact matches in {location_name}...")
 2. Introduces alternatives positively ("...here are 3 excellent nearby options that offer great value:")
-3. For EACH alternative, write a 2-3 sentence pitch that emphasizes:
-   - VALUE: Cost savings or affordability
-   - PROXIMITY: How close it is to the requested location
-   - BENEFITS: Key amenities, developer reputation, or lifestyle advantages
-   - OPPORTUNITY: Why it's a smart alternative
+3. For EACH alternative, write **Why consider this:** as 2-4 **bullet points**. **Bold** project name, price, key benefit. No paragraphs.
 
 Format as:
 🏠 **[Project Name]** ([distance] km from {location_name})
@@ -302,13 +298,17 @@ Format as:
 💰 Starting at ₹[price] ([configuration])
 
 **Why consider this:**
-[Your compelling 2-3 sentence value-focused pitch]
+• [Bullet 1 – **bold** main point]
+• [Bullet 2 – **bold** key benefit]
+• [Bullet 3 – value/proximity]
 
 ---
 
+**FORMATTING: For sales people on calls. Use bullets (•) for every point. Bold main points. No long sentences.**
+
 Use emojis, be enthusiastic but professional. End with: "Would you like to schedule a site visit to any of these projects?"
 
-Keep each project's pitch concise (2-3 sentences max). Focus on VALUE and BENEFITS."""
+Focus on VALUE and BENEFITS. No paragraphs."""
 
         try:
             response = client.chat.completions.create(
@@ -343,8 +343,7 @@ Keep each project's pitch concise (2-3 sentences max). Focus on VALUE and BENEFI
     ) -> str:
         """Fallback template if LLM fails."""
         lines = [
-            f"🔍 While I couldn't find exact matches for '{original_query}' in {location_name}, ",
-            f"here are {len(alternatives)} excellent alternatives nearby that offer great value:\n"
+            f"• 🔍 No exact matches for '{original_query}' in **{location_name}**; here are {len(alternatives)} excellent alternatives:\n"
         ]
         
         for idx, project in enumerate(alternatives, 1):
@@ -352,11 +351,11 @@ Keep each project's pitch concise (2-3 sentences max). Focus on VALUE and BENEFI
             distance = project.get('_distance', 'N/A')
             
             lines.append(f"\n{idx}. 🏠 **{project.get('name')}** ({distance} km away)")
-            lines.append(f"   📍 {project.get('location')}")
-            lines.append(f"   💰 Starting at ₹{budget_min:.2f} Cr")
-            lines.append(f"   🏗️ {project.get('status')} | Possession: {project.get('possession_quarter')} {project.get('possession_year')}\n")
+            lines.append(f"   • 📍 {project.get('location')}")
+            lines.append(f"   • 💰 Starting at **₹{budget_min:.2f} Cr**")
+            lines.append(f"   • 🏗️ {project.get('status')} | Possession: {project.get('possession_quarter')} {project.get('possession_year')}\n")
         
-        lines.append("\nWould you like more details about any of these projects? 📞")
+        lines.append("\n• Would you like more details or a **site visit** for any of these? 📞")
         
         return "".join(lines)
     

@@ -186,11 +186,20 @@ class SessionManager:
         return self.sessions[session_id].messages[-count:]
     
     def save_session(self, session: ConversationSession) -> None:
-        """Persist session state after updates."""
+        """Persist session state after updates. CRITICAL: Never lose context."""
+        # Ensure context is preserved
+        if not hasattr(session, 'last_shown_projects'):
+            session.last_shown_projects = []
+        if not hasattr(session, 'current_filters'):
+            session.current_filters = {}
+        
+        # Save session
         if session.session_id in self.sessions:
             self.sessions[session.session_id] = session
-            session.last_activity = datetime.now()
-            logger.debug(f"Session {session.session_id} saved with last_intent={session.last_intent}, last_topic={session.last_topic}")
+        else:
+            self.sessions[session.session_id] = session
+        session.last_activity = datetime.now()
+        logger.info(f"✅ Session saved: Context preserved (projects: {len(session.last_shown_projects)}, filters: {bool(session.current_filters)})")
     
     def get_context_summary(self, session_id: str) -> Dict[str, Any]:
         """

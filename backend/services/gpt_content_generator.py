@@ -138,8 +138,8 @@ The user is asking about: **{topic}**
 - For sustainability: Explain benefits of certifications, green features, monthly cost savings
 - For location: Mention connectivity (metro, highways), social infrastructure (schools, hospitals, malls), upcoming developments
 - For amenities: Elaborate on lifestyle benefits AND suggest additional premium features that buyers expect at this price point
-- Keep it conversational and engaging (200-400 words)
-- Use bullet points and formatting for readability
+- **Use BULLET POINTS only.** **Bold** main points (project name, price, key benefits). 8-12 bullets max. For sales people on calls.
+- Every point as a bullet (• or -). No paragraphs.
 - Focus on buyer benefits and emotional appeal
 - End with a soft call-to-action (site visit, more details, etc.)
 
@@ -354,13 +354,12 @@ def generate_contextual_response_with_full_history(
 4. If the user asks vague questions like "give more points", provide relevant information about the current topic/project
 5. Be helpful, informative, and sales-focused
 6. If uncertain, provide general helpful information and guide toward specific topics
-7. Keep responses conversational and engaging (200-400 words)
+7. 8-12 bullets max. Scannable.
 
 **Your Goal:** {goal}
 
 **Response Guidelines:**
-- Use bullet points for readability
-- Bold key terms (project names, prices, configs)
+- **ALWAYS use bullet points.** **Bold** key terms (project names, prices, configs). No paragraphs. For sales people on calls.
 - Be persuasive but honest
 - End with a gentle call-to-action or question to keep conversation flowing
 - Reference the conversation context naturally"""
