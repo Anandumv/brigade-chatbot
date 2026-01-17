@@ -83,9 +83,29 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project }) => {
         return 'Price on Request';
     };
 
-    // Get configuration display
+    // Get configuration display - clean format without JSON-like braces
     const getConfigDisplay = () => {
-        return project.configuration || project.config_summary || '2, 3 BHK';
+        const config = project.configuration || project.config_summary;
+        if (!config) return '2, 3 BHK';
+        
+        // Check if config contains curly braces (JSON-like format)
+        if (config.includes('{') && config.includes('}')) {
+            // Parse and extract only unit types
+            const units = config.match(/\{([^}]+)\}/g);
+            if (units && units.length > 0) {
+                const types = units.map(unit => {
+                    const parts = unit.replace(/[{}]/g, '').split(',').map(s => s.trim());
+                    return parts[0] || ''; // Just the type (2BHK, 3BHK, etc.)
+                }).filter(t => t.length > 0);
+                
+                if (types.length > 0) {
+                    return types.join(', ');
+                }
+            }
+        }
+        
+        // Fallback to original if parsing fails or no braces found
+        return config;
     };
 
     return (

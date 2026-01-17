@@ -179,15 +179,25 @@ class HybridRetrievalService:
                                       area_lower in str(r.get('full_address', '')).lower()]
                 logger.info(f"After zone filter '{filters.area}': {len(filtered_results)} results")
 
-            # Apply locality filter
+            # Apply locality filter - prioritize strict matches (location/address) over description
             if filters.locality and filters.locality.strip():
                 locality_lower = filters.locality.lower()
-                # Broaden search to include description/address since some projects are "near Jakkur"
-                filtered_results = [r for r in filtered_results 
-                                   if locality_lower in str(r.get('location', '')).lower() or
-                                      locality_lower in str(r.get('full_address', '')).lower() or
-                                      locality_lower in str(r.get('description', '')).lower()]
-                logger.info(f"After locality filter '{filters.locality}': {len(filtered_results)} results")
+                
+                # First, try strict matching (location and address only - most accurate)
+                strict_matches = [r for r in filtered_results 
+                                 if locality_lower in str(r.get('location', '')).lower() or
+                                    locality_lower in str(r.get('full_address', '')).lower()]
+                
+                # If we have strict matches, use only those (exclude description-only matches)
+                if strict_matches:
+                    filtered_results = strict_matches
+                    logger.info(f"After strict locality filter '{filters.locality}': {len(filtered_results)} results (location/address matches only)")
+                else:
+                    # Only if no strict matches found, include description matches as fallback
+                    # This handles cases like "near Jakkur" where location might not be exact
+                    filtered_results = [r for r in filtered_results 
+                                       if locality_lower in str(r.get('description', '')).lower()]
+                    logger.info(f"After broad locality filter '{filters.locality}': {len(filtered_results)} results (description matches only - no strict matches found)")
             
             # Apply developer filter - search in name and builder
             if filters.developer_name and filters.developer_name.strip():
