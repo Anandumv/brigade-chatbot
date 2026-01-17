@@ -8,6 +8,7 @@ from database.pixeltable_setup import get_projects_table
 import pixeltable as pxt
 import difflib
 import re
+from services.web_search import web_search_service
 
 logger = logging.getLogger(__name__)
 
@@ -198,6 +199,26 @@ Guidelines:
         logger.error(f"Contextual response generation failed: {e}")
         return "I'd be happy to help you with that. Could you tell me more about what you're looking for?"
 
+def fetch_nearby_amenities(project_name: str, location: str) -> str:
+    """Fetch nearby amenities using web search for location-based sales pitch."""
+    try:
+        query = f"What are the nearby amenities, schools, hospitals, malls, metro stations near {project_name} in {location}, Bangalore? Provide specific names and distances."
+
+        logger.info(f"Fetching nearby amenities for {project_name} in {location}")
+
+        web_result = web_search_service.search_and_answer(
+            query=query,
+            topic_hint=f"{project_name} Bangalore location advantages"
+        )
+
+        if web_result.get("answer"):
+            return f"\n\n**🌍 Location Advantages & Nearby Amenities:**\n{web_result['answer']}"
+        else:
+            return ""
+    except Exception as e:
+        logger.error(f"Failed to fetch nearby amenities: {e}")
+        return ""
+
 # --- NODE LOGIC ---
 def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
     # ... (Lines 172-309 remain unchanged, assuming minimal edits to previous nodes unless they were static)
@@ -377,6 +398,39 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
                 # We don't break here, we let the interceptor below handle the actual selection logic
                 # which iterates and selects.
                 break
+
+    # --- MORE INFORMATION INTERCEPTOR (Web Search for Amenities) ---
+    # When user asks for "more pointers", "more information", "nearby amenities" on a selected project
+    if state.selected_project_name and any(phrase in user_lower for phrase in [
+        "more pointer", "show more", "more information", "more detail", "nearby",
+        "amenities around", "what's near", "location advantage", "tell me more"
+    ]):
+        logger.info(f"User requesting additional information about {state.selected_project_name}")
+
+        # Fetch nearby amenities using web search
+        project_location = state.cached_project_details.get('location', '') if state.cached_project_details else ''
+
+        if project_location:
+            nearby_info = fetch_nearby_amenities(state.selected_project_name, project_location)
+
+            if nearby_info:
+                action = f"**{state.selected_project_name}** - Additional Location Insights:\n{nearby_info}\n\n👉 **Would you like to schedule a site visit to experience the location firsthand?**"
+            else:
+                # Fallback if web search fails
+                action = generate_contextual_response(
+                    user_input,
+                    f"User wants more information about {state.selected_project_name} in {project_location}. Focus on location connectivity, future development, and lifestyle benefits.",
+                    "Provide a compelling location pitch highlighting connectivity, nearby IT hubs, upcoming infrastructure, and lifestyle advantages. Be specific and persuasive."
+                )
+        else:
+            action = "I'd be happy to provide more details! What specific aspects would you like to know more about - location connectivity, appreciation potential, or amenities?"
+
+        return FlowResponse(
+            extracted_requirements=merged_reqs.dict(),
+            current_node="NODE 2B",
+            system_action=action,
+            next_redirection="NODE 2B"
+        )
 
     # --- PROJECT SELECTION INTERCEPTOR ---
     # Expanded keywords to cover more natural ways users ask about projects
