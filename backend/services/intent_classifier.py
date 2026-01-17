@@ -1,5 +1,7 @@
 """
-Intent classification service to categorize user queries before retrieval.
+LEGACY: Keyword-based intent classifier - used as fallback when GPT classification fails.
+Primary classification is now handled by gpt_intent_classifier.py
+
 Uses keyword detection + GPT-4 classification for intelligent routing.
 """
 

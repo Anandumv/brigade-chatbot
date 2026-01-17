@@ -138,8 +138,8 @@ INTENT_EXAMPLES = {
     ],
 }
 
-# Sales FAQ keywords for quick detection
-# Note: Removed "under construction", "ready to move", "possession" to prevent overlap with objections
+# LEGACY: Keyword lists below are used as fallback when GPT classification fails or confidence is low.
+# Primary classification is now handled by gpt_intent_classifier.py
 SALES_OBJECTION_KEYWORDS = [
     "too expensive", "costly", "high price", "can't afford",
     "out of budget", "beyond budget", "budget is less",

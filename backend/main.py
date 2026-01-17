@@ -49,7 +49,10 @@ from services.query_preprocessor import query_preprocessor
 from services.sales_conversation import sales_conversation, get_filter_options, SalesIntent
 from services.intelligent_sales import intelligent_sales, ConversationContext, SalesIntent as AISalesIntent
 from services.sales_intelligence import sales_intelligence
-from services.intent_classifier import intent_classifier
+from services.intent_classifier import intent_classifier  # Legacy fallback
+from services.gpt_intent_classifier import classify_intent_gpt_first  # GPT-first primary
+from services.gpt_content_generator import generate_insights, enhance_with_gpt
+from services.session_manager import session_manager
 
 # Pixeltable-only mode - replacing Supabase
 from database.pixeltable_client import pixeltable_client
@@ -260,9 +263,42 @@ async def chat_query(request: ChatQueryRequest):
         request.query = normalized_query
         logger.info(f"Normalized query: '{original_query}' -> '{normalized_query}'")
 
-        # Step 1: Intent Classification
-        intent = intent_classifier.classify_intent(request.query)
-        logger.info(f"Classified intent: {intent}")
+        # Step 1: GPT-First Intent Classification with Intelligent Data Source Routing
+        # Get conversation history and session state for context
+        conversation_history = []
+        session_state = {}
+        if request.session_id:
+            session = session_manager.get_or_create_session(request.session_id)
+            # Format messages for GPT context
+            conversation_history = [
+                {"role": msg.get("role", "user"), "content": msg.get("content", "")}
+                for msg in session.messages[-5:]
+            ]
+            session_state = {
+                "selected_project_name": session.interested_projects[-1] if session.interested_projects else None,
+                "requirements": session.current_filters
+            }
+        
+        # GPT-first classification with data source selection
+        gpt_result = classify_intent_gpt_first(
+            query=request.query,
+            conversation_history=conversation_history,
+            session_state=session_state
+        )
+        
+        intent = gpt_result.get("intent", "unsupported")
+        data_source = gpt_result.get("data_source", "database")
+        gpt_confidence = gpt_result.get("confidence", 0.0)
+        extraction = gpt_result.get("extraction", {})
+        
+        logger.info(f"GPT Classification: intent={intent}, data_source={data_source}, confidence={gpt_confidence}")
+        
+        # Fallback to keyword classifier if GPT confidence is too low
+        if gpt_confidence < 0.5:
+            logger.warning(f"GPT confidence too low ({gpt_confidence}), falling back to keyword classifier")
+            intent = intent_classifier.classify_intent(request.query)
+            data_source = "database"  # Default to database for fallback
+            logger.info(f"Keyword fallback intent: {intent}")
 
         # Extract and merge filters early (needed for context and search)
         filters = filter_extractor.extract_filters(request.query)
@@ -366,10 +402,81 @@ How can I assist you today?"""
                     suggested_actions=actions
                 )
 
+        # Step 1.8: Handle more_info_request with GPT content generation
+        if intent == "more_info_request" and data_source in ["gpt_generation", "hybrid"]:
+            logger.info(f"Routing more_info_request to GPT content generator (data_source={data_source})")
+            
+            # Get project from extraction or session
+            project_name = extraction.get("project_name")
+            topic = extraction.get("topic", "general_selling_points")
+            
+            if not project_name and request.session_id:
+                session = session_manager.get_or_create_session(request.session_id)
+                if session.interested_projects:
+                    project_name = session.interested_projects[-1]
+            
+            if project_name:
+                # Get project facts from database
+                try:
+                    from database.pixeltable_setup import get_projects_table
+                    projects_table = get_projects_table()
+                    
+                    # Query for project by name
+                    results = list(projects_table.where(
+                        projects_table.name.contains(project_name)
+                    ).limit(1).collect())
+                    
+                    if results:
+                        project_facts = results[0]
+                        
+                        if data_source == "gpt_generation":
+                            # Pure GPT generation for insights
+                            response_text = generate_insights(
+                                project_facts=project_facts,
+                                topic=topic,
+                                query=request.query,
+                                user_requirements=session_state.get("requirements")
+                            )
+                        else:  # hybrid
+                            # Combine DB facts with GPT persuasion
+                            response_text = enhance_with_gpt(
+                                project_facts=project_facts,
+                                query=request.query
+                            )
+                        
+                        response_time_ms = int((time.time() - start_time) * 1000)
+                        
+                        # Record interest in this project
+                        if request.session_id:
+                            session_manager.record_interest(request.session_id, project_name)
+                        
+                        if request.user_id:
+                            await pixeltable_client.log_query(
+                                user_id=request.user_id,
+                                query=request.query,
+                                intent=f"gpt_{data_source}_{topic}",
+                                answered=True,
+                                confidence_score="High",
+                                response_time_ms=response_time_ms,
+                                project_id=request.project_id
+                            )
+                        
+                        return ChatQueryResponse(
+                            answer=response_text,
+                            sources=[],
+                            confidence="High",
+                            intent=f"gpt_{data_source}",
+                            refusal_reason=None,
+                            response_time_ms=response_time_ms,
+                            suggested_actions=["Schedule site visit", "Compare with other projects", "Get pricing details"]
+                        )
+                except Exception as e:
+                    logger.error(f"GPT content generation failed: {e}")
+                    # Fall through to flow engine
 
         # Step 2: Route property_search, project selection, and facts to Flow Engine (Strict Flowchart Logic)
         # We group all search/project related intents here because flow_engine handles them all via interceptors
-        if intent in ["property_search", "sales_pitch", "project_fact", "comparison", "project_selection", "sales_faq"]:
+        if intent in ["property_search", "sales_pitch", "project_fact", "project_details", "comparison", "project_selection", "sales_faq", "more_info_request"]:
             logger.info(f"Routing intent '{intent}' to Flow Engine")
             
             # Use Flow Engine to process the request
@@ -380,6 +487,11 @@ How can I assist you today?"""
             )
             
             response_time_ms = int((time.time() - start_time) * 1000)
+            
+            # Track conversation for continuous loop
+            if request.session_id:
+                session_manager.add_message(request.session_id, "user", request.query)
+                session_manager.add_message(request.session_id, "assistant", flow_response.system_action[:500])
             
             # Log the interaction
             if request.user_id:
@@ -1033,10 +1145,17 @@ if settings.environment == "development":
 
     @app.get("/api/dev/test-intent")
     async def test_intent(query: str):
-        """Test intent classification."""
+        """Test intent classification using GPT-first classifier."""
         try:
-            intent = intent_classifier.classify_intent(query)
-            return {"query": query, "intent": intent}
+            gpt_result = classify_intent_gpt_first(query)
+            return {
+                "query": query, 
+                "intent": gpt_result.get("intent"),
+                "data_source": gpt_result.get("data_source"),
+                "confidence": gpt_result.get("confidence"),
+                "reasoning": gpt_result.get("reasoning"),
+                "extraction": gpt_result.get("extraction")
+            }
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
