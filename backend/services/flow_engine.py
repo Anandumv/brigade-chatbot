@@ -694,6 +694,22 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
             else:
                 response_parts = [budget_warning]
 
+                # ---------------------------------------------------------
+                # DIRECT ANSWER LOGIC (Minimum Budget / Starting Price)
+                # ---------------------------------------------------------
+                query_lower = query.lower()
+                min_price_keywords = ["minimum budget", "min budget", "starting price", "lowest price", "cheapest", "least expensive", "start from", "starts from", "start price"]
+                
+                if matches and any(kw in query_lower for kw in min_price_keywords):
+                    # Calculate minimum budget from matches
+                    min_price_proj = min(matches, key=lambda x: x.get('budget_min', float('inf')))
+                    min_price_val = min_price_proj.get('budget_min', 0) / 100
+                    
+                    direct_answer = f"💡 **The minimum budget required starts at ₹{min_price_val:.2f} Cr** with {min_price_proj.get('name')}.\n\n"
+                    response_parts.append(direct_answer)
+                
+                # ---------------------------------------------------------
+
                 # Add recommendation banner if top match has good fit score
                 if match_details and match_details[0]['_fit_score'] >= 70:
                     best = match_details[0]
