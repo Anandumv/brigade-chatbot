@@ -252,69 +252,6 @@ async def health_check():
     }
 
 
-@app.post("/admin/refresh-projects")
-async def admin_refresh_projects(x_admin_key: str = Header(None)):
-    """
-    Admin endpoint to force re-seed/update project data from seed_projects.json.
-    """
-    import json
-    import os
-    import pixeltable as pxt
-    
-    # Use dedicated ADMIN_KEY env var
-    expected_key = os.getenv("ADMIN_KEY", "secret")
-    
-    if not x_admin_key or x_admin_key != expected_key:
-         raise HTTPException(status_code=403, detail="Invalid Admin Key")
-
-    try:
-        # Drop existing and recreate with fresh data
-        try:
-            pxt.drop_table('brigade.projects', force=True)
-            logger.info("Dropped existing projects table")
-        except Exception as e:
-            logger.warning(f"Could not drop table: {e}")
-        
-        # Create fresh table with schema
-        schema = {
-            'project_id': pxt.String,
-            'name': pxt.String,
-            'developer': pxt.String,
-            'location': pxt.String,
-            'zone': pxt.String,
-            'configuration': pxt.String,
-            'budget_min': pxt.Int,
-            'budget_max': pxt.Int,
-            'possession_year': pxt.Int,
-            'possession_quarter': pxt.String,
-            'status': pxt.String,
-            'rera_number': pxt.String,
-            'description': pxt.String,
-            'amenities': pxt.String,
-            'usp': pxt.String,
-            'rm_details': pxt.Json,
-            'brochure_url': pxt.String,
-            'registration_process': pxt.String,
-        }
-        
-        projects = pxt.create_table('brigade.projects', schema)
-        logger.info("Created fresh projects table")
-        
-        # Load from JSON
-        seed_file = os.path.join(os.path.dirname(__file__), 'data', 'seed_projects.json')
-        if os.path.exists(seed_file):
-            with open(seed_file, 'r') as f:
-                seed_data = json.load(f)
-            projects.insert(seed_data)
-            return {"status": "success", "message": f"Loaded {len(seed_data)} projects"}
-        else:
-            return {"status": "error", "message": "Seed file not found"}
-    
-    except Exception as e:
-        logger.error(f"Error refreshing projects: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 # ========================================
 # 🆕 SCHEDULING API ENDPOINTS
 # Site Visit & Callback Scheduling
