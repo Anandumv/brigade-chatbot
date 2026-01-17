@@ -109,11 +109,13 @@ class ApiService {
     async sendQueryWithFilters(
         query: string,
         filters: SelectedFilters,
-        userId?: string
+        userId?: string,
+        sessionId?: string
     ): Promise<ChatQueryResponse> {
         return this.sendQuery({
             query: query.trim(),
             user_id: userId,
+            session_id: sessionId,
             filters: filters,
         });
     }

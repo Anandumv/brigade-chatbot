@@ -72,6 +72,7 @@ export interface ChatQueryRequest {
     query: string;
     project_id?: string;
     user_id?: string;
+    session_id?: string;
     persona?: string;
     filters?: any; // SelectedFilters type to be imported if needed, or loose coupling
 }
