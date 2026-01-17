@@ -323,12 +323,50 @@ class IntelligentSalesHandler:
 
     def classify_intent(self, query: str) -> SalesIntent:
         """
-        Intelligent intent classification using keyword matching + patterns.
+        Intelligent intent classification using GPT.
+        Falls back to keyword matching if GPT fails.
         """
         query_lower = query.lower().strip()
         
-        # Quick checks for common patterns
+        # Try GPT-first classification
+        try:
+            from services.gpt_intent_classifier import classify_intent_gpt_first
+            gpt_result = classify_intent_gpt_first(query)
+            gpt_intent = gpt_result.get("intent", "")
+            
+            # Map GPT intents to SalesIntent
+            intent_mapping = {
+                "sales_objection": {
+                    "budget": SalesIntent.OBJECTION_BUDGET,
+                    "location": SalesIntent.OBJECTION_LOCATION,
+                    "possession": SalesIntent.OBJECTION_POSSESSION,
+                    "trust": SalesIntent.OBJECTION_UNDER_CONSTRUCTION,
+                },
+                "sales_faq": SalesIntent.FAQ_PINCLICK_VALUE,
+                "site_visit": SalesIntent.FAQ_SITE_VISIT,
+                "meeting_request": SalesIntent.REQUEST_MEETING,
+                "property_search": SalesIntent.PROPERTY_QUERY,
+                "project_details": SalesIntent.PROPERTY_QUERY,
+            }
+            
+            if gpt_intent == "sales_objection":
+                objection_type = gpt_result.get("extraction", {}).get("objection_type", "")
+                mapped_intent = intent_mapping["sales_objection"].get(objection_type, SalesIntent.OBJECTION_BUDGET)
+                logger.info(f"GPT classified sales intent: {mapped_intent.value}")
+                return mapped_intent
+            elif gpt_intent in intent_mapping:
+                mapped_intent = intent_mapping[gpt_intent]
+                logger.info(f"GPT classified sales intent: {mapped_intent.value}")
+                return mapped_intent
+            
+            # Check for more_info_request -> treat as property query to fall through
+            if gpt_intent == "more_info_request":
+                return SalesIntent.PROPERTY_QUERY
+                
+        except Exception as e:
+            logger.warning(f"GPT classification failed, falling back to keywords: {e}")
         
+        # Fallback to keyword matching
         # Meeting/Visit requests
         meeting_patterns = [
             "schedule meeting", "schedule a meeting", "book meeting", "arrange meeting",
