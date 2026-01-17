@@ -1349,12 +1349,12 @@ async def chat_query(request: ChatQueryRequest):
                     except Exception as e:
                         logger.error(f"Error updating user profile: {e}")
                 
-        # ========================================
-        # 🆕 PROACTIVE NUDGING
-        # Detect patterns and generate smart nudges
-        # ========================================
-        detected_nudge = None  # Store nudge for structured data return
-        try:
+                # ========================================
+                # 🆕 PROACTIVE NUDGING
+                # Detect patterns and generate smart nudges
+                # ========================================
+                detected_nudge = None  # Store nudge for structured data return
+                try:
             from services.proactive_nudger import get_proactive_nudger
             
             nudger = get_proactive_nudger()
