@@ -616,9 +616,45 @@ How can I assist you today?"""
                                 response_time_ms=response_time_ms,
                                 suggested_actions=["Schedule site visit", "Compare with other projects", "Get pricing details"]
                             )
+                        else:
+                            # Project name found but no data in DB -> Fallback to Generic GPT
+                            logger.warning(f"Project '{project_name}' not found in DB. Falling back to generic GPT.")
+                    
                 except Exception as e:
                     logger.error(f"GPT content generation failed: {e}")
-                    # Fall through to flow engine
+                    # Fallback to generic GPT (below)
+
+            # Fallback for:
+            # 1. Project name not found in query/session
+            # 2. Project found in query but not in DB
+            # 3. Exception during DB lookup
+            
+            logger.info("Falling back to generic GPT for more_info_request")
+            from services.master_prompt import get_general_prompt
+            from services.gpt_content_generator import client, settings
+            
+            prompt = get_general_prompt(request.query)
+            
+            try:
+                response = client.chat.completions.create(
+                    model=settings.effective_gpt_model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.7
+                )
+                response_text = response.choices[0].message.content
+                
+                return ChatQueryResponse(
+                    answer=response_text,
+                    sources=[],
+                    confidence="Medium",
+                    intent="gpt_general_fallback",
+                    refusal_reason=None,
+                    response_time_ms=int((time.time() - start_time) * 1000),
+                    suggested_actions=["Search properties", "View projects", "Contact us"]
+                )
+            except Exception as e:
+                logger.error(f"Generic GPT fallback failed: {e}")
+                # Finally fall through to flow engine if even this fails
 
         # Step 2: Route property_search, project selection, and facts to Flow Engine (Strict Flowchart Logic)
         # We group all search/project related intents here because flow_engine handles them all via interceptors
