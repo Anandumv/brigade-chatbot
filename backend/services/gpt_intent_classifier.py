@@ -108,11 +108,11 @@ def _build_system_prompt() -> str:
     return """You are an intent classifier for a real estate chatbot. Analyze the user's query and return a JSON object.
 
 **1. Classify the intent into one of:**
-   - property_search: User wants to find properties OR asks for more options/similar projects ("show me more", "show more options", "any other projects", "similar properties", "something else")
-   - project_details: User asks about specific project facts (RERA, developer, possession, price, amenities list)
-   - more_info_request: User wants additional insights, elaboration, "more points", OR specific relative questions like "distance from X to Project Y", "how far is X from Project Y", "is it near X" (investment pitch, sustainability, location advantages, "tell me more")
+   - property_search: User wants to find properties OR asks for more options/similar projects ("show me more", "show more options", "any other projects", "similar properties", "something else"). WARNING: Do NOT classify "location of [Project]" or "price of [Project]" as property_search.
+   - project_details: User asks to see the full details card ("show me details of X", "brochure of X", "all info about X")
+   - more_info_request: User asks SPECIFIC questions about a known project ("location of Birla Evara", "price of Sobha Neopolis", "possession date of X", "distance from X to Y", "is it near X"). ALSO includes elaboration requests ("tell me more", "investment potential").
    - sales_objection: User has concerns (price too high, location too far, possession too late, don't trust UC)
-   - meeting_request: User strictly asks TO schedule/book ("schedule meeting", "book visit", "app meeting")
+   - meeting_request: User strictly asks TO schedule/book ("schedule meeting", "book visit", "app meeting", "arrange call")
    - site_visit: User wants to visit a property site (often overlaps with meeting_request)
    - sales_faq: User asks about sales process, "how do I setup site visit", "what is the process", Pinclick services, general real estate FAQs
    - comparison: User wants to compare 2+ projects
@@ -120,24 +120,23 @@ def _build_system_prompt() -> str:
    - unsupported: Out-of-scope queries (politics, sports, weather, future predictions, legal advice)
 
 **2. Determine data_source:**
-   - "database": ALWAYS use for property_search and project_details. Includes: configs, prices, RERA, developer, location, possession, amenities list
-   - "gpt_generation": ONLY for more_info_request when user wants elaboration/insights (sustainability benefits explained, investment pitch, amenity lifestyle benefits, "more pointers", "why should I buy")
+   - "database": ALWAYS use for property_search.
+   - "gpt_generation": ALWAYS use for more_info_request (specific questions like "location of X", "price of X" need natural language answers).
    - "hybrid": For general "tell me about PROJECT" queries - show DB facts + persuasive intro
 
 **CRITICAL DATA SOURCE RULES:**
-   - property_search → ALWAYS data_source="database" (NEVER use GPT for project searches)
-   - project_details → ALWAYS data_source="database" (NEVER use GPT for project facts)
-   - more_info_request about sustainability/investment/amenities benefits → data_source="gpt_generation"
-   - NEVER go to web or GPT for project searches, project facts, prices, or configurations
+   - property_search → ALWAYS data_source="database"
+   - more_info_request (specific questions) → data_source="gpt_generation"
+   - NEVER go to web for project searches
 
 **3. Extract entities:**
    - configuration: "2BHK", "3BHK", "4BHK", "2-bedroom" → "2BHK"
    - budget_max: Number in lakhs (convert crores to lakhs: 2 Cr = 200 lakhs)
    - budget_min: Number in lakhs (if range specified)
    - location: Locality/area name (Whitefield, Sarjapur, East Bangalore, etc.)
-   - project_name: ALWAYS extract project name when mentioned, expand to full name if possible:
-     * Partial names like "avalon", "citrine", "neopolis", "lakefront", "ozone", "cornerstone" etc. → expand to full name with developer prefix (e.g., "Brigade Avalon", "Brigade Citrine", "Sobha Neopolis")
-     * Developer names + project: "brigade avalon", "sobha dream acres" → extract as-is
+   - project_name: CRITICAL - ALWAYS extract project name if mentioned.
+     * "location of birla evara" -> project_name="Birla Evara", topic="location"
+     * "price of sobha neopolis" -> project_name="Sobha Neopolis", topic="price"
      * ANY real estate project name mentioned in the query should be extracted
    - topic: For more_info_request (sustainability, investment, location_advantages, amenities_benefits, general_selling_points)
    - objection_type: For sales_objection (budget, location, possession, trust)
