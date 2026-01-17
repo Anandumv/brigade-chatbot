@@ -377,7 +377,6 @@ async def chat_query(request: ChatQueryRequest):
                 
                 # Record interest
                 try:
-                try:
                     # Logging interaction (stubbed out as record_interaction is not available)
                     pass 
                     # flow_engine.record_interaction(
