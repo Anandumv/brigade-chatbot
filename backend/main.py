@@ -894,7 +894,32 @@ async def chat_query(request: ChatQueryRequest):
         
         if is_show_more and request.session_id:
              session = session_manager.get_or_create_session(request.session_id)
-             if session.last_intent in ["sales_faq", "sales_objection", "more_info_request", "faq_budget_stretch", "faq_pinclick_value"]:
+             
+             # Check if this is a "more nearby" request
+             if session.last_intent == "property_search" and session.last_shown_projects:
+                 # Check if we have location context
+                 location_from_context = None
+                 if session.current_filters and session.current_filters.get('location'):
+                     location_from_context = session.current_filters.get('location')
+                 elif session.last_shown_projects and len(session.last_shown_projects) > 0:
+                     # Extract location from last shown project
+                     first_proj = session.last_shown_projects[0]
+                     if isinstance(first_proj, dict):
+                         location_from_context = first_proj.get('location')
+                         # Parse location string to extract main locality name
+                         if location_from_context:
+                             location_parts = location_from_context.split(',')
+                             location_from_context = location_parts[0].strip()
+                             location_from_context = location_from_context.replace(' Road', '').replace(' road', '')
+                             location_from_context = location_from_context.replace(' Phase 1', '').replace(' Phase 2', '')
+                             location_from_context = location_from_context.strip()
+                 
+                 if location_from_context:
+                     # Treat as "show more nearby" request
+                     logger.info(f"Detected 'more' after nearby search - treating as 'show more nearby {location_from_context}'")
+                     # This will be handled by the nearby_properties intent handler below
+                     # The handler will exclude all previously shown projects
+             elif session.last_intent in ["sales_faq", "sales_objection", "more_info_request", "faq_budget_stretch", "faq_pinclick_value"]:
                  logger.info(f"Contextual Override: 'Show more' mapped to more_info_request (prev: {session.last_intent})")
                  intent = "more_info_request"
                  # Start specific logic for elaboration
@@ -1313,6 +1338,38 @@ async def chat_query(request: ChatQueryRequest):
             "last_topic": session.last_topic if session else None
         })
         
+        # Override intent if "more" was detected after nearby search
+        if is_show_more and request.session_id and session:
+            if session.last_intent == "property_search" and session.last_shown_projects:
+                # Check if we have location context
+                location_from_context = None
+                if session.current_filters and session.current_filters.get('location'):
+                    location_from_context = session.current_filters.get('location')
+                elif session.last_shown_projects and len(session.last_shown_projects) > 0:
+                    # Extract location from last shown project
+                    first_proj = session.last_shown_projects[0]
+                    if isinstance(first_proj, dict):
+                        location_from_context = first_proj.get('location')
+                        # Parse location string to extract main locality name
+                        if location_from_context:
+                            location_parts = location_from_context.split(',')
+                            location_from_context = location_parts[0].strip()
+                            location_from_context = location_from_context.replace(' Road', '').replace(' road', '')
+                            location_from_context = location_from_context.replace(' Phase 1', '').replace(' Phase 2', '')
+                            location_from_context = location_from_context.strip()
+                
+                if location_from_context:
+                    # Override intent to nearby_properties
+                    logger.info(f"🔄 Overriding intent to 'nearby_properties' - 'more' after nearby search for {location_from_context}")
+                    intent_result = {
+                        "intent_type": "nearby_properties",
+                        "intent_subtype": None,
+                        "needs_context": True,
+                        "context_type": "location",
+                        "confidence": 0.95,
+                        "reasoning": "User wants more nearby properties after seeing initial results"
+                    }
+        
         logger.info(f"🧠 Intent understood: {intent_result['intent_type']} (confidence: {intent_result['confidence']}, reasoning: {intent_result['reasoning']})")
         
         # Handle intent-based queries with context extraction
@@ -1373,15 +1430,20 @@ async def chat_query(request: ChatQueryRequest):
                                 radius_km=10.0
                             )
                             
-                            # Exclude current/reference project if we have one
+                            # Exclude ALL previously shown projects (not just the first one)
                             if session and hasattr(session, 'last_shown_projects') and session.last_shown_projects:
                                 if isinstance(session.last_shown_projects, list) and len(session.last_shown_projects) > 0:
-                                    ref_project = session.last_shown_projects[0]
-                                    if isinstance(ref_project, dict):
-                                        ref_name = ref_project.get('name')
-                                        if ref_name:
-                                            nearby_projects = [p for p in nearby_projects if p.get('name') != ref_name]
-                                            logger.info(f"Excluded reference project: {ref_name}")
+                                    shown_project_names = set()
+                                    for shown_proj in session.last_shown_projects:
+                                        if isinstance(shown_proj, dict):
+                                            name = shown_proj.get('name')
+                                            if name:
+                                                shown_project_names.add(name)
+                                    
+                                    if shown_project_names:
+                                        initial_count = len(nearby_projects)
+                                        nearby_projects = [p for p in nearby_projects if p.get('name') not in shown_project_names]
+                                        logger.info(f"Excluded {initial_count - len(nearby_projects)} previously shown projects: {shown_project_names}")
                             
                             # Apply additional filters if provided (budget, configuration)
                             if filters:
@@ -1409,8 +1471,16 @@ async def chat_query(request: ChatQueryRequest):
                                 
                                 # CRITICAL: Always update session context when projects are shown
                                 if session:
-                                    # ALWAYS update last_shown_projects (never lose this context)
-                                    session.last_shown_projects = nearby_projects
+                                    # Append to last_shown_projects (don't replace) to track all shown projects
+                                    if not hasattr(session, 'last_shown_projects') or not session.last_shown_projects:
+                                        session.last_shown_projects = []
+                                    
+                                    # Append new nearby projects (avoid duplicates by name)
+                                    existing_names = {p.get('name') for p in session.last_shown_projects if isinstance(p, dict) and p.get('name')}
+                                    for proj in nearby_projects:
+                                        if isinstance(proj, dict) and proj.get('name') not in existing_names:
+                                            session.last_shown_projects.append(proj)
+                                    
                                     session.last_intent = "property_search"
                                     # Also update current_filters with location if not already set
                                     if not hasattr(session, 'current_filters') or not session.current_filters:
@@ -1418,7 +1488,7 @@ async def chat_query(request: ChatQueryRequest):
                                     if location_name and 'location' not in session.current_filters:
                                         session.current_filters['location'] = location_name
                                     session_manager.save_session(session)
-                                    logger.info(f"✅ Context preserved: Updated last_shown_projects with {len(nearby_projects)} nearby projects")
+                                    logger.info(f"✅ Context preserved: Appended {len(nearby_projects)} nearby projects to last_shown_projects (total: {len(session.last_shown_projects)})")
                                 
                                 response_time_ms = int((time.time() - start_time) * 1000)
                                 
@@ -1464,8 +1534,34 @@ async def chat_query(request: ChatQueryRequest):
                                     coaching_prompt=coaching_prompt
                                 )
                             else:
-                                logger.info(f"No projects found within 10km of {location_name}")
-                                # Fall through to GPT consultant to handle gracefully
+                                logger.info(f"No more projects found within 10km of {location_name} (excluding previously shown)")
+                                
+                                # Update session with messages
+                                if session and request.session_id:
+                                    session_manager.add_message(request.session_id, "user", original_query)
+                                    answer_text = f"• I've shown you all available properties near **{location_name}**.\n• No additional projects within 10km.\n• Would you like to explore other areas or adjust your search criteria?"
+                                    session_manager.add_message(request.session_id, "assistant", answer_text[:500])
+                                    session.last_intent = "property_search"
+                                    session_manager.save_session(session)
+                                
+                                response_time_ms = int((time.time() - start_time) * 1000)
+                                
+                                coaching_prompt = _get_coaching_for_response(
+                                    session, request.session_id, request.query, "property_search",
+                                    search_performed=False, data_source="database", budget_alternatives_shown=False
+                                )
+                                
+                                return ChatQueryResponse(
+                                    answer=answer_text,
+                                    projects=[],
+                                    sources=[],
+                                    confidence="Medium",
+                                    intent="property_search",
+                                    refusal_reason=None,
+                                    response_time_ms=response_time_ms,
+                                    suggested_actions=[],
+                                    coaching_prompt=coaching_prompt
+                                )
                         else:
                             logger.warning(f"Could not find coordinates for location: {location_name}")
                             # Fall through to GPT consultant
