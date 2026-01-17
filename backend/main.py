@@ -377,27 +377,33 @@ async def chat_query(request: ChatQueryRequest):
                 
                 # Record interest
                 try:
-                    flow_engine.record_interaction(
-                        session_id=request.session_id,
-                        user_query=request.query,
-                        intent="project_details",
-                        response="\n".join(response_parts),
-                        project_name=project.get("name")
-                    )
+                try:
+                    # Logging interaction (stubbed out as record_interaction is not available)
+                    pass 
+                    # flow_engine.record_interaction(
+                    #     session_id=request.session_id,
+                    #     user_query=request.query,
+                    #     intent="project_details",
+                    #     response="\n".join(response_parts),
+                    #     project_name=project.get("name")
+                    # )
                 except Exception as e:
                     logger.error(f"Failed to record interaction: {e}")
 
-                return ChatResponse(
-                    response_id=f"resp_{int(time.time())}",
-                    message="\n".join(response_parts),
-                    intent="project_details",
-                    confidence=1.0,  # High confidence for direct match
+                return ChatQueryResponse(
+                    answer="\n".join(response_parts),
                     sources=[{
                         "source_type": "database",
                         "document_name": "projects_table",
                         "similarity_score": 1.0,
                         "content_preview": f"Details for {project.get('name')}"
                     }],
+                    confidence="High",
+                    intent="project_details",
+                    refusal_reason=None,
+                    response_time_ms=0, # Calculated later if needed or placeholder
+                    suggested_actions=[]
+                )
                     system_action="Showing Project Details",
                     response_time_ms=response_time_ms
                 )
