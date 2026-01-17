@@ -229,10 +229,41 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
             );
 
             // Process response similar to handleSubmit
-            const nudge = response.data?.nudge;
-            const urgencySignals = response.data?.urgency_signals;
-            const sentiment = response.data?.sentiment;
-            const userProfileData = response.data?.user_profile;
+            // Extract enhanced UX data from response
+            let nudge: ProactiveNudge | undefined = response.nudge;
+            let urgencySignals: UrgencySignal[] | undefined = response.urgency_signals;
+            let sentiment: SentimentData | undefined = response.sentiment;
+            let userProfileData: UserProfileData | undefined = response.user_profile;
+
+            if (userProfileData) {
+                setUserProfile(userProfileData);
+            }
+
+            // Parse nudge from response text if not in structured data
+            if (!nudge && response.answer.includes('🎯')) {
+                const nudgeMatch = response.answer.match(/🎯\s*(.+?)(?:\n\n|$)/);
+                if (nudgeMatch) {
+                    const nudgeText = nudgeMatch[1];
+                    // Infer nudge type from message
+                    let nudgeType: ProactiveNudge['type'] = 'decision_ready';
+                    if (nudgeText.toLowerCase().includes('viewed') && nudgeText.toLowerCase().includes('times')) {
+                        nudgeType = 'repeat_views';
+                    } else if (nudgeText.toLowerCase().includes('location')) {
+                        nudgeType = 'location_focus';
+                    } else if (nudgeText.toLowerCase().includes('budget')) {
+                        nudgeType = 'budget_concern';
+                    } else if (nudgeText.toLowerCase().includes('ready') || nudgeText.toLowerCase().includes('decide')) {
+                        nudgeType = 'decision_ready';
+                    }
+                    
+                    nudge = {
+                        type: nudgeType,
+                        message: nudgeText,
+                        action: nudgeText.toLowerCase().includes('schedule') ? 'schedule_visit' : undefined,
+                        priority: nudgeText.toLowerCase().includes('ready') ? 'high' : 'medium',
+                    };
+                }
+            }
 
             const assistantMessage: Message = {
                 id: generateId(),
@@ -246,6 +277,7 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                 refusalReason: response.refusal_reason,
                 suggested_actions: response.suggested_actions,
                 projects: response.projects,
+                // Phase 2: Enhanced UX data
                 nudge: nudge || response.nudge,
                 urgency_signals: urgencySignals || response.urgency_signals,
                 sentiment: sentiment || response.sentiment,
