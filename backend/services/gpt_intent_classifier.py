@@ -133,11 +133,10 @@ def _build_system_prompt() -> str:
    - budget_max: Number in lakhs (convert crores to lakhs: 2 Cr = 200 lakhs)
    - budget_min: Number in lakhs (if range specified)
    - location: Locality/area name (Whitefield, Sarjapur, East Bangalore, etc.)
-   - project_name: ALWAYS extract full project name even from partial mentions:
-     * "avalon" or "Brigade Avalon" → "Brigade Avalon"
-     * "citrine" or "Citrine" → "Brigade Citrine"
-     * "neopolis" → "Sobha Neopolis"
-     * Any other partial name → full project name if recognizable
+   - project_name: ALWAYS extract project name when mentioned, expand to full name if possible:
+     * Partial names like "avalon", "citrine", "neopolis", "lakefront", "ozone", "cornerstone" etc. → expand to full name with developer prefix (e.g., "Brigade Avalon", "Brigade Citrine", "Sobha Neopolis")
+     * Developer names + project: "brigade avalon", "sobha dream acres" → extract as-is
+     * ANY real estate project name mentioned in the query should be extracted
    - topic: For more_info_request (sustainability, investment, location_advantages, amenities_benefits, general_selling_points)
    - objection_type: For sales_objection (budget, location, possession, trust)
 
