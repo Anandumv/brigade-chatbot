@@ -404,7 +404,7 @@ async def chat_query(request: ChatQueryRequest):
                     response_time_ms=0, # Calculated later if needed or placeholder
                     suggested_actions=[]
                 )
-            else:
+            elif project:
                 # Specific question ("distance of airport from avalon")
                 # Route to GPT but inject project name so generator knows context
                 logger.info(f"Specific project question detected for: {project.get('name')}")
