@@ -187,6 +187,78 @@ OFFER: Show both ready and under-construction for comparison.
 }
 
 # =============================================================================
+# FAQ PROMPTS (Dynamic Response Generation)
+# =============================================================================
+
+FAQ_PROMPTS = {
+    "budget_stretch": """
+TASK: Help customer see value in stretching budget 10-15%
+COVER:
+- EMI difference in real numbers (their budget vs shown projects)
+- What they GAIN in specific terms (location, size, amenities of shown projects)
+- Tax savings calculation based on their price range
+- Appreciation potential of the area
+CRITICAL: Reference the actual projects shown by name. Compare features.
+END WITH: Offer to show side-by-side comparison
+""",
+
+    "location": """
+TASK: Reframe location preference as opportunity
+COVER:
+- Why suggested location makes financial sense (price vs appreciation)
+- Infrastructure coming up (metro, highways, IT parks)
+- What they sacrifice in preferred location at same budget
+- Commute time comparison with realistic traffic
+CRITICAL: Use actual location names from shown projects vs their preference
+END WITH: Offer site visit to see infrastructure firsthand
+""",
+
+    "under_construction": """
+TASK: Show financial advantage of under-construction
+COVER:
+- Exact price difference for shown projects (UC vs ready in same area)
+- Payment flexibility (10:80:10 vs full upfront)
+- Appreciation during construction period
+- RERA protection specific to shown projects
+CRITICAL: Use actual possession timelines and prices from shown projects
+END WITH: Offer to show RERA certificates and payment schedules
+""",
+
+    "site_visit": """
+TASK: Create urgency and value for site visit
+COVER:
+- What they'll see that photos don't show (construction quality, actual sizes)
+- Neighborhood assessment (approach roads, facilities)
+- Exclusive offers available only to site visitors
+- Free transport arrangement
+CRITICAL: Reference specific amenities/features of shown projects they'll see
+END WITH: Offer specific dates/times for visit
+""",
+
+    "meeting": """
+TASK: Show value of face-to-face meeting
+COVER:
+- Exclusive inventory not published online
+- Personalized financial planning (EMI, tax benefits, payment structure)
+- Legal documentation review (RERA, title deeds)
+- No-obligation, just information
+CRITICAL: Mention their specific requirements (budget, config) that need detailed planning
+END WITH: Offer 2-3 time slots
+""",
+
+    "pinclick_value": """
+TASK: Demonstrate Pinclick's unique value
+COVER:
+- Unbiased advice across 100+ developers (not tied to one builder)
+- Zero additional cost (same/better price as direct)
+- End-to-end support (shortlisting to possession)
+- Area expertise and legal verification
+CRITICAL: Reference how we found the matching projects for their specific needs
+END WITH: Ask how we can help further in their journey
+"""
+}
+
+# =============================================================================
 # RESPONSE TEMPLATES
 # =============================================================================
 
@@ -244,37 +316,91 @@ CLIENT REQUIREMENTS:
     return prompt
 
 
-def get_objection_prompt(objection_type: str, query: str, context: dict = None) -> str:
-    """Build prompt for handling objections."""
-    
+def get_objection_prompt(query: str, objection_type: str, context: dict = None) -> str:
+    """
+    Build prompt for handling objections with rich session context.
+
+    Args:
+        query: User's objection statement
+        objection_type: Type of objection (budget, location, possession, trust)
+        context: Session context dictionary with:
+            - projects_shown: List of dicts with project details
+            - requirements: User's budget/config/location filters
+            - objections_raised: List of previous objections
+            - last_project: Currently discussed project name
+
+    Returns:
+        Complete prompt string for GPT
+    """
+
     topic_key = f"objection_{objection_type}"
     guidance = TOPIC_PROMPTS.get(topic_key, TOPIC_PROMPTS["objection_budget"])
-    
+
+    # Build context section (ENHANCED)
+    context_section = ""
+    if context:
+        context_section = "\n\nCUSTOMER CONTEXT:"
+
+        # Add recently shown projects
+        if context.get("projects_shown"):
+            projects = context["projects_shown"]
+            project_names = [p.get("name", "Unknown") for p in projects[:5]]
+            context_section += f"\n- Recently shown {len(projects)} projects: {', '.join(project_names)}"
+
+            # Add price range
+            if projects:
+                try:
+                    min_price = min(p.get("budget_min", 0) for p in projects) / 100
+                    max_price = max(p.get("budget_max", 0) for p in projects) / 100
+                    context_section += f"\n- Price range shown: ₹{min_price:.1f} - ₹{max_price:.1f} Cr"
+                except (TypeError, ValueError):
+                    pass  # Skip if price data is invalid
+
+        # Add customer requirements
+        if context.get("requirements"):
+            reqs = context["requirements"]
+            req_parts = []
+            if reqs.get("configuration"):
+                req_parts.append(f"{reqs['configuration']}")
+            if reqs.get("location"):
+                req_parts.append(f"in {reqs['location']}")
+            if reqs.get("budget_max"):
+                budget_cr = reqs['budget_max'] / 100 if reqs['budget_max'] > 100 else reqs['budget_max']
+                req_parts.append(f"under ₹{budget_cr:.1f} Cr")
+            if req_parts:
+                context_section += f"\n- Original requirements: {' '.join(req_parts)}"
+
+        # Add previous objections
+        if context.get("objections_raised"):
+            context_section += f"\n- Earlier concerns: {', '.join(context['objections_raised'])}"
+
     prompt = f"""{SALES_ADVISOR_SYSTEM}
 
 OBJECTION HANDLING MODE:
 - Acknowledge without validating delay
-- Reframe trade-offs calmly  
+- Reframe trade-offs calmly
 - Bring focus back to cost of indecision
 - Never debate, redirect
+- BE SPECIFIC: Reference actual projects shown, not generic advice
 
 {guidance}
 
-CLIENT SAID: {query}
+{context_section}
+
+CUSTOMER SAID: {query}
+
+⚠️ CRITICAL REQUIREMENTS:
+1. Reference specific projects shown (by name) in your response
+2. Use their actual budget/requirements in comparisons
+3. Provide concrete alternatives from projects shown
+4. Fresh language - avoid sounding scripted
 
 RESPOND WITH:
 1. Short acknowledgment (1 sentence)
-2. Reframe or alternatives (2-3 bullets)
+2. Reframe using specific projects (2-3 bullets)
 3. Clear question to move forward
 """
-    
-    if context:
-        prompt += f"""
-CONTEXT:
-- Projects shown: {context.get('projects_shown', 'None')}
-- Requirements: {context.get('requirements', {})}
-"""
-    
+
     return prompt
 
 
@@ -295,9 +421,98 @@ RESPOND:
 """
 
 
+def get_faq_prompt(query: str, faq_type: str, context: dict = None) -> str:
+    """
+    Build dynamic prompt for FAQ responses with session context.
+
+    Args:
+        query: User's original FAQ question
+        faq_type: Type of FAQ (budget_stretch, location, under_construction, etc.)
+        context: Session context dictionary with:
+            - projects_shown: List of dicts with project details
+            - requirements: User's budget/config/location filters
+            - objections_raised: List of previous objections
+            - last_project: Currently discussed project name
+
+    Returns:
+        Complete prompt string for GPT
+    """
+
+    # Get FAQ-specific guidance
+    faq_guidance = FAQ_PROMPTS.get(faq_type, FAQ_PROMPTS.get("budget_stretch", ""))
+
+    # Build context section
+    context_section = ""
+    if context:
+        context_section = "\n\nCUSTOMER CONTEXT:"
+
+        # Add recently shown projects
+        if context.get("projects_shown"):
+            projects = context["projects_shown"]
+            project_names = [p.get("name", "Unknown") for p in projects[:5]]
+            context_section += f"\n- Recently shown {len(projects)} projects: {', '.join(project_names)}"
+
+            # Add price range
+            if projects:
+                try:
+                    min_price = min(p.get("budget_min", 0) for p in projects) / 100
+                    max_price = max(p.get("budget_max", 0) for p in projects) / 100
+                    context_section += f"\n- Price range of shown projects: ₹{min_price:.1f} - ₹{max_price:.1f} Cr"
+                except (TypeError, ValueError):
+                    pass  # Skip if price data is invalid
+
+        # Add customer requirements
+        if context.get("requirements"):
+            reqs = context["requirements"]
+            req_parts = []
+            if reqs.get("configuration"):
+                req_parts.append(f"{reqs['configuration']}")
+            if reqs.get("location"):
+                req_parts.append(f"in {reqs['location']}")
+            if reqs.get("budget_max"):
+                budget_cr = reqs['budget_max'] / 100 if reqs['budget_max'] > 100 else reqs['budget_max']
+                req_parts.append(f"under ₹{budget_cr:.1f} Cr")
+            if req_parts:
+                context_section += f"\n- Customer requirements: {' '.join(req_parts)}"
+
+        # Add objections raised
+        if context.get("objections_raised"):
+            context_section += f"\n- Previous concerns: {', '.join(context['objections_raised'])}"
+
+        # Add current discussion
+        if context.get("last_project"):
+            context_section += f"\n- Currently discussing: {context['last_project']}"
+
+    # Build complete prompt
+    prompt = f"""{SALES_ADVISOR_SYSTEM}
+
+FAQ HANDLING MODE:
+- Never give generic advice - be SPECIFIC to this customer's situation
+- Reference actual projects shown to them by NAME
+- Use their budget/requirements in calculations
+- Create fresh response, not templated script
+
+{faq_guidance}
+
+{context_section}
+
+CUSTOMER ASKED: {query}
+
+⚠️ CRITICAL REQUIREMENTS:
+1. Reference at least 2-3 specific projects by name from their search results
+2. Use their actual budget/config in examples (not generic "₹2 Cr")
+3. Vary your language - avoid sounding scripted
+4. End with clear next action tied to their specific situation
+
+RESPOND:
+"""
+
+    return prompt
+
+
 def get_general_prompt(query: str) -> str:
     """Build prompt for general/unclear queries."""
-    
+
     return f"""{SALES_ADVISOR_SYSTEM}
 
 The client asked something that doesn't fit standard categories.

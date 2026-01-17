@@ -52,7 +52,7 @@ class ConversationSession(BaseModel):
 class SessionManager:
     """Manage conversation sessions with in-memory storage."""
     
-    def __init__(self, session_timeout_minutes: int = 30):
+    def __init__(self, session_timeout_minutes: int = 240):  # 4 hours (240 minutes)
         self.sessions: Dict[str, ConversationSession] = {}
         self.session_timeout = timedelta(minutes=session_timeout_minutes)
     
@@ -218,27 +218,45 @@ class SessionManager:
         
         return context
     
+    def record_objection(self, session_id: str, objection_type: str) -> None:
+        """
+        Record an objection raised by the user.
+
+        Args:
+            session_id: Session identifier
+            objection_type: Type of objection (budget, location, possession, trust)
+        """
+        session = self.get_or_create_session(session_id)
+
+        if not hasattr(session, 'objections_raised'):
+            session.objections_raised = []
+
+        if objection_type not in session.objections_raised:
+            session.objections_raised.append(objection_type)
+            self.save_session(session)
+            logger.info(f"Recorded objection '{objection_type}' for session {session_id}")
+
     def _format_context_for_gpt(self, session: ConversationSession) -> str:
         """Format session context as natural language for GPT."""
         parts = []
-        
+
         if session.interested_projects:
             parts.append(f"Currently discussing: {session.interested_projects[-1]}")
-        
+
         if session.last_topic:
             parts.append(f"Last topic: {session.last_topic}")
-        
+
         if session.current_filters:
             filter_str = ", ".join([f"{k}={v}" for k, v in session.current_filters.items() if v])
             if filter_str:
                 parts.append(f"User requirements: {filter_str}")
-        
+
         if session.objections_raised:
             parts.append(f"Objections raised: {', '.join(session.objections_raised)}")
-        
+
         parts.append(f"Conversation phase: {session.conversation_phase}")
         parts.append(f"Messages exchanged: {len(session.messages)}")
-        
+
         return " | ".join(parts) if parts else "New conversation"
     
     def cleanup_expired_sessions(self):

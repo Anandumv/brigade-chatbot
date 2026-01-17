@@ -52,6 +52,7 @@ from services.sales_intelligence import sales_intelligence
 from services.intent_classifier import intent_classifier  # Legacy fallback
 from services.gpt_intent_classifier import classify_intent_gpt_first  # GPT-first primary
 from services.gpt_content_generator import generate_insights, enhance_with_gpt
+from services.gpt_sales_consultant import generate_consultant_response  # Unified consultant handler
 from services.session_manager import session_manager
 
 # Pixeltable-only mode - replacing Supabase
@@ -66,6 +67,48 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+# === Routing Helper Functions ===
+
+def is_property_search_query(query: str, intent: str, filters: Optional[Dict] = None) -> bool:
+    """
+    Determine if query should route to PATH 1: Property Search.
+
+    Returns True if:
+    - Intent is "property_search"
+    - Has explicit filters (config/budget/location)
+    - Contains search phrases like "show me", "find", "search for"
+    """
+    # Explicit property search intent
+    if intent == "property_search":
+        return True
+
+    # Has filters from UI or extraction
+    if filters and any(filters.values()):
+        return True
+
+    # Search phrases
+    search_phrases = ["show me", "find", "search for", "looking for", "need", "want"]
+    query_lower = query.lower()
+    if any(phrase in query_lower for phrase in search_phrases):
+        # Must also have property indicators (bhk, property, apartment, etc.)
+        property_indicators = ["bhk", "property", "properties", "apartment", "flat", "villa", "project"]
+        if any(indicator in query_lower for indicator in property_indicators):
+            return True
+
+    return False
+
+
+def is_project_details_query(query: str, intent: str) -> bool:
+    """
+    Determine if query should route to PATH 2: Project Details/Facts.
+
+    Returns True if:
+    - Intent is "project_details" or "project_fact"
+    - Factual query already handled (this is checked earlier in pipeline)
+    """
+    return intent in ["project_details", "project_fact"]
 
 
 @asynccontextmanager
@@ -324,6 +367,9 @@ async def chat_query(request: ChatQueryRequest):
         gpt_confidence = gpt_result.get("confidence", 0.0)
         extraction = gpt_result.get("extraction", {})
         
+        # Initialize project_name early to avoid UnboundLocalError in property_search handler
+        project_name = extraction.get("project_name") if extraction else None
+        
         logger.info(f"GPT Classification: intent={intent}, data_source={data_source}, confidence={gpt_confidence}")
         
         # Fallback to keyword classifier if GPT confidence is too low AND no context
@@ -385,7 +431,90 @@ async def chat_query(request: ChatQueryRequest):
                  # Start specific logic for elaboration
                  # We rely on intelligent sales handler or more_info_request handler to pick this up
 
-        # Step 1.5: FUZZY PROJECT NAME DETECTION
+        # Step 1.5: FACTUAL QUERY INTERCEPTOR - Fetch real database facts BEFORE classification
+        # This prevents GPT from making up information about project facts
+        from services.project_fact_extractor import detect_project_fact_query, get_project_fact, format_fact_response
+        
+        fact_query_detection = detect_project_fact_query(original_query)
+        if fact_query_detection and fact_query_detection.get("is_factual_query"):
+            logger.info(f"Detected factual query: {fact_query_detection}")
+            
+            # Fetch REAL data from database
+            fact_data = get_project_fact(
+                project_name=fact_query_detection["project_name"],
+                fact_type=fact_query_detection["fact_type"],
+                bhk_type=fact_query_detection.get("bhk_type")
+            )
+            
+            if fact_data:
+                # Format response using ONLY database facts
+                fact_response = format_fact_response(fact_data, original_query)
+                
+                if fact_response:
+                    response_time_ms = int((time.time() - start_time) * 1000)
+                    
+                    # Update session
+                    if session:
+                        session_manager.add_message(request.session_id, "user", original_query)
+                        session_manager.add_message(request.session_id, "assistant", fact_response[:500])
+                        session.last_intent = f"factual_{fact_query_detection['fact_type']}"
+                        if fact_query_detection["project_name"]:
+                            session_manager.record_interest(request.session_id, fact_query_detection["project_name"])
+                        session_manager.save_session(session)
+                    
+                    logger.info(f"Returned database fact for {fact_query_detection['project_name']}: {fact_query_detection['fact_type']}")
+                    
+                    return ChatQueryResponse(
+                        answer=fact_response,
+                        sources=[{
+                            "document": "projects_table",
+                            "excerpt": f"Database fact: {fact_query_detection['fact_type']} for {fact_query_detection['project_name']}",
+                            "similarity": 1.0
+                        }],
+                        confidence="High",
+                        intent=f"factual_{fact_query_detection['fact_type']}",
+                        refusal_reason=None,
+                        response_time_ms=response_time_ms,
+                        suggested_actions=["Schedule site visit", "View similar projects", "Get more details"]
+                    )
+        
+        # Step 1.6: LOCATION COMPARISON INTERCEPTOR
+        # Prevent location comparison questions from triggering property searches
+        from services.context_injector import is_location_comparison_query
+        
+        if is_location_comparison_query(original_query):
+            logger.info(f"Detected location comparison query: {original_query}")
+            
+            # Generate generic comparison answer using GPT
+            from services.gpt_content_generator import generate_contextual_response_with_full_history
+            
+            response_text = generate_contextual_response_with_full_history(
+                query=original_query,
+                conversation_history=conversation_history if session else [],
+                session_context={},
+                goal="Provide a generic, informative comparison of Bangalore locations/areas. Discuss factors like connectivity, IT hub proximity, infrastructure, appreciation potential, and lifestyle. Keep it neutral and educational, NOT project-specific. End with: 'Would you like to explore properties in any of these areas?'"
+            )
+            
+            # Update session
+            if session:
+                session_manager.add_message(request.session_id, "user", original_query)
+                session_manager.add_message(request.session_id, "assistant", response_text[:500])
+                session.last_intent = "location_comparison_generic"
+                session_manager.save_session(session)
+            
+            response_time_ms = int((time.time() - start_time) * 1000)
+            
+            return ChatQueryResponse(
+                answer=response_text,
+                sources=[],
+                confidence="High",
+                intent="location_comparison_generic",
+                refusal_reason=None,
+                response_time_ms=response_time_ms,
+                suggested_actions=["Explore properties in these areas", "Learn about other locations", "Get personalized recommendations"]
+            )
+        
+        # Step 1.7: FUZZY PROJECT NAME DETECTION
         # Intercept queries like "need details of avalon" or "more info on folium"
         from services.fuzzy_matcher import (
             extract_project_name_from_query, 
@@ -511,8 +640,117 @@ async def chat_query(request: ChatQueryRequest):
         )
 
 
-        # Step 1.5: Handle greetings immediately without RAG
-        if intent == "greeting":
+        # ========================================
+        # SIMPLIFIED 3-PATH ROUTING
+        # ========================================
+        # PATH 1: Property Search → Project cards
+        # PATH 2: Project Details → Structured info
+        # PATH 3: GPT Consultant → Continuous conversation (DEFAULT)
+        # ========================================
+
+        # Check if unified consultant is enabled (feature flag)
+        USE_UNIFIED_CONSULTANT = os.getenv("USE_UNIFIED_CONSULTANT", "true").lower() == "true"
+
+        # PATH 1: Property Search
+        if is_property_search_query(request.query, intent, filters):
+            logger.info("🔹 PATH 1: Property Search - showing project cards")
+
+            # Perform Hybrid Retrieval
+            search_results = await hybrid_retrieval.search_with_filters(
+                query=request.query,
+                filters=filters
+            )
+
+            # Update session with shown projects
+            if session:
+                session.last_shown_projects = search_results["projects"]
+                session_manager.save_session(session)
+                logger.info(f"Updated session with {len(search_results['projects'])} shown projects")
+
+            response_time_ms = int((time.time() - start_time) * 1000)
+
+            # Log the interaction
+            if request.user_id:
+                await pixeltable_client.log_query(
+                    user_id=request.user_id,
+                    query=request.query,
+                    intent="property_search",
+                    answered=True,
+                    confidence_score="High",
+                    response_time_ms=response_time_ms,
+                    project_id=request.project_id
+                )
+
+            return ChatQueryResponse(
+                answer=f"I found {len(search_results['projects'])} projects matching your criteria. Here are the details:",
+                projects=search_results["projects"],
+                sources=[],
+                confidence="High",
+                intent="property_search",
+                refusal_reason=None,
+                response_time_ms=response_time_ms,
+                suggested_actions=[]
+            )
+
+        # PATH 2: Project Details/Facts (already handled by factual query interceptor above)
+        # This path is mostly handled earlier in the pipeline (lines 388-627)
+        # If we reach here with project_details intent, it means we need to handle it
+        elif is_project_details_query(request.query, intent):
+            logger.info("🔹 PATH 2: Project Details - already handled by interceptor")
+            # This should not happen often as factual queries are intercepted earlier
+            # If we get here, fall through to GPT consultant for contextual response
+
+        # PATH 3: GPT Conversational Consultant (DEFAULT)
+        # Handles: FAQs, objections, meeting requests, comparisons, greetings, and ALL other queries
+        if USE_UNIFIED_CONSULTANT:
+            logger.info(f"🔹 PATH 3: GPT Consultant - conversational response for intent={intent}")
+
+            # Generate conversational response using unified consultant
+            response_text = await generate_consultant_response(
+                query=request.query,
+                session=session,
+                intent=intent
+            )
+
+            # Update session
+            if session and request.session_id:
+                session_manager.add_message(request.session_id, "user", request.query)
+                session_manager.add_message(request.session_id, "assistant", response_text[:500])
+                session.last_intent = f"gpt_consultant_{intent}"
+                session_manager.save_session(session)
+
+            response_time_ms = int((time.time() - start_time) * 1000)
+
+            # Log the interaction
+            if request.user_id:
+                await pixeltable_client.log_query(
+                    user_id=request.user_id,
+                    query=request.query,
+                    intent=f"gpt_consultant_{intent}",
+                    answered=True,
+                    confidence_score="High",
+                    response_time_ms=response_time_ms,
+                    project_id=request.project_id
+                )
+
+            return ChatQueryResponse(
+                answer=response_text,
+                sources=[],
+                confidence="High",
+                intent=f"gpt_consultant_{intent}",
+                refusal_reason=None,
+                response_time_ms=response_time_ms,
+                suggested_actions=[]
+            )
+
+        # ========================================
+        # FALLBACK TO OLD ROUTING (if feature flag disabled)
+        # ========================================
+        else:
+            logger.info("Using legacy routing (unified consultant disabled)")
+
+        # Step 1.5: Handle greetings immediately without RAG (LEGACY)
+        if not USE_UNIFIED_CONSULTANT and intent == "greeting":
             response_time_ms = int((time.time() - start_time) * 1000)
             greeting_response = """👋 **Hello!** Welcome to Pinclick Genie!
 
@@ -537,12 +775,21 @@ How can I assist you today?"""
         # Step 1.6: Handle sales FAQ intents with intelligent GPT-4 handler
         if intent == "sales_faq":
             logger.info("Routing to intelligent sales FAQ handler")
+
+            # Build rich session context for FAQ generation
+            session_context_enriched = context_summary_dict.copy() if context_summary_dict else {}
+
+            # CRITICAL: Ensure last_shown_projects is included
+            if session and hasattr(session, 'last_shown_projects'):
+                session_context_enriched["last_shown_projects"] = session.last_shown_projects
+                logger.info(f"Injecting {len(session.last_shown_projects)} shown projects into FAQ context")
+
             response_text, sales_intent, should_fallback, actions = await intelligent_sales.handle_query(
                 query=request.query,
                 context=context,
                 session_id=request.session_id,
                 conversation_history=conversation_history,
-                session_context=context_summary_dict
+                session_context=session_context_enriched  # Pass enriched context
             )
             
             if not should_fallback and response_text:
@@ -616,12 +863,26 @@ How can I assist you today?"""
         # Step 1.7: Handle sales objection intents with intelligent handler
         if intent == "sales_objection":
             logger.info("Routing to intelligent sales objection handler")
+
+            # Record objection in session
+            objection_type = extraction.get("objection_type", "general")
+            if request.session_id:
+                session_manager.record_objection(request.session_id, objection_type)
+
+            # Build rich session context for objection handling
+            session_context_enriched = context_summary_dict.copy() if context_summary_dict else {}
+
+            # CRITICAL: Ensure last_shown_projects is included
+            if session and hasattr(session, 'last_shown_projects'):
+                session_context_enriched["last_shown_projects"] = session.last_shown_projects
+                logger.info(f"Injecting {len(session.last_shown_projects)} shown projects into objection context")
+
             response_text, sales_intent, should_fallback, actions = await intelligent_sales.handle_query(
                 query=request.query,
                 context=context,
                 session_id=request.session_id,
                 conversation_history=conversation_history,
-                session_context=context_summary_dict
+                session_context=session_context_enriched  # Pass enriched context
             )
             
             if not should_fallback and response_text:
@@ -780,10 +1041,11 @@ How can I assist you today?"""
                 logger.error(f"Generic GPT fallback failed: {e}")
                 # Finally fall through to flow engine if even this fails
 
-        # Step 2: Route property_search, project selection, and facts to Flow Engine (Strict Flowchart Logic)
-        # We group all search/project related intents here because flow_engine handles them all via interceptors
-        if intent in ["sales_pitch", "project_fact", "project_details", "comparison", "project_selection", "sales_faq", "more_info_request"]:
-            logger.info(f"Routing intent '{intent}' to Flow Engine")
+        # DISABLED: Legacy flow_engine routing - now handled by unified GPT consultant
+        # The unified consultant (lines 703-744) provides better conversational responses
+        # Only re-enable this if USE_UNIFIED_CONSULTANT is set to false
+        if False and not USE_UNIFIED_CONSULTANT and intent in ["sales_pitch", "project_fact", "project_details", "comparison", "project_selection", "sales_faq", "more_info_request"]:
+            logger.info(f"Routing intent '{intent}' to Flow Engine (LEGACY)")
             
             # Use Flow Engine to process the request
             # This handles: Requirement Extraction -> Node Logic -> Pixeltable Query -> Negotiation

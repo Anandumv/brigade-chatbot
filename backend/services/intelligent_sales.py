@@ -546,18 +546,31 @@ class IntelligentSalesHandler:
         
         # Use Master Prompt for dynamic generation
         from services.master_prompt import SALES_ADVISOR_SYSTEM, get_objection_prompt, get_faq_prompt
-        
+
+        # Build rich context dictionary for prompt generation (used by both FAQ and objection handlers)
+        context_dict = None
+        if session_context:
+            context_dict = {
+                "projects_shown": session_context.get("last_shown_projects", []),
+                "requirements": session_context.get("current_filters", {}),
+                "objections_raised": session_context.get("objections_raised", []),
+                "last_project": session_context.get("last_project")
+            }
+
         # Determine specific prompt based on intent
         user_prompt = query
         if "objection" in intent.value:
-            user_prompt = get_objection_prompt(query, intent.value.replace("objection_", ""))
+            user_prompt = get_objection_prompt(
+                query=query,
+                objection_type=intent.value.replace("objection_", ""),
+                context=context_dict  # Pass rich context
+            )
         elif "faq" in intent.value:
-            user_prompt = get_faq_prompt(query, intent.value.replace("faq_", ""))
-            
-        # Add context from static knowledge if available, but treating it as "Reference" not "Script"
-        if additional_context:
-            user_prompt += f"\n\nREFERENCE KNOWLEDGE (Use as guide, not script):\n{additional_context}"
-            user_prompt += f"\n\n⚠️ IMPORTANT: Your response MUST reference the specific projects and search results shown to the customer. Don't give generic advice - be specific about the properties they just saw."
+            user_prompt = get_faq_prompt(
+                query=query,
+                faq_type=intent.value.replace("faq_", ""),
+                context=context_dict  # Pass rich context
+            )
 
         response = await self._call_llm(
             system_prompt=SALES_ADVISOR_SYSTEM,

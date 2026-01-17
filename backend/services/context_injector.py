@@ -6,6 +6,7 @@ Prevents the chatbot from asking repetitive clarifying questions.
 """
 
 import logging
+import re
 from typing import Optional
 from services.session_manager import ConversationSession
 
@@ -39,6 +40,73 @@ GENERIC_PATTERNS = [
 ]
 
 
+# Bangalore location names for comparison detection
+BANGALORE_LOCATIONS = [
+    "whitefield", "sarjapur", "electronic city", "hebbal", "yeshwantpur",
+    "koramangala", "indiranagar", "jayanagar", "hsr", "btm", "marathahalli",
+    "bellandur", "outer ring road", "bannerghatta", "hennur", "yelahanka",
+    "devanahalli", "kengeri", "jp nagar", "mg road", "brigade road",
+    "rajajinagar", "malleshwaram", "basavanagudi", "kr puram", "varthur",
+    "chandapura", "hosur road", "old madras road", "tumkur road", "mysore road",
+    "kanakpura road", "north bangalore", "south bangalore", "east bangalore",
+    "west bangalore", "central bangalore"
+]
+
+
+def is_location_comparison_query(query: str) -> bool:
+    """
+    Detect if query is comparing locations/areas (should be generic).
+    
+    Examples:
+    - "why whitefield is better than Sarjapur"
+    - "Whitefield vs Sarjapur"
+    - "which is better whitefield or sarjapur"
+    - "why should I buy in whitefield"
+    - "is whitefield location good"
+    - "tell me about whitefield area"
+    
+    Returns True for location comparison questions.
+    """
+    query_lower = query.lower().strip()
+    
+    # Check if query mentions any Bangalore locations
+    has_location = any(loc in query_lower for loc in BANGALORE_LOCATIONS)
+    
+    if not has_location:
+        return False
+    
+    # Pattern 1: "X vs Y", "X or Y", "better than", "compared to"
+    comparison_patterns = [
+        " vs ", " versus ", " or ", "better than", "compared to",
+        "difference between", "compare", "comparison"
+    ]
+    if any(pattern in query_lower for pattern in comparison_patterns):
+        return True
+    
+    # Pattern 2: "why should I buy in X", "is X good", "tell me about X area"
+    area_info_patterns = [
+        "why should i buy in", "is .* good", "is .* better",
+        "tell me about .* area", "tell me about .* location",
+        "why .* is good", "why .* is better"
+    ]
+    for pattern in area_info_patterns:
+        if re.search(pattern, query_lower):
+            return True
+    
+    # Pattern 3: "why X better/good" (without explicit property mention)
+    if "why" in query_lower and has_location:
+        if "better" in query_lower or "good" in query_lower or "best" in query_lower:
+            # Make sure it's not about a specific project
+            # "why Brigade Citrine is better" should NOT match
+            # "why Whitefield is better" SHOULD match
+            project_indicators = ["brigade", "sobha", "prestige", "godrej", 
+                                "citrine", "avalon", "neopolis", "project"]
+            if not any(proj in query_lower for proj in project_indicators):
+                return True
+    
+    return False
+
+
 def is_generic_question(query: str) -> bool:
     """
     Check if query is a generic question that shouldn't use project context.
@@ -53,6 +121,11 @@ def is_generic_question(query: str) -> bool:
     - "give more points" → Not Generic (False) - should use context
     - "tell me more" → Not Generic (False) - should use context
     """
+    # CRITICAL: Check for location comparison first
+    # "why whitefield is better than Sarjapur" should be generic
+    if is_location_comparison_query(query):
+        return True
+    
     query_lower = query.lower().strip()
     
     # Check against generic patterns

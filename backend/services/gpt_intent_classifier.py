@@ -153,6 +153,14 @@ def _build_system_prompt() -> str:
    - more_info_request (specific questions) → data_source="gpt_generation"
    - NEVER go to web for project searches
 
+**LOCATION COMPARISON DETECTION:**
+   - "why whitefield is better than sarjapur" → Generic location comparison, NOT property_search
+   - "is whitefield good" → Generic location question, NOT property_search
+   - "whitefield vs sarjapur" → Generic location comparison, NOT property_search
+   - "why should I buy in whitefield" → Generic location question, NOT property_search
+   - ONLY classify as property_search if user explicitly asks to "show", "find", "list" properties
+   - Location comparison questions should be classified as "unsupported" to trigger generic GPT response
+
 **3. Extract entities:**
    - configuration: "2BHK", "3BHK", "4BHK", "2-bedroom" → "2BHK"
    - budget_max: Number in lakhs (convert crores to lakhs: 2 Cr = 200 lakhs)
@@ -232,8 +240,30 @@ Query: "What is the RERA number for Sobha Neopolis?"
   "intent": "project_details",
   "data_source": "database",
   "confidence": 0.98,
-  "reasoning": "RERA number is structured fact in database",
+  "reasoning": "RERA number is structured fact in database - NEVER let GPT generate this",
   "extraction": {"project_name": "Sobha Neopolis", "fact_type": "rera_number"}
+}
+```
+
+Query: "carpet size of 3 BHK in Birla Evara"
+```json
+{
+  "intent": "project_details",
+  "data_source": "database",
+  "confidence": 0.98,
+  "reasoning": "Carpet area is factual data from database configuration field - MUST fetch from database",
+  "extraction": {"project_name": "Birla Evara", "fact_type": "carpet_area", "bhk_type": "3BHK"}
+}
+```
+
+Query: "why whitefield is better than sarjapur"
+```json
+{
+  "intent": "unsupported",
+  "data_source": "gpt_generation",
+  "confidence": 0.95,
+  "reasoning": "Location comparison question - should receive generic answer, not property list",
+  "extraction": {}
 }
 ```
 
