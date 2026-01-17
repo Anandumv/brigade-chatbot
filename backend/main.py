@@ -753,14 +753,9 @@ async def chat_query(request: ChatQueryRequest):
             suggested_actions=[]
         )
 
-        # ========================================
-        # FALLBACK TO OLD ROUTING (if feature flag disabled)
-        # ========================================
-        else:
-            logger.info("Using legacy routing (unified consultant disabled)")
-
-        # Step 1.5: Handle greetings immediately without RAG (LEGACY)
-        if not USE_UNIFIED_CONSULTANT and intent == "greeting":
+        # Step 1.5: Handle greetings immediately without RAG (LEGACY - unreachable code)
+        # This code is kept for reference but is unreachable due to the return statement above
+        if False and not USE_UNIFIED_CONSULTANT and intent == "greeting":
             response_time_ms = int((time.time() - start_time) * 1000)
             greeting_response = """👋 **Hello!** Welcome to Pinclick Genie!
 
