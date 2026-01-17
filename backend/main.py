@@ -1075,19 +1075,20 @@ async def chat_query(request: ChatQueryRequest):
             if intent == "property_search":
                 logger.info("🔹 PATH 1: Database - Property Search")
 
-                # Ensure hybrid_retrieval is available (safety check)
-                try:
-                    if 'hybrid_retrieval' not in globals() or hybrid_retrieval is None:
-                        from services.hybrid_retrieval import hybrid_retrieval
-                except ImportError as e:
-                    logger.error(f"Failed to import hybrid_retrieval: {e}")
-                    raise HTTPException(status_code=500, detail="Service unavailable: hybrid_retrieval")
-
                 # Perform Hybrid Retrieval
-                search_results = await hybrid_retrieval.search_with_filters(
-                    query=request.query,
-                    filters=filters
-                )
+                try:
+                    search_results = await hybrid_retrieval.search_with_filters(
+                        query=request.query,
+                        filters=filters
+                    )
+                except (NameError, AttributeError) as e:
+                    # If hybrid_retrieval is not available, import it
+                    logger.warning(f"hybrid_retrieval not available, re-importing: {e}")
+                    from services.hybrid_retrieval import hybrid_retrieval
+                    search_results = await hybrid_retrieval.search_with_filters(
+                        query=request.query,
+                        filters=filters
+                    )
 
                 # Update session with shown projects
                 if session:
@@ -1978,19 +1979,20 @@ How can I assist you today?"""
                 logger.info(f"Injecting detected project name '{project_name}' into search filters")
                 filters.project_name = project_name
 
-            # Ensure hybrid_retrieval is available (safety check)
-            try:
-                if 'hybrid_retrieval' not in globals() or hybrid_retrieval is None:
-                    from services.hybrid_retrieval import hybrid_retrieval
-            except ImportError as e:
-                logger.error(f"Failed to import hybrid_retrieval: {e}")
-                raise HTTPException(status_code=500, detail="Service unavailable: hybrid_retrieval")
-
             # Perform Hybrid Retrieval
-            search_results = await hybrid_retrieval.search_with_filters(
-                query=request.query,
-                filters=filters
-            )
+            try:
+                search_results = await hybrid_retrieval.search_with_filters(
+                    query=request.query,
+                    filters=filters
+                )
+            except (NameError, AttributeError) as e:
+                # If hybrid_retrieval is not available, import it
+                logger.warning(f"hybrid_retrieval not available, re-importing: {e}")
+                from services.hybrid_retrieval import hybrid_retrieval
+                search_results = await hybrid_retrieval.search_with_filters(
+                    query=request.query,
+                    filters=filters
+                )
             
             # Structured search doesn't use vector chunks
             chunks = []
@@ -2457,19 +2459,20 @@ async def filtered_search(request: ChatQueryRequest):
         
 
 
-        # Ensure hybrid_retrieval is available (safety check)
-        try:
-            if 'hybrid_retrieval' not in globals() or hybrid_retrieval is None:
-                from services.hybrid_retrieval import hybrid_retrieval
-        except ImportError as e:
-            logger.error(f"Failed to import hybrid_retrieval: {e}")
-            raise HTTPException(status_code=500, detail="Service unavailable: hybrid_retrieval")
-
         # Step 2: Hybrid retrieval (SQL + vector search)
-        search_results = await hybrid_retrieval.search_with_filters(
-            query=request.query,
-            filters=filters
-        )
+        try:
+            search_results = await hybrid_retrieval.search_with_filters(
+                query=request.query,
+                filters=filters
+            )
+        except (NameError, AttributeError) as e:
+            # If hybrid_retrieval is not available, import it
+            logger.warning(f"hybrid_retrieval not available, re-importing: {e}")
+            from services.hybrid_retrieval import hybrid_retrieval
+            search_results = await hybrid_retrieval.search_with_filters(
+                query=request.query,
+                filters=filters
+            )
 
         # Step 3: Check if any results found
         if not search_results["projects"]:
