@@ -76,6 +76,13 @@ export interface ChatQueryRequest {
     filters?: any; // SelectedFilters type to be imported if needed, or loose coupling
 }
 
+export interface CoachingPrompt {
+    type: string;
+    priority: 'low' | 'medium' | 'high' | 'critical';
+    message: string;
+    suggested_script?: string;
+}
+
 export interface ChatQueryResponse {
     answer: string;
     confidence: ConfidenceLevel;
@@ -92,6 +99,8 @@ export interface ChatQueryResponse {
     urgency_signals?: import('./enhanced-ux').UrgencySignal[];
     sentiment?: import('./enhanced-ux').SentimentData;
     user_profile?: import('./enhanced-ux').UserProfileData;
+    // Phase 3: Sales Coaching
+    coaching_prompt?: CoachingPrompt;
 }
 
 export interface CompareProjectsRequest {
@@ -118,6 +127,8 @@ export interface Message {
     urgency_signals?: import('./enhanced-ux').UrgencySignal[];
     sentiment?: import('./enhanced-ux').SentimentData;
     user_profile?: import('./enhanced-ux').UserProfileData;
+    // Phase 3: Sales Coaching
+    coaching_prompt?: CoachingPrompt;
 }
 
 export interface QueryAnalytics {

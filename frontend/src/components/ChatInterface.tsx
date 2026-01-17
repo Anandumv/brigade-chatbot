@@ -14,6 +14,8 @@ import { Send, Loader2, Sparkles, User, AlertCircle, Zap, Calendar } from '@/com
 import { ScheduleVisitModal, CallbackRequestButton } from './scheduling';
 // Phase 2: Enhanced UX components
 import { WelcomeBackBanner, ProactiveNudgeCard, UrgencySignals, SentimentIndicator } from './enhanced-ux';
+// Phase 3: Sales Coaching components
+import { CoachingPanel } from './CoachingPanel';
 
 interface ChatInterfaceProps {
     projects: ProjectInfo[];
@@ -114,21 +116,13 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
             }
 
             // Extract enhanced UX data from response
-            // Note: Backend may return this in response.data or we parse from text
-            let nudge: ProactiveNudge | undefined;
-            let urgencySignals: UrgencySignal[] | undefined;
-            let sentiment: SentimentData | undefined;
-            let userProfileData: UserProfileData | undefined;
+            let nudge: ProactiveNudge | undefined = response.nudge;
+            let urgencySignals: UrgencySignal[] | undefined = response.urgency_signals;
+            let sentiment: SentimentData | undefined = response.sentiment;
+            let userProfileData: UserProfileData | undefined = response.user_profile;
 
-            // Try to extract from response.data (if backend returns structured data)
-            if (response.data) {
-                if (response.data.nudge) nudge = response.data.nudge;
-                if (response.data.urgency_signals) urgencySignals = response.data.urgency_signals;
-                if (response.data.sentiment) sentiment = response.data.sentiment;
-                if (response.data.user_profile) {
-                    userProfileData = response.data.user_profile;
-                    setUserProfile(userProfileData);
-                }
+            if (userProfileData) {
+                setUserProfile(userProfileData);
             }
 
             // Parse nudge from response text if not in structured data
@@ -175,6 +169,8 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                 urgency_signals: urgencySignals || response.urgency_signals,
                 sentiment: sentiment || response.sentiment,
                 user_profile: userProfileData || response.user_profile,
+                // Phase 3: Sales Coaching
+                coaching_prompt: response.coaching_prompt,
             };
 
             setMessages((prev) =>
@@ -254,15 +250,9 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
             );
 
             // Extract enhanced UX data (same as above)
-            let nudge: ProactiveNudge | undefined;
-            let urgencySignals: UrgencySignal[] | undefined;
-            let sentiment: SentimentData | undefined;
-
-            if (response.data) {
-                if (response.data.nudge) nudge = response.data.nudge;
-                if (response.data.urgency_signals) urgencySignals = response.data.urgency_signals;
-                if (response.data.sentiment) sentiment = response.data.sentiment;
-            }
+            let nudge: ProactiveNudge | undefined = response.nudge;
+            let urgencySignals: UrgencySignal[] | undefined = response.urgency_signals;
+            let sentiment: SentimentData | undefined = response.sentiment;
 
             const assistantMessage: Message = {
                 id: generateId(),
@@ -280,6 +270,8 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                 nudge: nudge || response.nudge,
                 urgency_signals: urgencySignals || response.urgency_signals,
                 sentiment: sentiment || response.sentiment,
+                // Phase 3: Sales Coaching
+                coaching_prompt: response.coaching_prompt,
             };
 
             setMessages((prev) =>
@@ -456,6 +448,13 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                                                             inputRef.current?.focus();
                                                         }}
                                                     />
+                                                </div>
+                                            )}
+
+                                            {/* Phase 3: Sales Coaching Prompt */}
+                                            {message.coaching_prompt && (
+                                                <div className="mt-4">
+                                                    <CoachingPanel coaching_prompt={message.coaching_prompt} />
                                                 </div>
                                             )}
 

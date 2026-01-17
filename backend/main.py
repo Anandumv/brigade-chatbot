@@ -222,6 +222,7 @@ class ChatQueryResponse(BaseModel):
     data: Optional[Dict[str, Any]] = None
     projects: List[Dict[str, Any]] = []  # Default to empty list instead of None
     suggested_actions: Optional[List[str]] = None  # Dynamic quick reply chips
+    coaching_prompt: Optional[Dict[str, Any]] = None  # Real-time sales coaching for salesman
 
 
 class ProjectInfo(BaseModel):
@@ -1482,7 +1483,8 @@ async def chat_query(request: ChatQueryRequest):
             intent=intent,
             refusal_reason=None,
             response_time_ms=response_time_ms,
-            suggested_actions=[]
+            suggested_actions=[],
+            coaching_prompt=coaching_prompt if 'coaching_prompt' in locals() else None
         )
 
         # Step 1.5: Handle greetings immediately without RAG (LEGACY - unreachable code)

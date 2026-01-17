@@ -47,5 +47,12 @@ export {
     // FilterPanel icons
     SlidersHorizontal,
     X,
+
+    // Enhanced UX icons
+    DollarSign,
+    Mail,
+    Smile,
+    Meh,
+    Frown,
 } from 'lucide-react';
 
