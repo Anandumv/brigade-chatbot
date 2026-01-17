@@ -1,9 +1,12 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { ConfidenceLevel, SourceInfo } from '@/types';
 import { CheckCircle, AlertCircle, XCircle, FileText, ExternalLink, ChevronDown, ChevronUp } from '@/components/icons';
+import { TableDrawer } from '@/components/ui/TableDrawer';
+import { Table as TableIcon } from 'lucide-react';
+import remarkGfm from 'remark-gfm';
 
 // Lazy load ReactMarkdown for better initial bundle size
 const ReactMarkdown = dynamic(() => import('react-markdown'), {
@@ -27,6 +30,8 @@ export function ResponseCard({
     refusalReason,
 }: ResponseCardProps) {
     const [sourcesExpanded, setSourcesExpanded] = React.useState(false);
+    const [drawerOpen, setDrawerOpen] = useState(false);
+    const [tableContent, setTableContent] = useState<React.ReactNode>(null);
 
     const getConfidenceIcon = () => {
         switch (confidence) {
@@ -54,8 +59,36 @@ export function ResponseCard({
         }
     };
 
+    // Custom renderer for tables
+    const components = {
+        table: ({ children }: { children: React.ReactNode }) => {
+            return (
+                <div className="my-4">
+                    <button
+                        onClick={() => {
+                            setTableContent(children);
+                            setDrawerOpen(true);
+                        }}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors w-full sm:w-auto font-medium text-sm"
+                    >
+                        <TableIcon className="w-4 h-4" />
+                        View Configurations Table
+                    </button>
+                </div>
+            );
+        }
+    };
+
     return (
         <div className="w-full">
+            <TableDrawer isOpen={drawerOpen} onClose={() => setDrawerOpen(false)} title="Property Configurations">
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200 text-sm">
+                        {tableContent}
+                    </table>
+                </div>
+            </TableDrawer>
+
             {/* Main Content */}
             <div className={`rounded-2xl rounded-tl-sm p-5 shadow-sm ${isRefusal ? 'bg-amber-50 border border-amber-200' : 'bg-white border border-gray-200'}`}>
                 {isRefusal && refusalReason && (
@@ -66,7 +99,12 @@ export function ResponseCard({
                 )}
 
                 <div className="prose prose-sm sm:prose-base max-w-none text-gray-700 prose-p:leading-relaxed prose-headings:text-gray-900 prose-strong:text-gray-900 prose-strong:font-semibold">
-                    <ReactMarkdown>{content}</ReactMarkdown>
+                    <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={components}
+                    >
+                        {content}
+                    </ReactMarkdown>
                 </div>
 
                 {/* Confidence Badge - simplified */}
