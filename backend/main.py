@@ -393,10 +393,9 @@ async def chat_query(request: ChatQueryRequest):
                 return ChatQueryResponse(
                     answer="\n".join(response_parts),
                     sources=[{
-                        "source_type": "database",
-                        "document_name": "projects_table",
-                        "similarity_score": 1.0,
-                        "content_preview": f"Details for {project.get('name')}"
+                        "document": "projects_table",
+                        "excerpt": f"Details for {project.get('name')}",
+                        "similarity": 1.0
                     }],
                     confidence="High",
                     intent="project_details",
