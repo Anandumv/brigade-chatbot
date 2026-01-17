@@ -15,7 +15,7 @@ import logging
 from typing import Dict, List, Optional
 from openai import OpenAI
 from config import settings
-from models.conversation import ConversationSession
+from services.session_manager import ConversationSession  # Fixed import
 
 logger = logging.getLogger(__name__)
 
