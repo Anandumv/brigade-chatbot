@@ -3,12 +3,17 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Message, ProjectInfo, PersonaInfo, ChatQueryResponse } from '@/types';
 import { SelectedFilters } from '@/types/filters';
+import { UserProfileData, ProactiveNudge, UrgencySignal, SentimentData } from '@/types/enhanced-ux';
 import { apiService } from '@/services/api';
 import { ResponseCard } from './ResponseCard';
 import { ProjectCard } from './ProjectCard';
 import { FilterPanel } from './FilterPanel';
 import { QuickReplies, getQuickRepliesForIntent } from './QuickReplies';
-import { Send, Loader2, Sparkles, User, AlertCircle, Zap } from '@/components/icons';
+import { Send, Loader2, Sparkles, User, AlertCircle, Zap, Calendar } from '@/components/icons';
+// Phase 1: Scheduling components
+import { ScheduleVisitModal, CallbackRequestButton } from './scheduling';
+// Phase 2: Enhanced UX components
+import { WelcomeBackBanner, ProactiveNudgeCard, UrgencySignals, SentimentIndicator } from './enhanced-ux';
 
 interface ChatInterfaceProps {
     projects: ProjectInfo[];
@@ -22,6 +27,30 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
     const [error, setError] = useState<string | null>(null);
     const [selectedFilters, setSelectedFilters] = useState<SelectedFilters>({});
     const [isFilterCollapsed, setIsFilterCollapsed] = useState(true);
+
+    // Phase 1: Scheduling state
+    const [showScheduleModal, setShowScheduleModal] = useState(false);
+    const [selectedProjectForSchedule, setSelectedProjectForSchedule] = useState<ProjectInfo | null>(null);
+    
+    // Phase 2: Enhanced UX state
+    const [userProfile, setUserProfile] = useState<UserProfileData | undefined>();
+    const [showWelcomeBanner, setShowWelcomeBanner] = useState(true);
+
+    // User identification (persist across sessions)
+    const [userId] = useState(() => {
+        if (typeof window !== 'undefined') {
+            let id = localStorage.getItem('chatbot_user_id');
+            if (!id) {
+                id = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                localStorage.setItem('chatbot_user_id', id);
+            }
+            return id;
+        }
+        return `user_${Date.now()}`;
+    });
+
+    // Session ID (new for each page load)
+    const [sessionId] = useState(() => `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -72,14 +101,61 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
             if (hasFilters) {
                 response = await apiService.sendQueryWithFilters(
                     userMessage.content,
-                    selectedFilters
+                    selectedFilters,
+                    userId
                 );
             } else {
                 response = await apiService.sendQuery({
                     query: userMessage.content,
+                    user_id: userId,
                     project_id: undefined,
                     persona: undefined,
                 });
+            }
+
+            // Extract enhanced UX data from response
+            // Note: Backend may return this in response.data or we parse from text
+            let nudge: ProactiveNudge | undefined;
+            let urgencySignals: UrgencySignal[] | undefined;
+            let sentiment: SentimentData | undefined;
+            let userProfileData: UserProfileData | undefined;
+
+            // Try to extract from response.data (if backend returns structured data)
+            if (response.data) {
+                if (response.data.nudge) nudge = response.data.nudge;
+                if (response.data.urgency_signals) urgencySignals = response.data.urgency_signals;
+                if (response.data.sentiment) sentiment = response.data.sentiment;
+                if (response.data.user_profile) {
+                    userProfileData = response.data.user_profile;
+                    setUserProfile(userProfileData);
+                }
+            }
+
+            // Parse nudge from response text if not in structured data
+            // Backend currently adds nudges to response text with 🎯 prefix
+            if (!nudge && response.answer.includes('🎯')) {
+                const nudgeMatch = response.answer.match(/🎯\s*(.+?)(?:\n\n|$)/);
+                if (nudgeMatch) {
+                    const nudgeText = nudgeMatch[1];
+                    // Infer nudge type from message
+                    let nudgeType: ProactiveNudge['type'] = 'decision_ready';
+                    if (nudgeText.toLowerCase().includes('viewed') && nudgeText.toLowerCase().includes('times')) {
+                        nudgeType = 'repeat_views';
+                    } else if (nudgeText.toLowerCase().includes('location')) {
+                        nudgeType = 'location_focus';
+                    } else if (nudgeText.toLowerCase().includes('budget')) {
+                        nudgeType = 'budget_concern';
+                    } else if (nudgeText.toLowerCase().includes('ready') || nudgeText.toLowerCase().includes('decide')) {
+                        nudgeType = 'decision_ready';
+                    }
+                    
+                    nudge = {
+                        type: nudgeType,
+                        message: nudgeText,
+                        action: nudgeText.toLowerCase().includes('schedule') ? 'schedule_visit' : undefined,
+                        priority: nudgeText.toLowerCase().includes('ready') ? 'high' : 'medium',
+                    };
+                }
             }
 
             const assistantMessage: Message = {
@@ -94,6 +170,11 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                 refusalReason: response.refusal_reason,
                 suggested_actions: response.suggested_actions,
                 projects: response.projects,
+                // Phase 2: Enhanced UX data
+                nudge: nudge || response.nudge,
+                urgency_signals: urgencySignals || response.urgency_signals,
+                sentiment: sentiment || response.sentiment,
+                user_profile: userProfileData || response.user_profile,
             };
 
             setMessages((prev) =>
@@ -168,8 +249,20 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
         try {
             const response = await apiService.sendQueryWithFilters(
                 generatedQuery,
-                selectedFilters
+                selectedFilters,
+                userId
             );
+
+            // Extract enhanced UX data (same as above)
+            let nudge: ProactiveNudge | undefined;
+            let urgencySignals: UrgencySignal[] | undefined;
+            let sentiment: SentimentData | undefined;
+
+            if (response.data) {
+                if (response.data.nudge) nudge = response.data.nudge;
+                if (response.data.urgency_signals) urgencySignals = response.data.urgency_signals;
+                if (response.data.sentiment) sentiment = response.data.sentiment;
+            }
 
             const assistantMessage: Message = {
                 id: generateId(),
@@ -183,6 +276,10 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                 refusalReason: response.refusal_reason,
                 suggested_actions: response.suggested_actions,
                 projects: response.projects,
+                // Phase 2: Enhanced UX data
+                nudge: nudge || response.nudge,
+                urgency_signals: urgencySignals || response.urgency_signals,
+                sentiment: sentiment || response.sentiment,
             };
 
             setMessages((prev) =>
@@ -194,6 +291,22 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
             setMessages((prev) => prev.filter((m) => !m.isLoading));
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    // Handle nudge actions
+    const handleNudgeAction = (action: string) => {
+        if (action === 'schedule_visit') {
+            // Find the most recent project from messages
+            const lastMessage = messages[messages.length - 1];
+            if (lastMessage?.projects && lastMessage.projects.length > 0) {
+                setSelectedProjectForSchedule(lastMessage.projects[0] as ProjectInfo);
+                setShowScheduleModal(true);
+            }
+        } else if (action === 'contact_rm') {
+            // Could open callback modal or show contact info
+            // For now, just show a message
+            setInput('I would like to speak with a relationship manager');
         }
     };
 
@@ -209,6 +322,15 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
 
             {/* Chat Area - Mobile optimized with safe areas */}
             <div className="flex-1 overflow-y-auto w-full max-w-3xl mx-auto px-4 sm:px-6 pb-32 sm:pb-36">
+                {/* Phase 2: Welcome Back Banner */}
+                {showWelcomeBanner && userProfile && userProfile.is_returning_user && (
+                    <div className="pt-4">
+                        <WelcomeBackBanner
+                            userProfile={userProfile}
+                            onDismiss={() => setShowWelcomeBanner(false)}
+                        />
+                    </div>
+                )}
                 {messages.length === 0 ? (
                     <div className="flex flex-col items-center justify-center min-h-[50vh] sm:min-h-[60vh] text-center space-y-6 sm:space-y-8 animate-fade-in px-2 sm:px-4 pt-8">
                         <div className="space-y-3 sm:space-y-4">
@@ -297,6 +419,46 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                                                 refusalReason={message.refusalReason}
                                             />
 
+                                            {/* Phase 2: Proactive Nudge Card */}
+                                            {message.nudge && (
+                                                <div className="mt-4">
+                                                    <ProactiveNudgeCard
+                                                        nudge={message.nudge}
+                                                        onAction={handleNudgeAction}
+                                                        onDismiss={() => {
+                                                            // Remove nudge from message
+                                                            setMessages(prev => prev.map(m => 
+                                                                m.id === message.id ? { ...m, nudge: undefined } : m
+                                                            ));
+                                                        }}
+                                                    />
+                                                </div>
+                                            )}
+
+                                            {/* Phase 2: Urgency Signals */}
+                                            {message.urgency_signals && message.urgency_signals.length > 0 && (
+                                                <div className="mt-4">
+                                                    <UrgencySignals
+                                                        signals={message.urgency_signals}
+                                                        projectName={message.projects?.[0]?.name || message.projects?.[0]?.project_name}
+                                                    />
+                                                </div>
+                                            )}
+
+                                            {/* Phase 2: Sentiment Indicator */}
+                                            {message.sentiment && (
+                                                <div className="mt-4">
+                                                    <SentimentIndicator
+                                                        sentiment={message.sentiment}
+                                                        onEscalate={() => {
+                                                            // Open callback modal with high urgency
+                                                            setInput('I need to speak with a human agent immediately');
+                                                            inputRef.current?.focus();
+                                                        }}
+                                                    />
+                                                </div>
+                                            )}
+
                                             {message.projects && message.projects.length > 0 && (
                                                 <div className="mt-4 flex flex-col gap-4">
                                                     {message.projects.map((project, idx) => {
@@ -356,11 +518,25 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                                                             };
                                                         };
 
+                                                        const adaptedProject = adaptProjectData(project);
+                                                        
                                                         return (
-                                                            <ProjectCard
-                                                                key={idx}
-                                                                project={adaptProjectData(project)}
-                                                            />
+                                                            <div key={idx} className="relative">
+                                                                <ProjectCard
+                                                                    project={adaptedProject}
+                                                                />
+                                                                {/* Phase 1: Schedule Visit Button */}
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setSelectedProjectForSchedule(adaptedProject);
+                                                                        setShowScheduleModal(true);
+                                                                    }}
+                                                                    className="mt-3 w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 text-sm font-medium"
+                                                                >
+                                                                    <Calendar className="w-4 h-4" />
+                                                                    Schedule Site Visit
+                                                                </button>
+                                                            </div>
                                                         );
                                                     })}
                                                 </div>
@@ -440,6 +616,36 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                     </p>
                 </div>
             </div>
+
+            {/* Phase 1: Floating Callback Request Button */}
+            <CallbackRequestButton userId={userId} sessionId={sessionId} />
+
+            {/* Phase 1: Schedule Visit Modal */}
+            {selectedProjectForSchedule && (
+                <ScheduleVisitModal
+                    project={selectedProjectForSchedule}
+                    userId={userId}
+                    sessionId={sessionId}
+                    isOpen={showScheduleModal}
+                    onClose={() => {
+                        setShowScheduleModal(false);
+                        setSelectedProjectForSchedule(null);
+                    }}
+                    onSuccess={(visitId) => {
+                        console.log('Visit scheduled:', visitId);
+                        // Add success message to chat
+                        const successMessage: Message = {
+                            id: generateId(),
+                            role: 'assistant',
+                            content: `✅ Perfect! I've scheduled your site visit for ${selectedProjectForSchedule.name || selectedProjectForSchedule.project_name}. You'll receive a confirmation email and SMS shortly. Our Relationship Manager will contact you before the visit.`,
+                            timestamp: new Date(),
+                        };
+                        setMessages(prev => [...prev, successMessage]);
+                        setShowScheduleModal(false);
+                        setSelectedProjectForSchedule(null);
+                    }}
+                />
+            )}
         </div>
     );
 }
