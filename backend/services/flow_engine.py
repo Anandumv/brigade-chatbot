@@ -734,7 +734,7 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
                 # ---------------------------------------------------------
                 # DIRECT ANSWER LOGIC (Minimum Budget / Starting Price)
                 # ---------------------------------------------------------
-                query_lower = query.lower()
+                query_lower = user_input.lower()
                 min_price_keywords = ["minimum budget", "min budget", "starting price", "lowest price", "cheapest", "least expensive", "start from", "starts from", "start price"]
                 
                 if matches and any(kw in query_lower for kw in min_price_keywords):
