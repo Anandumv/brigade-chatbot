@@ -1250,7 +1250,7 @@ async def chat_query(request: ChatQueryRequest):
                 # If budget objection detected, proactively offer alternatives
                 if objection_type == "budget" and session.current_filters:
                     try:
-                        from services.hybrid_retrieval import hybrid_retrieval
+                        # hybrid_retrieval already imported at top of file
                         
                         # Get budget alternatives
                         alternatives = await hybrid_retrieval.get_budget_alternatives(
