@@ -87,6 +87,11 @@ export interface ChatQueryResponse {
     hallucination_risk?: boolean;
     suggested_actions?: string[];
     projects?: any[];
+    // Phase 2: Enhanced UX data
+    nudge?: import('./enhanced-ux').ProactiveNudge;
+    urgency_signals?: import('./enhanced-ux').UrgencySignal[];
+    sentiment?: import('./enhanced-ux').SentimentData;
+    user_profile?: import('./enhanced-ux').UserProfileData;
 }
 
 export interface CompareProjectsRequest {
@@ -108,6 +113,11 @@ export interface Message {
     suggested_actions?: string[];
     isLoading?: boolean;
     projects?: any[];
+    // Phase 2: Enhanced UX data
+    nudge?: import('./enhanced-ux').ProactiveNudge;
+    urgency_signals?: import('./enhanced-ux').UrgencySignal[];
+    sentiment?: import('./enhanced-ux').SentimentData;
+    user_profile?: import('./enhanced-ux').UserProfileData;
 }
 
 export interface QueryAnalytics {

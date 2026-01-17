@@ -11,3 +11,11 @@ export {
     CallbackRequestModal,
     CallbackRequestButton,
 } from './scheduling';
+
+// Enhanced UX components
+export {
+    WelcomeBackBanner,
+    ProactiveNudgeCard,
+    UrgencySignals,
+    SentimentIndicator,
+} from './enhanced-ux';
