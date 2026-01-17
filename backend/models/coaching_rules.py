@@ -28,8 +28,8 @@ COACHING_RULES: Dict[str, Dict[str, Any]] = {
     # CONVERSION TRIGGERS - High priority actions to close the sale
     "site_visit_trigger": {
         "conditions": {
-            "min_projects_viewed": 3,
-            "min_messages": 5,
+            "min_projects_viewed": 2,
+            "min_messages": 3,
             "conversation_stage": ["evaluation", "negotiation"]
         },
         "priority": CoachingPriority.HIGH,
@@ -40,7 +40,7 @@ COACHING_RULES: Dict[str, Dict[str, Any]] = {
 
     "callback_trigger": {
         "conditions": {
-            "min_messages": 7,
+            "min_messages": 4,
             "min_projects_viewed": 2,
             "conversation_stage": ["evaluation", "negotiation", "closing"]
         },
@@ -134,7 +134,7 @@ COACHING_RULES: Dict[str, Dict[str, Any]] = {
     # INFO PROVIDED - Low priority confirmations
     "distance_info_provided": {
         "conditions": {
-            "query_type": "location_distance",
+            "query_type": ["location_distance", "project_details", "more_info_request"],
             "real_data_used": True
         },
         "priority": CoachingPriority.LOW,
@@ -145,12 +145,24 @@ COACHING_RULES: Dict[str, Dict[str, Any]] = {
 
     "amenities_info_provided": {
         "conditions": {
-            "query_type": "amenities",
+            "query_type": ["amenities", "project_details", "more_info_request"],
             "real_data_used": True
         },
         "priority": CoachingPriority.LOW,
         "type": CoachingType.INFO_PROVIDED,
         "message_template": "✓ Provided real amenities data with distances. Good foundation for qualification questions.",
+        "suggested_script": None
+    },
+
+    # FALLBACK - Low priority tip when nothing else triggers
+    "general_conversation_tip": {
+        "conditions": {
+            "min_messages": 1,
+            "real_data_used": True
+        },
+        "priority": CoachingPriority.LOW,
+        "type": CoachingType.INFO_PROVIDED,
+        "message_template": "✓ Use **bold** for project names and prices. Suggest **site visit** or **brochure** when relevant.",
         "suggested_script": None
     },
 

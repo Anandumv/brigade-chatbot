@@ -117,6 +117,54 @@ def is_project_details_query(query: str, intent: str) -> bool:
     return intent in ["project_details", "project_fact"]
 
 
+def _get_coaching_for_response(
+    session,
+    request_session_id: str,
+    current_query: str,
+    intent: str,
+    search_performed: bool,
+    data_source: str,
+    budget_alternatives_shown: bool = False
+) -> Optional[Dict[str, Any]]:
+    """
+    Get coaching prompt for a response. Used by PATH 2 and early-return paths.
+    """
+    if not session or not request_session_id:
+        return None
+    try:
+        from services.conversation_director import get_conversation_director
+        director = get_conversation_director()
+        session_dict = session.model_dump() if hasattr(session, 'model_dump') else session.dict()
+        ctx = {
+            "search_performed": search_performed,
+            "budget_alternatives_shown": budget_alternatives_shown,
+            "real_data_used": data_source == "database" or search_performed,
+            "query_type": intent
+        }
+        # Enrich from last shown project when available
+        proj = None
+        if session_dict.get("last_shown_projects"):
+            proj = session_dict["last_shown_projects"][0] if isinstance(session_dict["last_shown_projects"], list) else None
+        # Provide template vars for rules that use them (avoid KeyError and ugly placeholders)
+        ctx["template_vars"] = {
+            "market_data_provided": "Share locality insights if available.",
+            "urgency_context": "Limited units / price revision expected.",
+            "location": (proj.get("location") or proj.get("full_address") or session_dict.get("current_filters", {}).get("location") or "this locality") if proj else (session_dict.get("current_filters", {}).get("location") or "this locality"),
+            "connectivity_info": "metro and highway",
+            "appreciation_rate": "8–12",
+            "rera_number": (proj.get("rera_number") or "RERA registered") if proj else "RERA registered",
+            "developer_name": (proj.get("developer") or proj.get("builder") or "The developer") if proj else "The developer",
+            "savings_percentage": "15–20"
+        }
+        prompt = director.get_coaching_prompt(session=session_dict, current_query=current_query, context=ctx)
+        if prompt and request_session_id:
+            session_manager.track_coaching_prompt(request_session_id, prompt["type"])
+        return prompt
+    except Exception as e:
+        logger.error(f"Coaching error: {e}")
+        return None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown events."""
@@ -885,6 +933,10 @@ async def chat_query(request: ChatQueryRequest):
                     
                     logger.info(f"Returned database fact for {fact_query_detection['project_name']}: {fact_query_detection['fact_type']}")
                     
+                    coaching_prompt = _get_coaching_for_response(
+                        session, request.session_id, request.query, f"factual_{fact_query_detection['fact_type']}",
+                        search_performed=False, data_source="database", budget_alternatives_shown=False
+                    )
                     return ChatQueryResponse(
                         answer=fact_response,
                         sources=[{
@@ -896,7 +948,8 @@ async def chat_query(request: ChatQueryRequest):
                         intent=f"factual_{fact_query_detection['fact_type']}",
                         refusal_reason=None,
                         response_time_ms=response_time_ms,
-                        suggested_actions=["Schedule site visit", "View similar projects", "Get more details"]
+                        suggested_actions=["Schedule site visit", "View similar projects", "Get more details"],
+                        coaching_prompt=coaching_prompt
                     )
         
         # Step 1.6: LOCATION COMPARISON INTERCEPTOR
@@ -925,6 +978,10 @@ async def chat_query(request: ChatQueryRequest):
             
             response_time_ms = int((time.time() - start_time) * 1000)
             
+            coaching_prompt = _get_coaching_for_response(
+                session, request.session_id, request.query, "location_comparison_generic",
+                search_performed=False, data_source="gpt_generation", budget_alternatives_shown=False
+            )
             return ChatQueryResponse(
                 answer=response_text,
                 sources=[],
@@ -932,7 +989,8 @@ async def chat_query(request: ChatQueryRequest):
                 intent="location_comparison_generic",
                 refusal_reason=None,
                 response_time_ms=response_time_ms,
-                suggested_actions=["Explore properties in these areas", "Learn about other locations", "Get personalized recommendations"]
+                suggested_actions=["Explore properties in these areas", "Learn about other locations", "Get personalized recommendations"],
+                coaching_prompt=coaching_prompt
             )
         
         # Step 1.7: FUZZY PROJECT NAME DETECTION
@@ -1025,8 +1083,21 @@ async def chat_query(request: ChatQueryRequest):
                 except Exception as e:
                     logger.error(f"Failed to record interaction: {e}")
 
+                answer_text = "\n".join(response_parts)
+                
+                # Update session with messages
+                if session and request.session_id:
+                    session_manager.add_message(request.session_id, "user", original_query)
+                    session_manager.add_message(request.session_id, "assistant", answer_text[:500])
+                    session.last_intent = "project_details"
+                    session_manager.save_session(session)
+                
+                coaching_prompt = _get_coaching_for_response(
+                    session, request.session_id, request.query, "project_details",
+                    search_performed=False, data_source="database", budget_alternatives_shown=False
+                )
                 return ChatQueryResponse(
-                    answer="\n".join(response_parts),
+                    answer=answer_text,
                     sources=[{
                         "document": "projects_table",
                         "excerpt": f"Details for {project.get('name')}",
@@ -1036,7 +1107,8 @@ async def chat_query(request: ChatQueryRequest):
                     intent="project_details",
                     refusal_reason=None,
                     response_time_ms=0, # Calculated later if needed or placeholder
-                    suggested_actions=[]
+                    suggested_actions=[],
+                    coaching_prompt=coaching_prompt
                 )
             elif project:
                 # Specific question ("distance of airport from avalon")
@@ -1369,6 +1441,17 @@ async def chat_query(request: ChatQueryRequest):
                                 distance_info = f" (closest: {nearby_projects[0].get('_distance', 'N/A')} km)"
                                 answer_text = f"I found {len(nearby_projects)} properties within 10km of {location_name}{distance_info}. Here are the details:"
                                 
+                                # Update session with messages
+                                if session and request.session_id:
+                                    session_manager.add_message(request.session_id, "user", original_query)
+                                    session_manager.add_message(request.session_id, "assistant", answer_text[:500])
+                                    session.last_intent = "property_search"
+                                    session_manager.save_session(session)
+                                
+                                coaching_prompt = _get_coaching_for_response(
+                                    session, request.session_id, request.query, "property_search",
+                                    search_performed=True, data_source="database", budget_alternatives_shown=False
+                                )
                                 return ChatQueryResponse(
                                     answer=answer_text,
                                     projects=nearby_projects,
@@ -1377,7 +1460,8 @@ async def chat_query(request: ChatQueryRequest):
                                     intent="property_search",
                                     refusal_reason=None,
                                     response_time_ms=response_time_ms,
-                                    suggested_actions=[]
+                                    suggested_actions=[],
+                                    coaching_prompt=coaching_prompt
                                 )
                             else:
                                 logger.info(f"No projects found within 10km of {location_name}")
@@ -1392,15 +1476,29 @@ async def chat_query(request: ChatQueryRequest):
                     # No location found in context
                     logger.info("No location found in context for nearby search")
                     response_time_ms = int((time.time() - start_time) * 1000)
+                    answer_text = "• I'd be happy to show you **nearby properties**.\n• Please specify the **location** (e.g. **Whitefield**, **Sarjapur**).\n• Try: *'what else is available near Whitefield'* or *'show me properties around Sarjapur'*."
+                    
+                    # Update session with messages
+                    if session and request.session_id:
+                        session_manager.add_message(request.session_id, "user", original_query)
+                        session_manager.add_message(request.session_id, "assistant", answer_text[:500])
+                        session.last_intent = "property_search"
+                        session_manager.save_session(session)
+                    
+                    coaching_prompt = _get_coaching_for_response(
+                        session, request.session_id, request.query, "property_search",
+                        search_performed=False, data_source="gpt_generation", budget_alternatives_shown=False
+                    )
                     return ChatQueryResponse(
-                        answer="• I'd be happy to show you **nearby properties**.\n• Please specify the **location** (e.g. **Whitefield**, **Sarjapur**).\n• Try: *'what else is available near Whitefield'* or *'show me properties around Sarjapur'*.",
+                        answer=answer_text,
                         projects=[],
                         sources=[],
                         confidence="Medium",
                         intent="property_search",
                         refusal_reason=None,
                         response_time_ms=response_time_ms,
-                        suggested_actions=[]
+                        suggested_actions=[],
+                        coaching_prompt=coaching_prompt
                     )
             
             # Handle other intent types (more_details, specific_question, similar_properties)
@@ -1487,15 +1585,29 @@ async def chat_query(request: ChatQueryRequest):
                         project_id=request.project_id
                     )
 
+                answer_text = f"I found {len(search_results['projects'])} projects matching your criteria. Here are the details:"
+                
+                # Update session with messages
+                if session and request.session_id:
+                    session_manager.add_message(request.session_id, "user", original_query)
+                    session_manager.add_message(request.session_id, "assistant", answer_text[:500])
+                    session.last_intent = "property_search"
+                    session_manager.save_session(session)
+                
+                coaching_prompt = _get_coaching_for_response(
+                    session, request.session_id, request.query, "property_search",
+                    search_performed=True, data_source="database", budget_alternatives_shown=False
+                )
                 return ChatQueryResponse(
-                    answer=f"I found {len(search_results['projects'])} projects matching your criteria. Here are the details:",
+                    answer=answer_text,
                     projects=search_results["projects"],
                     sources=[],
                     confidence="High",
                     intent="property_search",
                     refusal_reason=None,
                     response_time_ms=response_time_ms,
-                    suggested_actions=[]
+                    suggested_actions=[],
+                    coaching_prompt=coaching_prompt
                 )
             
             elif intent == "project_facts":
@@ -1581,6 +1693,10 @@ async def chat_query(request: ChatQueryRequest):
 
                             logger.info(f"✅ Returned database project details for: {project.get('name')}")
 
+                            coaching_prompt = _get_coaching_for_response(
+                                session, request.session_id, request.query, "project_facts",
+                                search_performed=False, data_source="database", budget_alternatives_shown=False
+                            )
                             return ChatQueryResponse(
                                 answer=response_text,
                                 sources=[],
@@ -1589,7 +1705,8 @@ async def chat_query(request: ChatQueryRequest):
                                 refusal_reason=None,
                                 response_time_ms=response_time_ms,
                                 suggested_actions=["Schedule site visit", "View similar projects", "Get brochure"],
-                                projects=[project]
+                                projects=[project],
+                                coaching_prompt=coaching_prompt
                             )
                     except Exception as e:
                         logger.error(f"Error fetching project details: {e}")
@@ -1678,32 +1795,15 @@ async def chat_query(request: ChatQueryRequest):
                     session_manager.record_objection(request.session_id, objection_type)
                     logger.info(f"💡 Objection detected: {objection_type}")
                 
-                # Get coaching prompt based on conversation state
-                coaching_context = {
-                    "search_performed": data_source == "database",
-                    "budget_alternatives_shown": False,  # Will be set if alternatives shown
-                    "real_data_used": True,
-                    "query_type": intent
-                }
-                
-                coaching_prompt = director.get_coaching_prompt(
-                    session=session.model_dump() if hasattr(session, 'model_dump') else session.dict(),
-                    current_query=request.query,
-                    context=coaching_context
+                # Get coaching prompt via helper (includes template_vars and track)
+                coaching_prompt = _get_coaching_for_response(
+                    session, request.session_id, request.query, intent,
+                    search_performed=(data_source == "database"), data_source=data_source, budget_alternatives_shown=False
                 )
-                
                 if coaching_prompt:
                     logger.info(f"💡 COACHING: {coaching_prompt['type']} - {coaching_prompt['message']}")
-                    
-                    # Track that we showed this coaching prompt
-                    session_manager.track_coaching_prompt(
-                        request.session_id,
-                        coaching_prompt['type']
-                    )
-                    
                     # If high-priority coaching with suggested script, enhance response
-                    if coaching_prompt['priority'] in ['high', 'critical'] and coaching_prompt.get('suggested_script'):
-                        # Append coaching suggestion to response
+                    if coaching_prompt.get('priority') in ['high', 'critical'] and coaching_prompt.get('suggested_script'):
                         response_text += f"\n\n{coaching_prompt['suggested_script']}"
                         logger.info(f"✅ Enhanced response with coaching script")
                 
@@ -1752,7 +1852,6 @@ async def chat_query(request: ChatQueryRequest):
                                     alt_text += f"• {proj['name']} in {proj['location']}\n"
                             
                             response_text += alt_text
-                            coaching_context["budget_alternatives_shown"] = True
                             logger.info(f"✅ Added {alternatives['metadata']['total_alternatives']} budget alternatives to response")
                     
                     except Exception as e:
@@ -2199,6 +2298,19 @@ How can I assist you today?"""
                                     project_id=request.project_id
                                 )
                             
+                            # Update session with messages
+                            if session and request.session_id:
+                                session_manager.add_message(request.session_id, "user", original_query)
+                                session_manager.add_message(request.session_id, "assistant", response_text[:500])
+                                session.last_intent = "more_info_request"
+                                if extraction and extraction.get("topic"):
+                                    session.last_topic = extraction["topic"]
+                                session_manager.save_session(session)
+                            
+                            coaching_prompt = _get_coaching_for_response(
+                                session, request.session_id, request.query, "more_info_request",
+                                search_performed=False, data_source="gpt_generation", budget_alternatives_shown=False
+                            )
                             return ChatQueryResponse(
                                 answer=response_text,
                                 sources=[],
@@ -2206,7 +2318,8 @@ How can I assist you today?"""
                                 intent="gpt_more_info",
                                 refusal_reason=None,
                                 response_time_ms=response_time_ms,
-                                suggested_actions=[]
+                                suggested_actions=[],
+                                coaching_prompt=coaching_prompt
                             )
                         else:
                             # Project name found but no data in DB -> Fallback to Generic GPT

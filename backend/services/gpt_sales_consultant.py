@@ -255,15 +255,51 @@ def format_context_for_prompt(context: dict) -> str:
         lines.append(f"**OBJECTIONS RAISED:** {', '.join(context['objections_raised'])}")
         lines.append("")
 
-    # Current topic
+    # Current topic (prominent display)
     if context.get("last_topic"):
-        lines.append(f"**CURRENT TOPIC:** {context['last_topic']}")
+        lines.append(f"**CURRENT DISCUSSION TOPIC:** {context['last_topic']}")
         lines.append("")
 
     # Conversation phase
     if context.get("conversation_phase"):
         lines.append(f"**CONVERSATION PHASE:** {context['conversation_phase']}")
         lines.append("")
+
+    # Recent conversation summary (last 2-3 messages)
+    recent_messages = context.get("recent_messages", [])
+    if recent_messages:
+        lines.append("**RECENT CONVERSATION (for context inference):**")
+        # Show last 3 messages for context
+        for msg in recent_messages[-3:]:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")[:200]  # Truncate to avoid token overflow
+            if content:
+                lines.append(f"- {role.upper()}: {content}")
+        lines.append("")
+        
+        # Extract and list locations mentioned in recent messages
+        import re
+        locations_mentioned = set()
+        common_locations = ["whitefield", "sarjapur", "electronic city", "koramangala", "indiranagar", "marathahalli", "hebbal", "yelahanka", "bellandur", "varthur"]
+        for msg in recent_messages:
+            content = msg.get("content", "").lower()
+            for loc in common_locations:
+                if loc in content:
+                    locations_mentioned.add(loc.title())
+        if locations_mentioned:
+            lines.append(f"**LOCATIONS MENTIONED IN CONVERSATION:** {', '.join(sorted(locations_mentioned))}")
+            lines.append("")
+        
+        # Extract project names mentioned
+        projects_mentioned = set()
+        if context.get("last_shown_projects"):
+            for proj in context["last_shown_projects"]:
+                projects_mentioned.add(proj.get("name", ""))
+        if context.get("interested_projects"):
+            projects_mentioned.update(context["interested_projects"])
+        if projects_mentioned:
+            lines.append(f"**PROJECTS MENTIONED IN CONVERSATION:** {', '.join(sorted(projects_mentioned))}")
+            lines.append("")
 
     # Messages count
     if context.get("messages_count"):
@@ -336,6 +372,8 @@ async def call_gpt_consultant(
 
     system_prompt = f"""You are a senior real estate sales consultant at Pinclick, having a live conversation with a potential homebuyer in Bangalore.
 
+🚨 CRITICAL: You have FULL ACCESS to the conversation history below. EVERYTHING the user has said is in the conversation history. NEVER say "I don't have the details" or ask for information that was already provided. ALWAYS infer from conversation history.
+
 CONVERSATION CONTEXT:
 {context_section}
 
@@ -350,6 +388,42 @@ CRITICAL RULES:
 5. **SALES-FOCUSED**: Guide toward decision, site visit, or next step
 6. **HONEST**: Don't invent facts not in context - acknowledge if you don't have specific info
 7. **🆕 SENTIMENT-ADAPTIVE**: Match your tone to their emotional state (see tone adaptation above)
+8. **NEVER ADMIT CONTEXT LOSS - ABSOLUTE RULE**: This is CRITICAL. You MUST NEVER say:
+   - "I don't have the details"
+   - "I'm sorry I don't have"
+   - "Could you provide more information"
+   - "I don't have the details of your previous message"
+   - "I need more context"
+   - "It seems there was no prior context"
+   - "Could you please share more details"
+   - Any variation of asking for information that was already provided
+   
+   INSTEAD: ALWAYS check the conversation history above. The conversation history contains EVERYTHING the user has said. If they said "Whitefield" or "Sarjapur" in a previous message, it's in the history. Use it.
+
+9. **CONTEXT INFERENCE - MANDATORY**: When user says vague phrases, you MUST infer from conversation history:
+   
+   **Example 1**: User says "explore properties in these areas"
+   - Check conversation history for location mentions (Whitefield, Sarjapur, Marathahalli, etc.)
+   - If you see "Whitefield" and "Sarjapur" in recent messages → Respond: "I'd be happy to show you properties in **Whitefield** and **Sarjapur**..."
+   - NEVER say "I don't have the details of which areas"
+   
+   **Example 2**: User says "show nearby" or "SHOW NEARBY"
+   - Check conversation history for the last location mentioned
+   - If you see "Marathahalli" in a recent message → Respond: "Let me find properties near **Marathahalli**..."
+   - NEVER say "I need more context about the location"
+   
+   **Example 3**: User says "more" or "tell me more"
+   - Check conversation history for the last topic/project discussed
+   - If last message was about "SBR Minara" → Continue discussing SBR Minara
+   - NEVER say "I don't have details of your previous message"
+   
+   **HOW TO INFER**:
+   1. Read the conversation history messages above (they show role and content)
+   2. Extract locations, projects, topics mentioned
+   3. Use them in your response as if you fully understand
+   4. If conversation history shows "Whitefield" and "Sarjapur" were discussed, and user says "these areas", you KNOW they mean Whitefield and Sarjapur
+   
+   **REMEMBER**: The conversation history is YOUR MEMORY. Everything the user said is there. Use it.
 
 CONVERSATION STYLE:
 - Consultative, not salesy

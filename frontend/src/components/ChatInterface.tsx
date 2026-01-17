@@ -11,7 +11,7 @@ import { FilterPanel } from './FilterPanel';
 import { QuickReplies, getQuickRepliesForIntent } from './QuickReplies';
 import { Send, Loader2, Sparkles, User, AlertCircle, Zap } from '@/components/icons';
 // Phase 1: Scheduling components
-import { ScheduleVisitModal, CallbackRequestButton } from './scheduling';
+import { ScheduleVisitModal } from './scheduling';
 // Phase 2: Enhanced UX components
 import { WelcomeBackBanner, ProactiveNudgeCard, UrgencySignals, SentimentIndicator } from './enhanced-ux';
 // Phase 3: Sales Coaching components
@@ -678,9 +678,6 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                     </p>
                 </div>
             </div>
-
-            {/* Phase 1: Floating Callback Request Button */}
-            <CallbackRequestButton userId={userId} sessionId={sessionId} />
 
             {/* Phase 1: Schedule Visit Modal */}
             {selectedProjectForSchedule && (

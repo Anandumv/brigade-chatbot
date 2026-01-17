@@ -340,21 +340,74 @@ def generate_contextual_response_with_full_history(
     if session_context.get("objections_raised"):
         context_parts.append(f"**Objections:** {', '.join(session_context['objections_raised'])}")
     
+    # Add recent message content for context inference
+    if conversation_history:
+        context_parts.append("**RECENT CONVERSATION (for context inference):**")
+        # Show last 3 messages for context
+        for msg in conversation_history[-3:]:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")[:200]  # Truncate to avoid token overflow
+            if content:
+                context_parts.append(f"- {role.upper()}: {content}")
+        
+        # Extract locations mentioned in recent messages
+        import re
+        locations_mentioned = set()
+        common_locations = ["whitefield", "sarjapur", "electronic city", "koramangala", "indiranagar", "marathahalli", "hebbal", "yelahanka", "bellandur", "varthur"]
+        for msg in conversation_history:
+            content = msg.get("content", "").lower()
+            for loc in common_locations:
+                if loc in content:
+                    locations_mentioned.add(loc.title())
+        if locations_mentioned:
+            context_parts.append(f"**LOCATIONS MENTIONED IN CONVERSATION:** {', '.join(sorted(locations_mentioned))}")
+    
     context_str = "\n".join(context_parts) if context_parts else "New conversation"
     
     # Build system prompt
     system_prompt = f"""You are an AI real estate sales assistant for Pinclick in Bangalore.
 
+🚨 CRITICAL: You have FULL ACCESS to the conversation history below. EVERYTHING the user has said is in the conversation history. NEVER say "I don't have the details" or ask for information that was already provided. ALWAYS infer from conversation history.
+
 {context_str}
 
 **YOUR CRITICAL INSTRUCTIONS:**
 1. NEVER ask clarifying questions like "What would you like to know?" or "Could you clarify?"
-2. Use the conversation context to infer what the user wants
-3. Continue the conversation naturally as if you fully understand the context
-4. If the user asks vague questions like "give more points", provide relevant information about the current topic/project
-5. Be helpful, informative, and sales-focused
-6. If uncertain, provide general helpful information and guide toward specific topics
-7. 8-12 bullets max. Scannable.
+2. **NEVER ADMIT CONTEXT LOSS - ABSOLUTE RULE**: You MUST NEVER say:
+   - "I don't have the details"
+   - "I'm sorry I don't have"
+   - "Could you provide more information"
+   - "I don't have the details of your previous message"
+   - "I need more context"
+   - "It seems there was no prior context"
+   - "Could you please share more details"
+   - Any variation of asking for information that was already provided
+   
+   INSTEAD: ALWAYS check the conversation history above. If the user mentioned "Whitefield" or "Marathahalli" in a previous message, it's in the history. Use it.
+3. Use the conversation context to infer what the user wants
+4. Continue the conversation naturally as if you fully understand the context
+5. **CONTEXT INFERENCE - MANDATORY**: When user says vague phrases, you MUST infer from conversation history:
+   
+   **Example**: User says "explore properties in these areas"
+   - Check conversation history messages for location mentions (Whitefield, Sarjapur, Marathahalli, etc.)
+   - If you see "Whitefield" and "Sarjapur" in recent messages → Respond: "I'd be happy to show you properties in **Whitefield** and **Sarjapur**..."
+   - NEVER say "I don't have the details of which areas"
+   
+   **Example**: User says "show nearby" or "SHOW NEARBY"
+   - Check conversation history for the last location mentioned
+   - If you see "Marathahalli" in a recent message → Respond: "Let me find properties near **Marathahalli**..."
+   - NEVER say "I need more context about the location"
+   
+   **HOW TO INFER**:
+   1. Read the conversation history messages above (they show role and content)
+   2. Extract locations, projects, topics mentioned
+   3. Use them in your response as if you fully understand
+   4. If conversation history shows locations were discussed, and user says "these areas", you KNOW what they mean
+   
+   **REMEMBER**: The conversation history is YOUR MEMORY. Everything the user said is there. Use it.
+6. Be helpful, informative, and sales-focused
+7. If uncertain, provide general helpful information and guide toward specific topics
+8. 8-12 bullets max. Scannable.
 
 **Your Goal:** {goal}
 
@@ -362,7 +415,8 @@ def generate_contextual_response_with_full_history(
 - **ALWAYS use bullet points.** **Bold** key terms (project names, prices, configs). No paragraphs. For sales people on calls.
 - Be persuasive but honest
 - End with a gentle call-to-action or question to keep conversation flowing
-- Reference the conversation context naturally"""
+- Reference the conversation context naturally
+- You have full access to the conversation history above - use it to understand what the user is referring to"""
 
     # Build messages with history
     messages = [{"role": "system", "content": system_prompt}]

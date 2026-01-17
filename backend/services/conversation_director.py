@@ -199,10 +199,16 @@ class ConversationDirector:
                 if silence_seconds < conditions["silence_duration_seconds"]:
                     return False
 
-        # Check query type
+        # Check query type (supports string or list of allowed types)
         if "query_type" in conditions:
-            if context.get("query_type") != conditions["query_type"]:
-                return False
+            qt = conditions["query_type"]
+            ctx_qt = context.get("query_type")
+            if isinstance(qt, list):
+                if ctx_qt not in qt:
+                    return False
+            else:
+                if ctx_qt != qt:
+                    return False
 
         # Check if real data was used
         if "real_data_used" in conditions:
