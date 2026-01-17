@@ -12,6 +12,72 @@ from services.session_manager import ConversationSession
 logger = logging.getLogger(__name__)
 
 
+# Generic question patterns that should NEVER get project context
+GENERIC_PATTERNS = [
+    # Finance terms
+    "what is emi", "how to calculate emi", "emi calculator", "calculate emi",
+    "what is home loan", "how to apply loan", "loan eligibility", "loan process",
+    "interest rate", "down payment", "processing fee", "loan tenure",
+    "home loan interest", "emi calculation", "loan amount",
+    
+    # Legal/Process
+    "what is rera", "how to register", "stamp duty", "registration fee",
+    "registration process", "legal documents", "sale deed", "agreement",
+    "property registration", "title deed", "encumbrance certificate",
+    
+    # General real estate
+    "what is carpet area", "what is built up area", "super built up",
+    "difference between", "what is the difference", "how to",
+    "what is the process", "what does", "how does", "why is",
+    
+    # Services
+    "who is pinclick", "what services", "how do you help", "what do you do",
+    "your commission", "fees", "charges", "how pinclick", "pinclick services",
+    
+    # General questions
+    "what is", "how to", "why is", "when to", "who is", "where is"
+]
+
+
+def is_generic_question(query: str) -> bool:
+    """
+    Check if query is a generic question that shouldn't use project context.
+    
+    Generic questions are about general topics (EMI, RERA, loans, etc.) that
+    should receive generic answers, NOT be forced into project-specific context.
+    
+    Examples:
+    - "What is EMI?" → Generic (True)
+    - "How to apply for loan?" → Generic (True)
+    - "What is RERA?" → Generic (True)
+    - "give more points" → Not Generic (False) - should use context
+    - "tell me more" → Not Generic (False) - should use context
+    """
+    query_lower = query.lower().strip()
+    
+    # Check against generic patterns
+    for pattern in GENERIC_PATTERNS:
+        if pattern in query_lower:
+            return True
+    
+    # Check for question words WITHOUT property context
+    question_words = ["what is", "how to", "why is", "when to", "who is", "where is", 
+                     "what are", "how do", "what does", "how does"]
+    property_words = ["project", "property", "apartment", "flat", "home", "villa", 
+                     "this", "that", "about", "citrine", "avalon", "brigade", "sobha",
+                     "here", "these", "those"]
+    
+    has_question_word = any(qw in query_lower for qw in question_words)
+    has_property_context = any(pw in query_lower for pw in property_words)
+    
+    # If it's a question WITHOUT property words → Generic
+    # e.g., "What is EMI?" has "what is" but no property words → Generic
+    if has_question_word and not has_property_context:
+        return True
+    
+    return False
+
+
 def is_vague_query(query: str) -> bool:
     """
     Determine if a query is too vague and needs context enrichment.
@@ -20,13 +86,19 @@ def is_vague_query(query: str) -> bool:
     - Very short (< 5 words)
     - Follow-up questions without subjects
     - Requests for "more info" without specifying what
+    
+    NOTE: Generic questions are NOT vague - they're specific about general topics.
     """
+    # FIRST: Check if it's a generic question
+    if is_generic_question(query):
+        return False  # NOT vague, it's specific about a general topic
+    
     query_lower = query.lower().strip()
     word_count = len(query.split())
     
     # Short queries that might be vague
     if word_count < 5:
-        # Check for vague patterns
+        # Check for vague patterns (property-related follow-ups)
         vague_patterns = [
             "give more points",
             "more points",
@@ -43,6 +115,8 @@ def is_vague_query(query: str) -> bool:
             "tell more",
             "give more",
             "show more",
+            "show similar",
+            "similar properties",
             "more",
             "how about",
             "what about",
@@ -98,6 +172,12 @@ def enrich_query_with_context(
         Tuple of (enriched_query, was_enriched)
     """
     if not session:
+        return query, False
+    
+    # CRITICAL: Don't enrich generic questions
+    # Generic questions like "What is EMI?" should remain generic
+    if is_generic_question(query):
+        logger.info(f"Skipping context injection for generic question: '{query}'")
         return query, False
     
     # Don't enrich if query already has explicit project mention
@@ -193,8 +273,14 @@ def should_use_gpt_fallback(
     Use GPT fallback when:
     1. Query is vague AND session has context AND confidence is low
     2. This prevents asking clarifying questions when context exists
+    
+    NOTE: Generic questions should NOT use GPT fallback with project context.
     """
     if not session:
+        return False
+    
+    # Generic questions should be handled normally, not with project context fallback
+    if is_generic_question(query):
         return False
     
     # If confidence is high, trust the handler

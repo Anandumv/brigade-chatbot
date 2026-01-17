@@ -995,7 +995,7 @@ How can I assist you today?"""
             # Create a context summary for the LLM
             if full_projects:
                 project_context = "\n".join([
-                    f"- {p['project_name']} ({p.get('status')}): {p.get('location')}. Price: {p['price_range']['min_display']} - {p['price_range']['max_display']}. {p.get('highlights')}"
+                    f"- {p['project_name']} ({p.get('status')}): {p.get('location')}. Price: {p['price_range']['min_display']} - {p['price_range']['max_display']}. Config: {p.get('config_summary')}. {p.get('highlights')}"
                     for p in full_projects[:5] # Limit context
                 ])
                 system_prompt = f"You are a helpful sales assistant. The user is looking for properties. Here are the matches:\n{project_context}\n\nSummarize these options briefly and ask if they'd like to schedule a visit."
