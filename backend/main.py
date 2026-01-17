@@ -502,7 +502,7 @@ How can I assist you today?"""
                     intent="intelligent_sales_faq",
                     refusal_reason=None,
                     response_time_ms=response_time_ms,
-                    suggested_actions=actions
+                    suggested_actions=[]
                 )
 
         # Step 1.6b: Handle meeting_request intent - GPT generates response
@@ -535,7 +535,7 @@ How can I assist you today?"""
                     intent="meeting_request",
                     refusal_reason=None,
                     response_time_ms=response_time_ms,
-                    suggested_actions=["Schedule now", "Call me back", "Later"]
+                    suggested_actions=[]
                 )
             except Exception as e:
                 logger.error(f"GPT meeting generation failed: {e}")
@@ -571,7 +571,7 @@ How can I assist you today?"""
                     intent="intelligent_sales_objection",
                     refusal_reason=None,
                     response_time_ms=response_time_ms,
-                    suggested_actions=actions
+                    suggested_actions=[]
                 )
 
         # Step 1.8: Handle more_info_request with GPT content generation
@@ -664,7 +664,7 @@ How can I assist you today?"""
                                 intent="gpt_more_info",
                                 refusal_reason=None,
                                 response_time_ms=response_time_ms,
-                                suggested_actions=["Schedule site visit", "Compare with other projects", "Get pricing details"]
+                                suggested_actions=[]
                             )
                         else:
                             # Project name found but no data in DB -> Fallback to Generic GPT
@@ -700,7 +700,7 @@ How can I assist you today?"""
                     intent="gpt_general_fallback",
                     refusal_reason=None,
                     response_time_ms=int((time.time() - start_time) * 1000),
-                    suggested_actions=["Search properties", "View projects", "Contact us"]
+                    suggested_actions=[]
                 )
             except Exception as e:
                 logger.error(f"Generic GPT fallback failed: {e}")
@@ -779,7 +779,7 @@ How can I assist you today?"""
                     intent="gpt_general",
                     refusal_reason=None,
                     response_time_ms=response_time_ms,
-                    suggested_actions=["Search properties", "Schedule meeting", "Get more info"]
+                    suggested_actions=[]
                 )
             except Exception as e:
                 logger.error(f"GPT general response failed: {e}")
