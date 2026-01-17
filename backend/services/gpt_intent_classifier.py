@@ -110,12 +110,14 @@ def _build_system_prompt() -> str:
 **1. Classify the intent into one of:**
    - property_search: User wants to find properties (by config/budget/location)
    - project_details: User asks about specific project facts (RERA, developer, possession, price, amenities list)
-   - more_info_request: User wants additional insights BEYOND basic facts (investment pitch, sustainability elaboration, location advantages, "more pointers")
+   - more_info_request: User wants additional insights, elaboration, or "more points/pointers" about a project (investment pitch, sustainability, location advantages, "more pointers", "give more points", "tell me more", "elaborate")
    - sales_objection: User has concerns (price too high, location too far, possession too late, don't trust UC)
-   - site_visit: User wants to schedule a visit
+   - meeting_request: User asks about scheduling meetings or HOW to meet/book/schedule ("how do I schedule", "how to book meeting", "face to face meeting", "arrange meeting", "setup meeting")
+   - site_visit: User wants to visit a property site
+   - sales_faq: User asks about sales process, Pinclick services, general real estate FAQs
    - comparison: User wants to compare 2+ projects
    - greeting: User greeting (hi, hello, good morning, etc.)
-   - unsupported: Out-of-scope queries (future predictions, ROI estimates, legal advice)
+   - unsupported: Out-of-scope queries (politics, sports, weather, future predictions, legal advice)
 
 **2. Determine data_source:**
    - "database": ALWAYS use for property_search and project_details. Includes: configs, prices, RERA, developer, location, possession, amenities list

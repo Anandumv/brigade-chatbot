@@ -369,6 +369,43 @@ How can I assist you today?"""
                     suggested_actions=actions
                 )
 
+        # Step 1.6b: Handle meeting_request intent
+        if intent == "meeting_request":
+            logger.info("Routing to meeting request handler")
+            response_time_ms = int((time.time() - start_time) * 1000)
+            
+            meeting_response = """📅 **Let's Schedule Your Meeting!**
+
+I can help you arrange a meeting with our property consultant. Here's how:
+
+**Meeting Options:**
+🏢 **Office Visit** - Meet at our office for a detailed discussion
+🏗️ **Site Visit** - Visit the property site in person
+💻 **Video Call** - Quick virtual meeting at your convenience
+
+**To schedule:**
+1. Share your preferred date and time
+2. Tell me your contact number or email
+3. I'll confirm the appointment
+
+**What's included:**
+✓ Personalized property recommendations
+✓ Detailed pricing and payment plans
+✓ Documentation assistance
+✓ No obligation - just exploration!
+
+👉 **When would you like to meet? Share your preferred date/time!**"""
+            
+            return ChatQueryResponse(
+                answer=meeting_response,
+                sources=[],
+                confidence="High",
+                intent="meeting_request",
+                refusal_reason=None,
+                response_time_ms=response_time_ms,
+                suggested_actions=["Schedule now", "Call me back", "Later"]
+            )
+
         # Step 1.7: Handle sales objection intents with intelligent handler
         if intent == "sales_objection":
             logger.info("Routing to intelligent sales objection handler")
