@@ -1340,30 +1340,31 @@ async def chat_query(request: ChatQueryRequest):
                     except Exception as e:
                         logger.error(f"Error updating user profile: {e}")
                 
-                # ========================================
-                # 🆕 PROACTIVE NUDGING
-                # Detect patterns and generate smart nudges
-                # ========================================
-                try:
-                    from services.proactive_nudger import get_proactive_nudger
-                    
-                    nudger = get_proactive_nudger()
-                    nudge = nudger.detect_patterns_and_nudge(
-                        user_profile=user_profile,
-                        session=session,
-                        current_query=request.query
-                    )
-                    
-                    if nudge:
-                        # Add nudge to response
-                        nudge_message = f"\n\n{nudge['message']}"
-                        response_text += nudge_message
-                        
-                        logger.info(f"🎯 PROACTIVE NUDGE SHOWN: {nudge['type']} (priority: {nudge['priority']})")
+        # ========================================
+        # 🆕 PROACTIVE NUDGING
+        # Detect patterns and generate smart nudges
+        # ========================================
+        detected_nudge = None  # Store nudge for structured data return
+        try:
+            from services.proactive_nudger import get_proactive_nudger
+            
+            nudger = get_proactive_nudger()
+            detected_nudge = nudger.detect_patterns_and_nudge(
+                user_profile=user_profile,
+                session=session,
+                current_query=request.query
+            )
+            
+            if detected_nudge:
+                # Add nudge to response
+                nudge_message = f"\n\n{detected_nudge['message']}"
+                response_text += nudge_message
                 
-                except Exception as e:
-                    logger.error(f"Error in proactive nudging: {e}")
-                    # Don't fail the request if nudging fails
+                logger.info(f"🎯 PROACTIVE NUDGE SHOWN: {detected_nudge['type']} (priority: {detected_nudge['priority']})")
+        
+        except Exception as e:
+            logger.error(f"Error in proactive nudging: {e}")
+            # Don't fail the request if nudging fails
                 
                 # ========================================
                 # 🆕 SCHEDULING INTENT DETECTION
@@ -2102,6 +2103,79 @@ How can I assist you today?"""
         else:
              logger.info("DEBUG: full_projects is empty or None")
 
+        # ========================================
+        # 🆕 PREPARE ENHANCED UX DATA FOR FRONTEND
+        # Collect all structured data for Phase 2 components
+        # ========================================
+        enhanced_ux_data = {}
+        
+        # 1. Proactive Nudge (if generated)
+        if detected_nudge:
+            enhanced_ux_data["nudge"] = detected_nudge
+            logger.info(f"📦 Returning nudge in structured data: {detected_nudge['type']}")
+        
+        # 2. Sentiment Data (if analyzed)
+        try:
+            if sentiment_analysis:
+                sentiment_data = {
+                    "sentiment": sentiment_analysis.get("sentiment", "neutral"),
+                    "frustration_score": sentiment_analysis.get("frustration_level", 0),
+                    "escalation_recommended": sentiment_analysis.get("frustration_level", 0) >= 7,
+                    "escalation_reason": None,
+                    "confidence": sentiment_analysis.get("confidence", 0.8),
+                }
+                
+                # Get escalation reason if recommended
+                if sentiment_data["escalation_recommended"]:
+                    from services.sentiment_analyzer import get_sentiment_analyzer
+                    analyzer = get_sentiment_analyzer()
+                    tone_adjustment = analyzer.get_tone_adjustment(
+                        sentiment_data["sentiment"],
+                        sentiment_data["frustration_score"]
+                    )
+                    if tone_adjustment.get("escalation_recommended"):
+                        sentiment_data["escalation_reason"] = tone_adjustment.get(
+                            "escalation_message",
+                            "High frustration level detected. Human assistance recommended."
+                        )
+                
+                enhanced_ux_data["sentiment"] = sentiment_data
+                logger.info(f"📦 Returning sentiment in structured data: {sentiment_data['sentiment']}")
+        except Exception as e:
+            logger.error(f"Error preparing sentiment data: {e}")
+        
+        # 3. Urgency Signals (if generated)
+        try:
+            if urgency_signals and len(urgency_signals) > 0:
+                # Convert to frontend format
+                formatted_signals = []
+                for signal in urgency_signals[:2]:  # Top 2 signals
+                    formatted_signals.append({
+                        "type": signal.get("type", "low_inventory"),
+                        "message": signal.get("message", ""),
+                        "priority_score": signal.get("priority_score", 5),
+                        "icon": signal.get("icon"),
+                    })
+                enhanced_ux_data["urgency_signals"] = formatted_signals
+                logger.info(f"📦 Returning {len(formatted_signals)} urgency signals in structured data")
+        except Exception as e:
+            logger.error(f"Error preparing urgency signals data: {e}")
+        
+        # 4. User Profile Data (if available)
+        try:
+            if user_profile and request.user_id:
+                profile_data = {
+                    "is_returning_user": user_profile.viewed_projects_count > 0 if hasattr(user_profile, 'viewed_projects_count') else False,
+                    "last_visit_date": user_profile.last_visit_date.isoformat() if hasattr(user_profile, 'last_visit_date') and user_profile.last_visit_date else None,
+                    "viewed_projects_count": user_profile.viewed_projects_count if hasattr(user_profile, 'viewed_projects_count') else 0,
+                    "interests": user_profile.interests if hasattr(user_profile, 'interests') else [],
+                    "lead_score": user_profile.lead_score if hasattr(user_profile, 'lead_score') else None,
+                }
+                enhanced_ux_data["user_profile"] = profile_data
+                logger.info(f"📦 Returning user profile in structured data: returning_user={profile_data['is_returning_user']}")
+        except Exception as e:
+            logger.error(f"Error preparing user profile data: {e}")
+
         return ChatQueryResponse(
             answer=result["answer"],
             sources=[SourceInfo(**source) for source in result["sources"]],
@@ -2109,7 +2183,8 @@ How can I assist you today?"""
             intent=intent,
             refusal_reason=None,
             response_time_ms=response_time_ms,
-            projects=full_projects
+            projects=full_projects,
+            data=enhanced_ux_data if enhanced_ux_data else None  # Include enhanced UX data
         )
 
     except Exception as e:
