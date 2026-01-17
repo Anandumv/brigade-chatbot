@@ -133,8 +133,12 @@ def _build_system_prompt() -> str:
    - budget_max: Number in lakhs (convert crores to lakhs: 2 Cr = 200 lakhs)
    - budget_min: Number in lakhs (if range specified)
    - location: Locality/area name (Whitefield, Sarjapur, East Bangalore, etc.)
-   - project_name: Specific project if mentioned (Brigade Citrine, Sobha Neopolis, etc.)
-   - topic: For more_info_request (sustainability, investment, location_advantages, amenities_benefits, general)
+   - project_name: ALWAYS extract full project name even from partial mentions:
+     * "avalon" or "Brigade Avalon" → "Brigade Avalon"
+     * "citrine" or "Citrine" → "Brigade Citrine"
+     * "neopolis" → "Sobha Neopolis"
+     * Any other partial name → full project name if recognizable
+   - topic: For more_info_request (sustainability, investment, location_advantages, amenities_benefits, general_selling_points)
    - objection_type: For sales_objection (budget, location, possession, trust)
 
 **4. Return JSON format:**
@@ -194,6 +198,17 @@ Query: "What is the RERA number for Sobha Neopolis?"
   "confidence": 0.98,
   "reasoning": "RERA number is structured fact in database",
   "extraction": {"project_name": "Sobha Neopolis", "fact_type": "rera_number"}
+}
+```
+
+Query: "more pointers on avalon"
+```json
+{
+  "intent": "more_info_request",
+  "data_source": "gpt_generation",
+  "confidence": 0.90,
+  "reasoning": "User wants additional selling points about Brigade Avalon project",
+  "extraction": {"project_name": "Brigade Avalon", "topic": "general_selling_points"}
 }
 ```
 
