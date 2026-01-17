@@ -1355,24 +1355,24 @@ async def chat_query(request: ChatQueryRequest):
                 # ========================================
                 detected_nudge = None  # Store nudge for structured data return
                 try:
-            from services.proactive_nudger import get_proactive_nudger
-            
-            nudger = get_proactive_nudger()
-            detected_nudge = nudger.detect_patterns_and_nudge(
-                user_profile=user_profile,
-                session=session,
-                current_query=request.query
-            )
-            
-            if detected_nudge:
-                # Add nudge to response
-                nudge_message = f"\n\n{detected_nudge['message']}"
-                response_text += nudge_message
+                    from services.proactive_nudger import get_proactive_nudger
+                    
+                    nudger = get_proactive_nudger()
+                    detected_nudge = nudger.detect_patterns_and_nudge(
+                        user_profile=user_profile,
+                        session=session,
+                        current_query=request.query
+                    )
+                    
+                    if detected_nudge:
+                        # Add nudge to response
+                        nudge_message = f"\n\n{detected_nudge['message']}"
+                        response_text += nudge_message
+                        
+                        logger.info(f"🎯 PROACTIVE NUDGE SHOWN: {detected_nudge['type']} (priority: {detected_nudge['priority']})")
                 
-                logger.info(f"🎯 PROACTIVE NUDGE SHOWN: {detected_nudge['type']} (priority: {detected_nudge['priority']})")
-        
-        except Exception as e:
-            logger.error(f"Error in proactive nudging: {e}")
+                except Exception as e:
+                    logger.error(f"Error in proactive nudging: {e}")
             # Don't fail the request if nudging fails
                 
                 # ========================================
