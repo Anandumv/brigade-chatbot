@@ -379,7 +379,8 @@ class IntelligentSalesHandler:
         visit_patterns = [
             "site visit", "visit site", "see the property", "visit property",
             "schedule visit", "arrange visit", "book visit", "want to visit",
-            "can i visit", "show me the property", "see the flat", "see the project"
+            "can i visit", "show me the property", "see the flat", "see the project",
+            "setup visit", "setup site visit", "set up visit", "plan visit"
         ]
         if any(p in query_lower for p in visit_patterns):
             return SalesIntent.FAQ_SITE_VISIT
