@@ -45,19 +45,19 @@ def format_configuration_table(config_raw: str) -> str:
         return f"**Config:** {cleaned}"
         
     # Build table
-    table_lines = []
-    table_lines.append("\n| Configuration | Size (sq.ft) | Price |")
-    table_lines.append("| :--- | :--- | :--- |")
+    # Build clean list instead of table (User preference & mobile friendly)
+    list_lines = []
     
     for group in groups:
         parts = [p.strip() for p in group.split(',')]
         if len(parts) >= 3:
             config, size, price = parts[0], parts[1], parts[2]
-            table_lines.append(f"| {config} | {size} | {price} |")
+            # Format: "  - **2 BHK**: 1127 - 1461 sq.ft • ₹2.20 Cr*"
+            list_lines.append(f"  - **{config}**: {size} sq.ft • {price}")
         elif len(parts) >= 1:
-            table_lines.append(f"| {parts[0]} | - | - |")
+            list_lines.append(f"  - {parts[0]}")
              
-    return "\n".join(table_lines) + "\n"
+    return "\n".join(list_lines) + "\n"
 
 # --- SYSTEM PROMPT ---
 STRICT_SYSTEM_PROMPT = """
