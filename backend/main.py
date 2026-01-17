@@ -1075,6 +1075,14 @@ async def chat_query(request: ChatQueryRequest):
             if intent == "property_search":
                 logger.info("🔹 PATH 1: Database - Property Search")
 
+                # Ensure hybrid_retrieval is available (safety check)
+                try:
+                    if 'hybrid_retrieval' not in globals() or hybrid_retrieval is None:
+                        from services.hybrid_retrieval import hybrid_retrieval
+                except ImportError as e:
+                    logger.error(f"Failed to import hybrid_retrieval: {e}")
+                    raise HTTPException(status_code=500, detail="Service unavailable: hybrid_retrieval")
+
                 # Perform Hybrid Retrieval
                 search_results = await hybrid_retrieval.search_with_filters(
                     query=request.query,
