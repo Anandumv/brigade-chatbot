@@ -100,6 +100,9 @@ def _create_projects_table():
         'description': pxt.String,
         'amenities': pxt.String,         # JSON array as string
         'usp': pxt.String,               # Unique selling points
+        'rm_details': pxt.Json,
+        'brochure_url': pxt.String,
+        'registration_process': pxt.String,
     })
     
     logger.info("Created brigade.projects table")

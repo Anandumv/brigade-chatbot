@@ -227,6 +227,9 @@ async def admin_refresh_projects(x_admin_key: str = Header(None)):
             'description': pxt.String,
             'amenities': pxt.String,
             'usp': pxt.String,
+            'rm_details': pxt.Json,
+            'brochure_url': pxt.String,
+            'registration_process': pxt.String,
         }
         
         projects = pxt.create_table('brigade.projects', schema)
