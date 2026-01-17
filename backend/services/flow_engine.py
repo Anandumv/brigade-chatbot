@@ -514,13 +514,31 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
             # Generate detailed pitch for the selected project
             proj = target_project
             pitch_parts = [f"🏠 **{proj.get('name')}** - Here's everything you need to know:\n\n"]
+            
+            # Developer (trust signal)
+            if proj.get('developer'):
+                pitch_parts.append(f"**🏗️ Developer:** {proj.get('developer')}\n")
+            
             pitch_parts.append(f"**📍 Location:** {proj.get('location')}\n")
             pitch_parts.append(f"**💰 Price Range:** ₹{proj.get('budget_min', 0)/100:.2f} - ₹{proj.get('budget_max', 0)/100:.2f} Cr\n")
-            pitch_parts.append(f"**🏗️ Status:** {proj.get('status')}\n")
+            
+            # Configuration (BHK types)
+            if proj.get('configuration'):
+                config_display = clean_configuration_string(proj.get('configuration', ''))
+                pitch_parts.append(f"**🛏️ Configuration:** {config_display}\n")
+            
+            pitch_parts.append(f"**📊 Status:** {proj.get('status')}\n")
             pitch_parts.append(f"**📅 Possession:** {proj.get('possession_quarter')} {proj.get('possession_year')}\n")
             
             if proj.get('rera_number'):
                 pitch_parts.append(f"**📋 RERA:** {proj.get('rera_number')}\n")
+            
+            # Description if available
+            if proj.get('description') and len(proj.get('description', '')) > 10:
+                desc = proj.get('description', '')[:300]
+                if len(proj.get('description', '')) > 300:
+                    desc += "..."
+                pitch_parts.append(f"\n**📝 About:**\n{desc}\n")
             
             if proj.get('usp'):
                 pitch_parts.append(f"\n**✨ Why this property?**\n{proj.get('usp')}\n")
@@ -528,6 +546,10 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
             if proj.get('amenities'):
                 amenities = proj.get('amenities', '').replace("[", "").replace("]", "").replace("'", "")
                 pitch_parts.append(f"\n**🎯 Key Amenities:** {amenities}\n")
+            
+            # Highlights if available
+            if proj.get('highlights') and len(proj.get('highlights', '')) > 10:
+                pitch_parts.append(f"\n**💎 Highlights:** {proj.get('highlights')}\n")
             
             pitch_parts.append("\n👉 **Ready to see it in person? Schedule a site visit!**")
             action = "".join(pitch_parts)
