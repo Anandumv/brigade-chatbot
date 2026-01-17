@@ -568,5 +568,128 @@ class HybridRetrievalService:
         matches.sort(key=lambda x: x.get('_distance', 999))
         return matches
 
+    async def get_budget_alternatives(
+        self,
+        original_filters: PropertyFilters,
+        budget_adjustment_percent: float = 20.0,
+        max_results: int = 3
+    ) -> Dict[str, Any]:
+        """
+        Get proactive budget alternatives when customer shows budget concerns.
+        
+        Returns projects that are:
+        1. Lower budget (more affordable)
+        2. Slightly higher budget (better value)
+        3. Same budget in emerging areas (better appreciation)
+        
+        Args:
+            original_filters: Customer's original search filters
+            budget_adjustment_percent: How much to adjust budget (default 20%)
+            max_results: Maximum alternatives per category
+        
+        Returns:
+            Dict with three categories of alternatives
+        """
+        alternatives = {
+            "lower_budget": [],
+            "better_value": [],
+            "emerging_areas": []
+        }
+        
+        if not original_filters.budget_max:
+            logger.warning("No budget specified, cannot generate alternatives")
+            return alternatives
+        
+        original_budget = original_filters.budget_max
+        
+        # 1. Lower budget alternatives (20% less)
+        lower_budget_filters = PropertyFilters(
+            configuration=original_filters.configuration,
+            budget_min=original_filters.budget_min,
+            budget_max=int(original_budget * (1 - budget_adjustment_percent/100)),
+            location=original_filters.location,
+            radius_km=original_filters.radius_km,
+            possession_year=original_filters.possession_year
+        )
+        
+        try:
+            lower_results = await self.search_with_filters(
+                query="affordable alternatives",
+                filters=lower_budget_filters
+            )
+            alternatives["lower_budget"] = lower_results.get("projects", [])[:max_results]
+            logger.info(f"Found {len(alternatives['lower_budget'])} lower budget alternatives")
+        except Exception as e:
+            logger.error(f"Error finding lower budget alternatives: {e}")
+        
+        # 2. Better value alternatives (10-20% higher budget)
+        higher_budget_filters = PropertyFilters(
+            configuration=original_filters.configuration,
+            budget_min=original_budget,
+            budget_max=int(original_budget * (1 + budget_adjustment_percent/100)),
+            location=original_filters.location,
+            radius_km=original_filters.radius_km,
+            possession_year=original_filters.possession_year
+        )
+        
+        try:
+            higher_results = await self.search_with_filters(
+                query="premium options",
+                filters=higher_budget_filters
+            )
+            alternatives["better_value"] = higher_results.get("projects", [])[:max_results]
+            logger.info(f"Found {len(alternatives['better_value'])} better value alternatives")
+        except Exception as e:
+            logger.error(f"Error finding better value alternatives: {e}")
+        
+        # 3. Emerging area alternatives (same budget, different location)
+        # Target emerging hotspots: Sarjapur, Devanahalli, Hennur
+        emerging_locations = ["Sarjapur", "Devanahalli", "Hennur", "Bannerghatta Road"]
+        
+        for location in emerging_locations:
+            if location.lower() in (original_filters.location or "").lower():
+                continue  # Skip if already searching in this area
+            
+            emerging_filters = PropertyFilters(
+                configuration=original_filters.configuration,
+                budget_min=original_filters.budget_min,
+                budget_max=original_budget,
+                location=location,
+                radius_km=15.0,  # Wider radius for emerging areas
+                possession_year=original_filters.possession_year
+            )
+            
+            try:
+                emerging_results = await self.search_with_filters(
+                    query=f"projects in {location}",
+                    filters=emerging_filters
+                )
+                
+                if emerging_results.get("projects"):
+                    alternatives["emerging_areas"].extend(emerging_results["projects"][:2])
+                    
+                    if len(alternatives["emerging_areas"]) >= max_results:
+                        break
+            except Exception as e:
+                logger.error(f"Error finding alternatives in {location}: {e}")
+        
+        alternatives["emerging_areas"] = alternatives["emerging_areas"][:max_results]
+        logger.info(f"Found {len(alternatives['emerging_areas'])} emerging area alternatives")
+        
+        # Add metadata
+        alternatives["metadata"] = {
+            "original_budget_max": original_budget,
+            "lower_budget_max": int(original_budget * (1 - budget_adjustment_percent/100)),
+            "higher_budget_max": int(original_budget * (1 + budget_adjustment_percent/100)),
+            "adjustment_percent": budget_adjustment_percent,
+            "total_alternatives": (
+                len(alternatives["lower_budget"]) +
+                len(alternatives["better_value"]) +
+                len(alternatives["emerging_areas"])
+            )
+        }
+        
+        return alternatives
+
 # Global instance
 hybrid_retrieval = HybridRetrievalService()

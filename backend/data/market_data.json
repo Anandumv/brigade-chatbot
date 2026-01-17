@@ -1,0 +1,203 @@
+{
+  "Whitefield": {
+    "avg_price_per_sqft": 6800,
+    "price_range_min": 5500,
+    "price_range_max": 9000,
+    "appreciation_rate_yoy": 12.5,
+    "appreciation_5yr": 68,
+    "inventory_trend": "high_demand",
+    "upcoming_infrastructure": [
+      "Metro Phase 3 extension",
+      "IT Parks expansion (Manyata Tech Park)",
+      "Peripheral Ring Road connectivity"
+    ],
+    "key_attractions": [
+      "ITPL (International Tech Park)",
+      "Phoenix Marketcity",
+      "Columbia Asia Hospital"
+    ],
+    "demographics": "IT professionals, young families",
+    "rental_yield": 3.2
+  },
+  "Sarjapur": {
+    "avg_price_per_sqft": 5900,
+    "price_range_min": 4800,
+    "price_range_max": 7500,
+    "appreciation_rate_yoy": 14.2,
+    "appreciation_5yr": 75,
+    "inventory_trend": "emerging_hotspot",
+    "upcoming_infrastructure": [
+      "Peripheral Ring Road",
+      "Metro extension planned (2027)",
+      "Sarjapur-Attibele Industrial Corridor"
+    ],
+    "key_attractions": [
+      "Wipro Corporate Office",
+      "Sakra World Hospital",
+      "Innovative Multiplex"
+    ],
+    "demographics": "IT professionals, investors",
+    "rental_yield": 3.5
+  },
+  "Electronic City": {
+    "avg_price_per_sqft": 5500,
+    "price_range_min": 4500,
+    "price_range_max": 7200,
+    "appreciation_rate_yoy": 10.8,
+    "appreciation_5yr": 58,
+    "inventory_trend": "stable",
+    "upcoming_infrastructure": [
+      "Nice Road widening",
+      "Peripheral Ring Road Phase 2",
+      "Metro Green Line extension"
+    ],
+    "key_attractions": [
+      "Infosys, TCS, Wipro campuses",
+      "Forum Neighbourhood Mall",
+      "Narayana Health City"
+    ],
+    "demographics": "IT professionals, working couples",
+    "rental_yield": 3.8
+  },
+  "Hennur": {
+    "avg_price_per_sqft": 6200,
+    "price_range_min": 5000,
+    "price_range_max": 7800,
+    "appreciation_rate_yoy": 13.5,
+    "appreciation_5yr": 71,
+    "inventory_trend": "growing",
+    "upcoming_infrastructure": [
+      "Peripheral Ring Road connectivity",
+      "Metro extension to Nagawara",
+      "Upgraded Hennur-Bagalur Road"
+    ],
+    "key_attractions": [
+      "Manyata Tech Park (nearby)",
+      "Columbia Asia Hospital",
+      "Lumbini Gardens"
+    ],
+    "demographics": "Mid-senior IT professionals, families",
+    "rental_yield": 3.3
+  },
+  "Yelahanka": {
+    "avg_price_per_sqft": 5700,
+    "price_range_min": 4600,
+    "price_range_max": 7000,
+    "appreciation_rate_yoy": 11.8,
+    "appreciation_5yr": 64,
+    "inventory_trend": "moderate",
+    "upcoming_infrastructure": [
+      "Kempegowda International Airport proximity",
+      "Metro Phase 2 connectivity",
+      "BIA Industrial Area expansion"
+    ],
+    "key_attractions": [
+      "BIA Airport (8 km)",
+      "Esteem Mall",
+      "Manipal Hospital"
+    ],
+    "demographics": "Airport employees, logistics professionals",
+    "rental_yield": 3.4
+  },
+  "Koramangala": {
+    "avg_price_per_sqft": 9500,
+    "price_range_min": 8000,
+    "price_range_max": 12500,
+    "appreciation_rate_yoy": 8.5,
+    "appreciation_5yr": 45,
+    "inventory_trend": "premium_saturated",
+    "upcoming_infrastructure": [
+      "Metro connectivity expansion",
+      "Heritage building renovations",
+      "Park improvements"
+    ],
+    "key_attractions": [
+      "Forum Koramangala Mall",
+      "St. John's Medical College",
+      "Vibrant startup ecosystem"
+    ],
+    "demographics": "Entrepreneurs, senior professionals, expats",
+    "rental_yield": 2.8
+  },
+  "HSR Layout": {
+    "avg_price_per_sqft": 8200,
+    "price_range_min": 7000,
+    "price_range_max": 10500,
+    "appreciation_rate_yoy": 9.2,
+    "appreciation_5yr": 50,
+    "inventory_trend": "high_demand",
+    "upcoming_infrastructure": [
+      "Metro Yellow Line",
+      "Outer Ring Road improvements",
+      "Park and recreational developments"
+    ],
+    "key_attractions": [
+      "27th Main Road (food street)",
+      "HSR Club",
+      "Multiple malls and cinemas"
+    ],
+    "demographics": "IT professionals, young families, working couples",
+    "rental_yield": 3.0
+  },
+  "Marathahalli": {
+    "avg_price_per_sqft": 6500,
+    "price_range_min": 5500,
+    "price_range_max": 8000,
+    "appreciation_rate_yoy": 10.5,
+    "appreciation_5yr": 57,
+    "inventory_trend": "stable",
+    "upcoming_infrastructure": [
+      "Peripheral Ring Road upgrades",
+      "Metro connectivity (operational)",
+      "Flyover improvements"
+    ],
+    "key_attractions": [
+      "Marathahalli Bridge",
+      "Innovative Multiplex",
+      "Close to IT corridor"
+    ],
+    "demographics": "IT professionals, working professionals",
+    "rental_yield": 3.6
+  },
+  "Bannerghatta Road": {
+    "avg_price_per_sqft": 6100,
+    "price_range_min": 5200,
+    "price_range_max": 7500,
+    "appreciation_rate_yoy": 12.0,
+    "appreciation_5yr": 65,
+    "inventory_trend": "growing",
+    "upcoming_infrastructure": [
+      "NICE Road Phase 2",
+      "Metro extension planned",
+      "IIM Bangalore expansion"
+    ],
+    "key_attractions": [
+      "Bannerghatta National Park",
+      "IIM Bangalore",
+      "Fortis Hospital"
+    ],
+    "demographics": "Families, nature lovers, academics",
+    "rental_yield": 3.3
+  },
+  "Devanahalli": {
+    "avg_price_per_sqft": 4200,
+    "price_range_min": 3500,
+    "price_range_max": 5500,
+    "appreciation_rate_yoy": 16.5,
+    "appreciation_5yr": 92,
+    "inventory_trend": "emerging_hotspot",
+    "upcoming_infrastructure": [
+      "Airport City development",
+      "Aerospace Park",
+      "Financial City project",
+      "Industrial corridor"
+    ],
+    "key_attractions": [
+      "Kempegowda International Airport",
+      "Nandi Hills (nearby)",
+      "Aerospace SEZ"
+    ],
+    "demographics": "Investors, airport employees, logistics",
+    "rental_yield": 4.0
+  }
+}

@@ -41,12 +41,30 @@ class ConversationSession(BaseModel):
 
     # Flow Engine State (Strict Agent Mode)
     flow_state: Optional[Dict[str, Any]] = None
-    
+
     # Context Tracking - Enhanced for continuous conversation
     last_intent: Optional[str] = None  # To contextually handle "show more" etc.
     last_topic: Optional[str] = None  # Last discussed topic (sustainability, investment, etc.)
     last_shown_projects: List[Dict[str, Any]] = []  # Recently shown projects with details
     conversation_phase: str = "discovery"  # discovery, evaluation, negotiation, closing
+
+    # ENHANCED: Conversation coaching metrics
+    objection_count: int = 0  # Number of objections raised
+    coaching_prompts_shown: List[str] = []  # History of coaching prompts shown
+    last_message_time: Optional[datetime] = None  # For silence detection
+    projects_viewed_count: int = 0  # Cumulative count of unique projects viewed
+    
+    # 🆕 SENTIMENT TRACKING
+    last_sentiment: str = "neutral"  # Last detected sentiment
+    last_frustration_level: int = 0  # Last frustration score (0-10)
+    escalation_recommended: bool = False  # Whether human escalation was recommended
+    escalation_reason: Optional[str] = None  # Reason for escalation recommendation
+    sentiment_history: List[Dict[str, Any]] = []  # Track sentiment over time
+    frustration_score: float = 0.0  # Rolling average frustration (0-10)
+    
+    # 🆕 PROACTIVE NUDGING TRACKING
+    last_nudge_time: Optional[datetime] = None  # When last nudge was shown
+    nudges_shown: List[Dict[str, Any]] = []  # History of nudges shown
 
 
 class SessionManager:
@@ -81,11 +99,14 @@ class SessionManager:
     def add_message(self, session_id: str, role: str, content: str):
         """Add a message to session history."""
         if session_id in self.sessions:
+            current_time = datetime.now()
             self.sessions[session_id].messages.append({
                 "role": role,
                 "content": content,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": current_time.isoformat()
             })
+            # Update last message time for silence detection
+            self.sessions[session_id].last_message_time = current_time
             # Keep only last 10 messages
             self.sessions[session_id].messages = self.sessions[session_id].messages[-10:]
             self.sessions[session_id].engagement_score += 1
@@ -95,6 +116,7 @@ class SessionManager:
         if session_id in self.sessions:
             if objection_type not in self.sessions[session_id].objections_raised:
                 self.sessions[session_id].objections_raised.append(objection_type)
+                self.sessions[session_id].objection_count += 1  # Track total objections
                 logger.info(f"Session {session_id}: Recorded objection '{objection_type}'")
     
     def record_interest(self, session_id: str, project_name: str):
@@ -236,6 +258,105 @@ class SessionManager:
             self.save_session(session)
             logger.info(f"Recorded objection '{objection_type}' for session {session_id}")
 
+    def track_coaching_prompt(self, session_id: str, prompt_type: str) -> None:
+        """
+        Track that a coaching prompt was shown to avoid repetition.
+        
+        Args:
+            session_id: Session identifier
+            prompt_type: Type of coaching prompt (e.g., "site_visit_trigger")
+        """
+        session = self.get_or_create_session(session_id)
+        
+        if not hasattr(session, 'coaching_prompts_shown'):
+            session.coaching_prompts_shown = []
+        
+        session.coaching_prompts_shown.append({
+            "type": prompt_type,
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        # Keep only last 20 prompts
+        session.coaching_prompts_shown = session.coaching_prompts_shown[-20:]
+        self.save_session(session)
+        logger.info(f"Tracked coaching prompt '{prompt_type}' for session {session_id}")
+    
+    def was_coaching_prompt_shown(self, session_id: str, prompt_type: str, within_minutes: int = 30) -> bool:
+        """
+        Check if a coaching prompt was recently shown to avoid repetition.
+        
+        Args:
+            session_id: Session identifier
+            prompt_type: Type of coaching prompt
+            within_minutes: Time window to check (default: 30 minutes)
+        
+        Returns:
+            True if prompt was shown within time window, False otherwise
+        """
+        session = self.get_or_create_session(session_id)
+        
+        if not hasattr(session, 'coaching_prompts_shown') or not session.coaching_prompts_shown:
+            return False
+        
+        cutoff_time = datetime.now() - timedelta(minutes=within_minutes)
+        
+        for prompt in session.coaching_prompts_shown:
+            if prompt["type"] == prompt_type:
+                prompt_time = datetime.fromisoformat(prompt["timestamp"])
+                if prompt_time > cutoff_time:
+                    return True
+        
+        return False
+    
+    def update_projects_viewed(self, session_id: str, projects: List[Dict[str, Any]]) -> None:
+        """
+        Update the count of unique projects viewed.
+        
+        Args:
+            session_id: Session identifier
+            projects: List of projects shown
+        """
+        session = self.get_or_create_session(session_id)
+        
+        # Track unique project names
+        existing_projects = set(p.get("name") for p in session.last_shown_projects if p.get("name"))
+        new_projects = set(p.get("name") for p in projects if p.get("name"))
+        
+        # Count new unique projects
+        newly_viewed = len(new_projects - existing_projects)
+        session.projects_viewed_count += newly_viewed
+        
+        # Update last shown projects
+        session.last_shown_projects = projects
+        
+        self.save_session(session)
+        logger.info(f"Session {session_id}: Viewed {newly_viewed} new projects (total: {session.projects_viewed_count})")
+    
+    def get_engagement_metrics(self, session_id: str) -> Dict[str, Any]:
+        """
+        Get detailed engagement metrics for conversation coaching.
+        
+        Returns:
+            Dict with engagement metrics
+        """
+        session = self.get_or_create_session(session_id)
+        
+        return {
+            "message_count": len(session.messages),
+            "projects_viewed": session.projects_viewed_count,
+            "interested_projects_count": len(session.interested_projects),
+            "objection_count": session.objection_count,
+            "engagement_score": session.engagement_score,
+            "conversation_phase": session.conversation_phase,
+            "last_message_time": session.last_message_time,
+            "session_duration_minutes": (datetime.now() - session.created_at).total_seconds() / 60,
+            "ctas_suggested": {
+                "meeting": session.meeting_suggested,
+                "site_visit": session.site_visit_suggested,
+                "callback": session.callback_suggested
+            }
+        }
+
     def _format_context_for_gpt(self, session: ConversationSession) -> str:
         """Format session context as natural language for GPT."""
         parts = []
@@ -259,6 +380,40 @@ class SessionManager:
 
         return " | ".join(parts) if parts else "New conversation"
     
+    def record_coaching_prompt(self, session_id: str, prompt_type: str) -> None:
+        """
+        Record that a coaching prompt was shown to avoid repetition.
+
+        Args:
+            session_id: Session identifier
+            prompt_type: Type of coaching prompt shown
+        """
+        if session_id in self.sessions:
+            session = self.sessions[session_id]
+            if not hasattr(session, 'coaching_prompts_shown'):
+                session.coaching_prompts_shown = []
+            session.coaching_prompts_shown.append(prompt_type)
+            # Keep only last 20 prompts
+            session.coaching_prompts_shown = session.coaching_prompts_shown[-20:]
+            self.save_session(session)
+            logger.debug(f"Recorded coaching prompt '{prompt_type}' for session {session_id}")
+
+    def update_projects_viewed(self, session_id: str, projects: List[Dict[str, Any]]) -> None:
+        """
+        Update the count of unique projects viewed.
+
+        Args:
+            session_id: Session identifier
+            projects: List of project dicts shown to user
+        """
+        if session_id in self.sessions:
+            session = self.sessions[session_id]
+            # Track unique project names
+            existing_names = {p.get("name") for p in session.last_shown_projects}
+            new_projects = [p for p in projects if p.get("name") not in existing_names]
+            session.projects_viewed_count += len(new_projects)
+            self.save_session(session)
+
     def cleanup_expired_sessions(self):
         """Remove expired sessions to free memory."""
         now = datetime.now()
@@ -269,7 +424,7 @@ class SessionManager:
         for sid in expired:
             del self.sessions[sid]
             logger.info(f"Cleaned up expired session: {sid}")
-        
+
         if expired:
             logger.info(f"Cleaned up {len(expired)} expired sessions")
 

@@ -151,6 +151,23 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Auto-seed failed: {e}")
     
+    # Initialize Railway PostgreSQL database
+    try:
+        import os
+        if os.getenv('DATABASE_URL') or os.getenv('POSTGRES_URL'):
+            logger.info("🚀 Initializing Railway PostgreSQL database...")
+            from database.init_db import init_database
+            success = init_database()
+            if success:
+                logger.info("✅ Database initialization successful")
+            else:
+                logger.warning("⚠️ Database initialization encountered errors")
+        else:
+            logger.info("ℹ️ No DATABASE_URL configured - using in-memory storage")
+    except Exception as e:
+        logger.error(f"Database initialization failed: {e}")
+        logger.warning("⚠️ Falling back to in-memory storage")
+    
     yield
     logger.info("Shutting down API...")
 
@@ -272,6 +289,411 @@ async def admin_refresh_projects(x_admin_key: str = Header(None)):
             'possession_quarter': pxt.String,
             'status': pxt.String,
             'rera_number': pxt.String,
+
+
+# ========================================
+# 🆕 SCHEDULING API ENDPOINTS
+# Site Visit & Callback Scheduling
+# ========================================
+
+class SiteVisitScheduleRequest(BaseModel):
+    """Request to schedule a site visit"""
+    user_id: str
+    session_id: Optional[str] = None
+    project_id: str
+    project_name: str
+    contact_name: str
+    contact_phone: str
+    contact_email: Optional[str] = None
+    requested_date: Optional[str] = None  # ISO format: YYYY-MM-DD
+    requested_time_slot: Optional[str] = "morning"  # morning/afternoon/evening
+    user_notes: Optional[str] = None
+
+
+class CallbackScheduleRequest(BaseModel):
+    """Request to schedule a callback"""
+    user_id: str
+    session_id: Optional[str] = None
+    contact_name: str
+    contact_phone: str
+    contact_email: Optional[str] = None
+    callback_reason: str = "general_inquiry"
+    user_notes: Optional[str] = None
+    urgency_level: str = "medium"  # low/medium/high/urgent
+    preferred_date: Optional[str] = None
+    preferred_time: Optional[str] = None
+
+
+@app.post("/api/schedule/site-visit")
+async def schedule_site_visit(request: SiteVisitScheduleRequest):
+    """
+    Schedule a site visit
+    
+    User requests to visit a property in person
+    """
+    try:
+        from services.scheduling_service import get_scheduling_service, SiteVisitRequest, TimeSlot
+        from services.user_profile_manager import get_profile_manager
+        from datetime import date
+        
+        scheduling_service = get_scheduling_service()
+        profile_manager = get_profile_manager()
+        
+        # Parse requested date
+        requested_date_obj = None
+        if request.requested_date:
+            try:
+                requested_date_obj = date.fromisoformat(request.requested_date)
+            except:
+                logger.warning(f"Invalid date format: {request.requested_date}")
+        
+        # Parse time slot
+        time_slot = None
+        if request.requested_time_slot:
+            time_slot = TimeSlot(request.requested_time_slot)
+        
+        # Get user's lead score
+        lead_score = None
+        try:
+            profile = profile_manager.get_or_create_profile(request.user_id)
+            lead_scores = profile_manager.calculate_lead_score(request.user_id)
+            lead_score = lead_scores.get('total_score', 0)
+        except:
+            pass
+        
+        # Create site visit request
+        visit_request = SiteVisitRequest(
+            user_id=request.user_id,
+            session_id=request.session_id,
+            project_id=request.project_id,
+            project_name=request.project_name,
+            contact_name=request.contact_name,
+            contact_phone=request.contact_phone,
+            contact_email=request.contact_email,
+            requested_date=requested_date_obj,
+            requested_time_slot=time_slot,
+            user_notes=request.user_notes,
+            source="api_request",
+            lead_score=lead_score
+        )
+        
+        # Schedule visit
+        result = scheduling_service.schedule_site_visit(visit_request)
+        
+        # Track in user profile
+        profile_manager.track_site_visit_scheduled(request.user_id)
+        
+        logger.info(f"✅ SITE VISIT SCHEDULED via API: {request.project_name} for {request.user_id}")
+        
+        return result
+    
+    except Exception as e:
+        logger.error(f"Error scheduling site visit: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/schedule/callback")
+async def schedule_callback(request: CallbackScheduleRequest):
+    """
+    Request a callback from sales team
+    
+    User requests to be called back for discussion
+    """
+    try:
+        from services.scheduling_service import get_scheduling_service, CallbackRequest, UrgencyLevel
+        from services.user_profile_manager import get_profile_manager
+        from datetime import date, time as time_obj
+        
+        scheduling_service = get_scheduling_service()
+        profile_manager = get_profile_manager()
+        
+        # Parse dates/times
+        preferred_date_obj = None
+        if request.preferred_date:
+            try:
+                preferred_date_obj = date.fromisoformat(request.preferred_date)
+            except:
+                pass
+        
+        preferred_time_obj = None
+        if request.preferred_time:
+            try:
+                preferred_time_obj = time_obj.fromisoformat(request.preferred_time)
+            except:
+                pass
+        
+        # Parse urgency
+        urgency = UrgencyLevel(request.urgency_level)
+        
+        # Get lead score
+        lead_score = None
+        try:
+            profile = profile_manager.get_or_create_profile(request.user_id)
+            lead_scores = profile_manager.calculate_lead_score(request.user_id)
+            lead_score = lead_scores.get('total_score', 0)
+        except:
+            pass
+        
+        # Create callback request
+        callback_request = CallbackRequest(
+            user_id=request.user_id,
+            session_id=request.session_id,
+            contact_name=request.contact_name,
+            contact_phone=request.contact_phone,
+            contact_email=request.contact_email,
+            callback_reason=request.callback_reason,
+            user_notes=request.user_notes,
+            urgency_level=urgency,
+            preferred_date=preferred_date_obj,
+            preferred_time=preferred_time_obj,
+            source="api_request",
+            lead_score=lead_score
+        )
+        
+        # Request callback
+        result = scheduling_service.request_callback(callback_request)
+        
+        # Track in user profile
+        profile_manager.track_callback_requested(request.user_id)
+        
+        logger.info(f"✅ CALLBACK REQUESTED via API: {request.callback_reason} for {request.user_id}")
+        
+        return result
+    
+    except Exception as e:
+        logger.error(f"Error requesting callback: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/schedule/user/{user_id}")
+async def get_user_schedule(user_id: str):
+    """
+    Get all scheduled visits and callbacks for a user
+    """
+    try:
+        from services.scheduling_service import get_scheduling_service
+        
+        scheduling_service = get_scheduling_service()
+        
+        visits = scheduling_service.get_user_visits(user_id)
+        callbacks = scheduling_service.get_user_callbacks(user_id)
+        
+        return {
+            "user_id": user_id,
+            "site_visits": visits,
+            "callbacks": callbacks,
+            "total_scheduled": len(visits) + len(callbacks)
+        }
+    
+    except Exception as e:
+        logger.error(f"Error getting user schedule: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Admin endpoints for schedule management
+@app.get("/api/admin/schedule/visits")
+async def admin_get_all_visits(
+    status: Optional[str] = None,
+    date_from: Optional[str] = None,
+    x_admin_key: str = Header(None)
+):
+    """
+    Get all scheduled visits (admin only)
+    
+    Filters:
+    - status: pending/confirmed/completed/cancelled
+    - date_from: YYYY-MM-DD
+    """
+    import os
+    expected_key = os.getenv("ADMIN_KEY", "secret")
+    
+    if not x_admin_key or x_admin_key != expected_key:
+        raise HTTPException(status_code=403, detail="Invalid Admin Key")
+    
+    try:
+        from services.scheduling_service import get_scheduling_service
+        
+        scheduling_service = get_scheduling_service()
+        
+        # Get all visits
+        all_visits = list(scheduling_service.scheduled_visits.values())
+        
+        # Apply filters
+        if status:
+            all_visits = [v for v in all_visits if v['status'] == status]
+        
+        if date_from:
+            from datetime import date
+            date_filter = date.fromisoformat(date_from)
+            all_visits = [v for v in all_visits if v.get('requested_date') and v['requested_date'] >= date_filter]
+        
+        return {
+            "total": len(all_visits),
+            "visits": all_visits
+        }
+    
+    except Exception as e:
+        logger.error(f"Error getting visits: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/admin/schedule/callbacks")
+async def admin_get_all_callbacks(
+    status: Optional[str] = None,
+    urgency: Optional[str] = None,
+    x_admin_key: str = Header(None)
+):
+    """
+    Get all callback requests (admin only)
+    
+    Filters:
+    - status: pending/contacted/completed
+    - urgency: low/medium/high/urgent
+    """
+    import os
+    expected_key = os.getenv("ADMIN_KEY", "secret")
+    
+    if not x_admin_key or x_admin_key != expected_key:
+        raise HTTPException(status_code=403, detail="Invalid Admin Key")
+    
+    try:
+        from services.scheduling_service import get_scheduling_service
+        
+        scheduling_service = get_scheduling_service()
+        
+        # Get all callbacks
+        all_callbacks = list(scheduling_service.callbacks.values())
+        
+        # Apply filters
+        if status:
+            all_callbacks = [c for c in all_callbacks if c['status'] == status]
+        
+        if urgency:
+            all_callbacks = [c for c in all_callbacks if c['urgency_level'] == urgency]
+        
+        # Sort by urgency and created_at
+        urgency_order = {'urgent': 0, 'high': 1, 'medium': 2, 'low': 3}
+        all_callbacks.sort(key=lambda c: (urgency_order.get(c['urgency_level'], 4), c['created_at']))
+        
+        return {
+            "total": len(all_callbacks),
+            "callbacks": all_callbacks
+        }
+    
+    except Exception as e:
+        logger.error(f"Error getting callbacks: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/admin/schedule/visit/{visit_id}/status")
+async def admin_update_visit_status(
+    visit_id: str,
+    status: str,
+    notes: Optional[str] = None,
+    x_admin_key: str = Header(None)
+):
+    """Update visit status (admin only)"""
+    import os
+    expected_key = os.getenv("ADMIN_KEY", "secret")
+    
+    if not x_admin_key or x_admin_key != expected_key:
+        raise HTTPException(status_code=403, detail="Invalid Admin Key")
+    
+    try:
+        from services.scheduling_service import get_scheduling_service, SchedulingStatus
+        
+        scheduling_service = get_scheduling_service()
+        
+        success = scheduling_service.update_visit_status(
+            visit_id,
+            SchedulingStatus(status),
+            notes
+        )
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="Visit not found")
+        
+        return {"success": True, "visit_id": visit_id, "new_status": status}
+    
+    except Exception as e:
+        logger.error(f"Error updating visit status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/admin/schedule/callback/{callback_id}/status")
+async def admin_update_callback_status(
+    callback_id: str,
+    status: str,
+    notes: Optional[str] = None,
+    call_duration: Optional[int] = None,
+    x_admin_key: str = Header(None)
+):
+    """Update callback status (admin only)"""
+    import os
+    expected_key = os.getenv("ADMIN_KEY", "secret")
+    
+    if not x_admin_key or x_admin_key != expected_key:
+        raise HTTPException(status_code=403, detail="Invalid Admin Key")
+    
+    try:
+        from services.scheduling_service import get_scheduling_service, SchedulingStatus
+        
+        scheduling_service = get_scheduling_service()
+        
+        success = scheduling_service.update_callback_status(
+            callback_id,
+            SchedulingStatus(status),
+            notes,
+            call_duration
+        )
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="Callback not found")
+        
+        return {"success": True, "callback_id": callback_id, "new_status": status}
+    
+    except Exception as e:
+        logger.error(f"Error updating callback status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/admin/refresh-projects")
+async def admin_refresh_projects(x_admin_key: str = Header(None)):
+    """
+    Admin endpoint to force re-seed/update project data from seed_projects.json.
+    """
+    import json
+    import os
+    import pixeltable as pxt
+    
+    # Use dedicated ADMIN_KEY env var
+    expected_key = os.getenv("ADMIN_KEY", "secret")
+    
+    if not x_admin_key or x_admin_key != expected_key:
+         raise HTTPException(status_code=403, detail="Invalid Admin Key")
+
+    try:
+        # Drop existing and recreate with fresh data
+        try:
+            pxt.drop_table('brigade.projects', force=True)
+            logger.info("Dropped existing projects table")
+        except Exception as e:
+            logger.warning(f"Could not drop table: {e}")
+        
+        # Create fresh table with schema
+        schema = {
+            'project_id': pxt.String,
+            'name': pxt.String,
+            'developer': pxt.String,
+            'location': pxt.String,
+            'zone': pxt.String,
+            'configuration': pxt.String,
+            'budget_min': pxt.Int,
+            'budget_max': pxt.Int,
+            'possession_year': pxt.Int,
+            'possession_quarter': pxt.String,
+            'status': pxt.String,
+            'rera_number': pxt.String,
             'description': pxt.String,
             'amenities': pxt.String,
             'usp': pxt.String,
@@ -320,6 +742,37 @@ async def chat_query(request: ChatQueryRequest):
         if request.session_id:
             session = session_manager.get_or_create_session(request.session_id)
             context_summary_dict = session_manager.get_context_summary(request.session_id)
+        
+        # 🆕 Step 0.55: Load or Create User Profile (Cross-Session Memory)
+        user_profile = None
+        welcome_back_message = None
+        
+        if request.user_id:
+            try:
+                from services.user_profile_manager import get_profile_manager
+                
+                profile_manager = get_profile_manager()
+                user_profile = profile_manager.get_or_create_profile(request.user_id)
+                
+                # Increment session count
+                profile_manager.increment_session_count(request.user_id, request.session_id or "default")
+                
+                # Get welcome back message for returning users
+                if user_profile.total_sessions > 1:
+                    welcome_back_message = profile_manager.get_welcome_back_message(request.user_id)
+                    logger.info(f"👋 RETURNING USER: {request.user_id} (session #{user_profile.total_sessions})")
+                else:
+                    logger.info(f"🆕 NEW USER: {request.user_id}")
+                
+                # Calculate lead score
+                lead_score = profile_manager.calculate_lead_score(request.user_id)
+                logger.info(f"📊 LEAD SCORE: {lead_score['lead_temperature']} "
+                           f"(engagement: {lead_score['engagement_score']}/10, "
+                           f"intent: {lead_score['intent_to_buy_score']}/10)")
+                
+            except Exception as e:
+                logger.error(f"Error loading user profile: {e}")
+                # Continue without profile
         
         # Step 0.6: Context Injection - Enrich vague queries with session context
         from services.context_injector import (
@@ -709,18 +1162,326 @@ async def chat_query(request: ChatQueryRequest):
         # Handles: amenities, distances, advice, FAQs, objections, "more", greetings, all conversational queries
         logger.info(f"🔹 PATH 2: GPT Sales Consultant - intent={intent}")
 
-        # Generate conversational response using unified consultant
+        # ========================================
+        # 🆕 SENTIMENT ANALYSIS
+        # Analyze customer sentiment and adapt tone
+        # ========================================
+        sentiment_analysis = None
+        
+        if session and request.session_id:
+            try:
+                from services.sentiment_analyzer import get_sentiment_analyzer
+                
+                analyzer = get_sentiment_analyzer()
+                
+                # Quick sentiment analysis (fast, always runs)
+                sentiment_analysis = analyzer.analyze_sentiment_quick(request.query)
+                
+                logger.info(f"😊 SENTIMENT: {sentiment_analysis['sentiment']} "
+                           f"(frustration: {sentiment_analysis['frustration_level']}/10, "
+                           f"engagement: {sentiment_analysis['engagement_level']:.1f}/10)")
+                
+                # Check if human escalation needed
+                should_escalate, escalation_reason = analyzer.should_escalate_to_human(
+                    sentiment=sentiment_analysis['sentiment'],
+                    frustration_level=sentiment_analysis['frustration_level'],
+                    conversation_length=len(session.messages)
+                )
+                
+                if should_escalate:
+                    logger.warning(f"🚨 ESCALATION RECOMMENDED: {escalation_reason}")
+                    # Store escalation flag in session for follow-up
+                    session.escalation_recommended = True
+                    session.escalation_reason = escalation_reason
+                
+            except Exception as e:
+                logger.error(f"Sentiment analysis error: {e}")
+                # Continue without sentiment analysis
+
+        # Generate conversational response using unified consultant with sentiment
         response_text = await generate_consultant_response(
             query=request.query,
             session=session,
-            intent=intent
+            intent=intent,
+            sentiment_analysis=sentiment_analysis
         )
+        
+        # 🆕 Add welcome back message for returning users (prepend to response)
+        if welcome_back_message and user_profile and user_profile.total_sessions == 2:
+            # Only show on second session to avoid repetition
+            response_text = f"{welcome_back_message}\n\n{response_text}"
+            logger.info(f"✅ Added welcome back message for user {request.user_id}")
+
+        # ========================================
+        # CONVERSATION COACHING INTEGRATION
+        # Real-time sales coaching based on conversation patterns
+        # ========================================
+        coaching_prompt = None
+        urgency_signals = []
+        market_insights = None
+        
+        if session and request.session_id:
+            try:
+                from services.conversation_director import get_conversation_director
+                from services.market_intelligence import get_market_intelligence
+                from services.urgency_engine import get_urgency_engine
+                
+                director = get_conversation_director()
+                market_intel = get_market_intelligence()
+                urgency = get_urgency_engine()
+                
+                # Track objections if detected
+                objection_type = director.track_objection(
+                    session=session.model_dump() if hasattr(session, 'model_dump') else session.dict(),
+                    query=request.query
+                )
+                if objection_type:
+                    session_manager.record_objection(request.session_id, objection_type)
+                    logger.info(f"💡 Objection detected: {objection_type}")
+                
+                # Get coaching prompt based on conversation state
+                coaching_context = {
+                    "search_performed": data_source == "database",
+                    "budget_alternatives_shown": False,  # Will be set if alternatives shown
+                    "real_data_used": True,
+                    "query_type": intent
+                }
+                
+                coaching_prompt = director.get_coaching_prompt(
+                    session=session.model_dump() if hasattr(session, 'model_dump') else session.dict(),
+                    current_query=request.query,
+                    context=coaching_context
+                )
+                
+                if coaching_prompt:
+                    logger.info(f"💡 COACHING: {coaching_prompt['type']} - {coaching_prompt['message']}")
+                    
+                    # Track that we showed this coaching prompt
+                    session_manager.track_coaching_prompt(
+                        request.session_id,
+                        coaching_prompt['type']
+                    )
+                    
+                    # If high-priority coaching with suggested script, enhance response
+                    if coaching_prompt['priority'] in ['high', 'critical'] and coaching_prompt.get('suggested_script'):
+                        # Append coaching suggestion to response
+                        response_text += f"\n\n{coaching_prompt['suggested_script']}"
+                        logger.info(f"✅ Enhanced response with coaching script")
+                
+                # Get market intelligence for shown projects
+                if session.last_shown_projects:
+                    for project in session.last_shown_projects[:3]:  # Top 3 projects
+                        locality = project.get("location", "")
+                        if locality:
+                            # Get locality insights
+                            locality_insights = market_intel.get_locality_insights(locality)
+                            
+                            # Get urgency signals
+                            project_urgency = urgency.get_urgency_signals(
+                                project=project,
+                                locality_data=locality_insights
+                            )
+                            
+                            if project_urgency:
+                                urgency_signals.extend(project_urgency)
+                                logger.info(f"⚡ Urgency signals for {project.get('name')}: {len(project_urgency)}")
+                
+                # If budget objection detected, proactively offer alternatives
+                if objection_type == "budget" and session.current_filters:
+                    try:
+                        from services.hybrid_retrieval import hybrid_retrieval
+                        
+                        # Get budget alternatives
+                        alternatives = await hybrid_retrieval.get_budget_alternatives(
+                            original_filters=session.current_filters,
+                            budget_adjustment_percent=20.0,
+                            max_results=2
+                        )
+                        
+                        if alternatives["metadata"]["total_alternatives"] > 0:
+                            # Add alternatives context to response
+                            alt_text = "\n\n💰 **Budget-Friendly Alternatives:**\n"
+                            
+                            if alternatives["lower_budget"]:
+                                alt_text += f"\n**More Affordable Options** (₹{alternatives['metadata']['lower_budget_max']/100:.1f} Cr):\n"
+                                for proj in alternatives["lower_budget"][:2]:
+                                    alt_text += f"• {proj['name']} in {proj['location']}\n"
+                            
+                            if alternatives["emerging_areas"]:
+                                alt_text += f"\n**Emerging Areas** (Better Appreciation):\n"
+                                for proj in alternatives["emerging_areas"][:2]:
+                                    alt_text += f"• {proj['name']} in {proj['location']}\n"
+                            
+                            response_text += alt_text
+                            coaching_context["budget_alternatives_shown"] = True
+                            logger.info(f"✅ Added {alternatives['metadata']['total_alternatives']} budget alternatives to response")
+                    
+                    except Exception as e:
+                        logger.error(f"Error getting budget alternatives: {e}")
+                
+                # 🆕 Add human escalation if needed
+                if sentiment_analysis and sentiment_analysis.get('sentiment') == 'frustrated':
+                    frustration_level = sentiment_analysis.get('frustration_level', 0)
+                    
+                    if frustration_level >= 7:
+                        # Add escalation offer to response
+                        tone_adjustment = analyzer.get_tone_adjustment(
+                            sentiment_analysis['sentiment'],
+                            frustration_level
+                        )
+                        
+                        if tone_adjustment.get('escalation_recommended'):
+                            escalation_msg = tone_adjustment.get('escalation_message', 
+                                "Would you like to speak with our senior consultant for personalized assistance?")
+                            response_text += f"\n\n{escalation_msg}"
+                            logger.warning(f"🚨 HUMAN ESCALATION OFFERED (frustration: {frustration_level}/10)")
+                
+                # 🆕 Track user profile interactions
+                if user_profile and request.user_id:
+                    try:
+                        profile_manager = get_profile_manager()
+                        
+                        # Track properties viewed
+                        if session and session.last_shown_projects:
+                            for project in session.last_shown_projects[:5]:  # Track top 5
+                                profile_manager.track_property_viewed(
+                                    request.user_id,
+                                    project.get("id", project.get("project_id", "")),
+                                    project.get("name", ""),
+                                    project
+                                )
+                        
+                        # Track sentiment
+                        if sentiment_analysis:
+                            profile_manager.track_sentiment(
+                                request.user_id,
+                                sentiment_analysis['sentiment'],
+                                sentiment_analysis.get('frustration_level', 0)
+                            )
+                        
+                        # Track objections
+                        if objection_type:
+                            profile_manager.track_objection(request.user_id, objection_type)
+                        
+                        # Update preferences from current filters
+                        if session and session.current_filters:
+                            filters = session.current_filters
+                            profile_manager.update_preferences(
+                                request.user_id,
+                                budget_min=filters.get('budget_min'),
+                                budget_max=filters.get('budget_max'),
+                                configurations=[filters.get('configuration')] if filters.get('configuration') else None,
+                                locations=[filters.get('location')] if filters.get('location') else None
+                            )
+                        
+                        logger.info(f"✅ Updated user profile for {request.user_id}")
+                    
+                    except Exception as e:
+                        logger.error(f"Error updating user profile: {e}")
+                
+                # ========================================
+                # 🆕 PROACTIVE NUDGING
+                # Detect patterns and generate smart nudges
+                # ========================================
+                try:
+                    from services.proactive_nudger import get_proactive_nudger
+                    
+                    nudger = get_proactive_nudger()
+                    nudge = nudger.detect_patterns_and_nudge(
+                        user_profile=user_profile,
+                        session=session,
+                        current_query=request.query
+                    )
+                    
+                    if nudge:
+                        # Add nudge to response
+                        nudge_message = f"\n\n{nudge['message']}"
+                        response_text += nudge_message
+                        
+                        logger.info(f"🎯 PROACTIVE NUDGE SHOWN: {nudge['type']} (priority: {nudge['priority']})")
+                
+                except Exception as e:
+                    logger.error(f"Error in proactive nudging: {e}")
+                    # Don't fail the request if nudging fails
+                
+                # ========================================
+                # 🆕 SCHEDULING INTENT DETECTION
+                # Detect if user wants to schedule visit/callback
+                # ========================================
+                try:
+                    # Check if user expressed interest in scheduling
+                    scheduling_keywords = {
+                        'visit': ['visit', 'see', 'tour', 'inspect', 'viewing'],
+                        'callback': ['call', 'callback', 'call back', 'speak', 'talk', 'discuss', 'contact']
+                    }
+                    
+                    query_lower = request.query.lower()
+                    
+                    # Check for scheduling intent
+                    wants_visit = any(keyword in query_lower for keyword in scheduling_keywords['visit'])
+                    wants_callback = any(keyword in query_lower for keyword in scheduling_keywords['callback'])
+                    
+                    # Check for confirmation words
+                    is_confirmation = any(word in query_lower for word in ['yes', 'sure', 'ok', 'okay', 'great', 'perfect', 'definitely', 'absolutely'])
+                    
+                    # If user just confirmed and there's a recent nudge about scheduling
+                    if is_confirmation and session and hasattr(session, 'nudges_shown'):
+                        recent_nudges = session.nudges_shown[-3:] if session.nudges_shown else []
+                        has_scheduling_nudge = any(
+                            nudge.get('type') in ['repeat_views', 'abandoned_interest']
+                            for nudge in recent_nudges
+                        )
+                        
+                        if has_scheduling_nudge and (wants_visit or 'visit' in response_text.lower()):
+                            # Add scheduling offer
+                            scheduling_prompt = ("\n\n📅 **Let's schedule your visit!**\n\n"
+                                               "Please provide:\n"
+                                               "1. Your name\n"
+                                               "2. Phone number\n"
+                                               "3. Preferred date (e.g., tomorrow, this weekend, next Monday)\n"
+                                               "4. Preferred time (morning/afternoon/evening)\n\n"
+                                               "I'll connect you with our Relationship Manager right away!")
+                            
+                            response_text += scheduling_prompt
+                            logger.info("📅 SCHEDULING PROMPT ADDED (visit confirmation detected)")
+                    
+                    # If explicit scheduling request
+                    elif (wants_visit or wants_callback) and is_confirmation:
+                        if wants_visit:
+                            response_text += ("\n\n📅 **Great! Let's schedule your site visit.**\n\n"
+                                            "Please share:\n"
+                                            "• Your name\n"
+                                            "• Phone number\n"
+                                            "• Preferred date and time\n\n"
+                                            "Our Relationship Manager will confirm within 1 hour!")
+                        elif wants_callback:
+                            response_text += ("\n\n📞 **I'll arrange a callback for you.**\n\n"
+                                            "Please provide:\n"
+                                            "• Your name\n"
+                                            "• Phone number\n"
+                                            "• Best time to call\n\n"
+                                            "Our team will reach you within 1-2 hours!")
+                        
+                        logger.info(f"📅 SCHEDULING PROMPT ADDED ({'visit' if wants_visit else 'callback'})")
+                
+                except Exception as e:
+                    logger.error(f"Error in scheduling detection: {e}")
+                    # Don't fail the request
+                
+            except Exception as e:
+                logger.error(f"Error in conversation coaching: {e}")
+                # Don't fail the request if coaching fails
 
         # Update session
         if session and request.session_id:
             session_manager.add_message(request.session_id, "user", request.query)
             session_manager.add_message(request.session_id, "assistant", response_text[:500])
             session.last_intent = intent if intent != "unsupported" else "sales_conversation"
+            
+            # 🆕 Store sentiment in session for tracking
+            if sentiment_analysis:
+                session.last_sentiment = sentiment_analysis['sentiment']
+                session.last_frustration_level = sentiment_analysis.get('frustration_level', 0)
             
             # Update last_topic if provided in extraction
             if extraction and extraction.get("topic"):

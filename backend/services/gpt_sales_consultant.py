@@ -29,7 +29,8 @@ client = OpenAI(
 async def generate_consultant_response(
     query: str,
     session: ConversationSession,
-    intent: str = None
+    intent: str = None,
+    sentiment_analysis: dict = None
 ) -> str:
     """
     Unified GPT sales consultant for continuous conversation.
@@ -38,6 +39,7 @@ async def generate_consultant_response(
         query: User's query
         session: Full session state with history, context, projects
         intent: Optional intent hint (faq, objection, etc.)
+        sentiment_analysis: Optional sentiment analysis results
 
     Returns:
         Natural conversational response
@@ -48,6 +50,19 @@ async def generate_consultant_response(
 
     # Determine conversation goal
     goal = determine_conversation_goal(intent, query, session)
+    
+    # 🆕 Enhance goal with sentiment awareness
+    if sentiment_analysis:
+        sentiment = sentiment_analysis.get("sentiment", "neutral")
+        frustration_level = sentiment_analysis.get("frustration_level", 0)
+        
+        # Add sentiment-specific goal guidance
+        if sentiment == "frustrated" or frustration_level >= 7:
+            goal += "\n\n🚨 CUSTOMER IS FRUSTRATED - Priority: Address concern immediately with empathy and concrete solutions."
+        elif sentiment == "excited":
+            goal += "\n\n✨ CUSTOMER IS EXCITED - Capitalize on enthusiasm, suggest immediate action (site visit/booking)."
+        elif sentiment == "negative":
+            goal += "\n\n⚠️ CUSTOMER HAS CONCERNS - Build trust through transparency and detailed explanations."
 
     # Get conversation history
     conversation_history = []
@@ -59,7 +74,8 @@ async def generate_consultant_response(
         query=query,
         conversation_history=conversation_history,
         context=context,
-        goal=goal
+        goal=goal,
+        sentiment_analysis=sentiment_analysis
     )
 
     logger.info(f"Generated consultant response (intent={intent}, session={session.session_id if session else 'None'})")
@@ -264,14 +280,59 @@ async def call_gpt_consultant(
     query: str,
     conversation_history: List[Dict],
     context: dict,
-    goal: str
+    goal: str,
+    sentiment_analysis: dict = None
 ) -> str:
     """
-    Call GPT with unified consultant prompt.
+    Call GPT with unified consultant prompt and sentiment-adaptive tone.
     """
 
     # Build context section
     context_section = format_context_for_prompt(context)
+    
+    # 🆕 Build sentiment-adaptive tone instructions
+    tone_instructions = ""
+    empathy_statement = ""
+    
+    if sentiment_analysis:
+        from services.sentiment_analyzer import get_sentiment_analyzer
+        
+        analyzer = get_sentiment_analyzer()
+        sentiment = sentiment_analysis.get("sentiment", "neutral")
+        frustration_level = sentiment_analysis.get("frustration_level", 0)
+        detected_emotions = sentiment_analysis.get("detected_emotions", [])
+        
+        # Get tone adjustment
+        tone_adjustment = analyzer.get_tone_adjustment(sentiment, frustration_level)
+        
+        # Generate empathy statement
+        empathy_statement = analyzer.generate_empathy_statement(
+            sentiment,
+            detected_emotions,
+            specific_concern=context.get("last_objection_type")
+        )
+        
+        # Build tone instructions
+        tone_instructions = f"""
+        
+🎭 TONE ADAPTATION (Critical):
+- Customer Sentiment: {sentiment.upper()}
+- Frustration Level: {frustration_level}/10
+- Detected Emotions: {', '.join(detected_emotions) if detected_emotions else 'none'}
+- Empathy Level: {tone_adjustment['empathy_level']}
+- Response Style: {tone_adjustment['response_style']}
+
+📋 REQUIRED ACTIONS:
+{chr(10).join('- ' + action for action in tone_adjustment['suggested_actions'])}
+
+🚫 AVOID:
+{chr(10).join('- ' + avoid for avoid in tone_adjustment['avoid'])}
+
+💡 TONE GUIDANCE:
+{chr(10).join('- ' + prompt for prompt in tone_adjustment['prompt_additions'])}
+
+⚡ START YOUR RESPONSE WITH: "{empathy_statement}"
+"""
 
     system_prompt = f"""You are a senior real estate sales consultant at Pinclick, having a live conversation with a potential homebuyer in Bangalore.
 
@@ -279,7 +340,7 @@ CONVERSATION CONTEXT:
 {context_section}
 
 YOUR GOAL FOR THIS TURN:
-{goal}
+{goal}{tone_instructions}
 
 CRITICAL RULES:
 1. **CONTINUOUS CONVERSATION**: Never ask "What would you like to know?" or clarifying questions
@@ -288,24 +349,28 @@ CRITICAL RULES:
 4. **NATURAL FLOW**: Build on previous messages, don't restart the conversation
 5. **SALES-FOCUSED**: Guide toward decision, site visit, or next step
 6. **HONEST**: Don't invent facts not in context - acknowledge if you don't have specific info
+7. **🆕 SENTIMENT-ADAPTIVE**: Match your tone to their emotional state (see tone adaptation above)
 
 CONVERSATION STYLE:
 - Consultative, not salesy
 - Specific numbers and comparisons
 - Address their actual situation
 - End with relevant next step
+- 🆕 ADAPT TONE based on their sentiment and emotions
 
 WHAT YOU HAVE ACCESS TO:
 - Projects shown to them (in context above)
 - Their requirements and budget
 - Previous conversation
 - General real estate knowledge
+- 🆕 Their current emotional state and sentiment
 
 WHAT YOU DON'T DO:
 - Ask what they're looking for (you already know)
 - Repeat project lists (they've seen them)
 - Generic advice without project specifics
 - Break conversation flow
+- 🆕 Ignore their emotional state or use wrong tone
 
 RESPOND NATURALLY:
 """
