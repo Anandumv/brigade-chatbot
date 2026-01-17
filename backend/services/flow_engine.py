@@ -638,31 +638,42 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
             
             cap = float(budget_cap) * 100 if budget_cap else float('inf')
             
+            # PHASE 1: Location Filtering
+            # ---------------------------
+            # If location is specified, mark strict vs broad matches
+            filtered_by_location = []
+            
             for p in projects:
-                # Filter Location (Broad Match: Location > Description > USP)
+                if not loc_term:
+                    p['_loc_match_type'] = 'none' # No location filter
+                    filtered_by_location.append(p)
+                    continue
+
                 p_loc = p['location'].lower()
                 p_desc = str(p.get('description', '')).lower()
                 p_usp = str(p.get('usp', '')).lower()
                 
-                if loc_term:
-                    # Check if location term matches ANY relevant field
-                    matches_loc = loc_term in p_loc
-                    matches_desc = loc_term in p_desc
-                    matches_usp = loc_term in p_usp
-                    
-                    if matches_loc:
-                        p['_loc_match_type'] = 'strict'
-                    elif matches_desc or matches_usp:
-                        p['_loc_match_type'] = 'broad'
-                    else:
-                        continue
-            
-            # Post-filtering: If we have strict location matches, filter out the broad ones
-            # This prevents "Sarjapur (near Whitefield)" showing up for "Whitefield" query if actual Whitefield projects exist
-            has_strict_matches = any(p.get('_loc_match_type') == 'strict' for p in projects)
-            if has_strict_matches:
-                projects = [p for p in projects if p.get('_loc_match_type') == 'strict']
+                matches_loc = loc_term in p_loc
+                matches_desc = loc_term in p_desc
+                matches_usp = loc_term in p_usp
                 
+                if matches_loc:
+                    p['_loc_match_type'] = 'strict'
+                    filtered_by_location.append(p)
+                    
+                elif matches_desc or matches_usp:
+                    p['_loc_match_type'] = 'broad'
+                    filtered_by_location.append(p)
+
+            # Apply Strict Priority Logic
+            current_projects = filtered_by_location
+            has_strict = any(p.get('_loc_match_type') == 'strict' for p in current_projects)
+            if has_strict:
+                current_projects = [p for p in current_projects if p.get('_loc_match_type') == 'strict']
+                
+            # PHASE 2: Attribute Filtering (Config, Budget, etc.)
+            # ---------------------------
+            for p in current_projects:
                 # Filter Config (Normalize: remove spaces and dots)
                 p_conf_norm = p['configuration'].lower().replace(" ", "").replace(".", "")
                 conf_term_norm = conf_term.replace(" ", "").replace(".", "")
