@@ -495,13 +495,24 @@ class IntelligentSalesHandler:
             if context.interested_projects:
                 additional_context += f"\nProjects customer showed interest in: {', '.join(context.interested_projects)}"
         
-        # Generate response
-        conversation_history = context.conversation_history if context else None
+        # Use Master Prompt for dynamic generation
+        from services.master_prompt import SALES_ADVISOR_SYSTEM, get_objection_prompt, get_faq_prompt
         
+        # Determine specific prompt based on intent
+        user_prompt = query
+        if "objection" in intent.value:
+            user_prompt = get_objection_prompt(query, intent.value.replace("objection_", ""))
+        elif "faq" in intent.value:
+            user_prompt = get_faq_prompt(query, intent.value.replace("faq_", ""))
+            
+        # Add context from static knowledge if available, but treating it as "Reference" not "Script"
+        if additional_context:
+            user_prompt += f"\n\nREFERENCE KNOWLEDGE (Use as guide, not script):\n{additional_context}"
+
         response = await self._call_llm(
-            system_prompt=SALES_SYSTEM_PROMPT,
-            user_message=query,
-            context=additional_context,
+            system_prompt=SALES_ADVISOR_SYSTEM,
+            user_message=user_prompt,
+            context=None, # Context is now embedded in user prompt for better flow
             conversation_history=conversation_history
         )
         
