@@ -588,7 +588,8 @@ How can I assist you today?"""
                 query_lower = request.query.lower()
                 # Common project keywords to match
                 # Common project keywords to match
-                project_keywords = ["avalon", "citrine", "neopolis", "brigade", "sobha", "prestige", "godrej", "birla", "evara", "ojasvi", "woods", "calista", "7 gardens", "panache"]
+                # Common project keywords to match
+                project_keywords = ["avalon", "citrine", "neopolis", "brigade", "sobha", "prestige", "godrej", "birla", "evara", "ojasvi", "woods", "calista", "7 gardens", "panache", "folium", "sumadhura", "eden", "serene"]
                 for keyword in project_keywords:
                     if keyword in query_lower:
                         project_name = keyword.title()  # e.g., "avalon" -> "Avalon"
@@ -598,8 +599,12 @@ How can I assist you today?"""
                             project_name = "Brigade Citrine"
                         elif keyword == "evara":
                             project_name = "Birla Evara"
-                        elif keyword == "ojasvi":
-                            project_name = "Birla Ojasvi"
+                        elif keyword == "folium" or keyword == "sumadhura":
+                            project_name = "Sumadhura Folium"
+                        elif keyword == "eden":
+                            project_name = "Godrej Eden"
+                        elif keyword == "serene":
+                            project_name = "Godrej Serene"
                         elif keyword == "woods":
                             project_name = "Godrej Woods"
                         break
