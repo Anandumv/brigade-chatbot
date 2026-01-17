@@ -23,7 +23,8 @@ client = OpenAI(
 def classify_intent_gpt_first(
     query: str,
     conversation_history: Optional[List[Dict]] = None,
-    session_state: Optional[Dict] = None
+    session_state: Optional[Dict] = None,
+    context_summary: Optional[str] = None
 ) -> Dict:
     """
     GPT-4 primary classifier with intelligent data source selection.
@@ -32,6 +33,7 @@ def classify_intent_gpt_first(
         query: User's input query
         conversation_history: Last N conversation turns for context (optional)
         session_state: Current session state with selected_project, requirements, etc. (optional)
+        context_summary: Formatted context summary from session manager (optional)
 
     Returns:
         {
@@ -48,23 +50,45 @@ def classify_intent_gpt_first(
     # Build messages array
     messages = [{"role": "system", "content": system_prompt}]
 
-    # Add conversation history for context (last 5 turns)
+    # Add conversation history for context (last 10 turns now for better context)
     if conversation_history:
-        messages.extend(conversation_history[-5:])
+        messages.extend(conversation_history[-10:])
 
-    # Add session context if available
+    # Build comprehensive context info
     context_info = ""
+    
+    # Use context summary if available (preferred)
+    if context_summary:
+        context_info = f"\n\n**Conversation Context:**\n{context_summary}"
+    
+    # Add detailed session state
     if session_state:
         if session_state.get("selected_project_name"):
-            context_info += f"\nCurrent selected project: {session_state['selected_project_name']}"
+            context_info += f"\n**Current Project:** {session_state['selected_project_name']}"
         if session_state.get("requirements"):
             req = session_state["requirements"]
-            context_info += f"\nUser requirements: config={req.get('configuration')}, location={req.get('location')}, budget_max={req.get('budget_max')}"
+            req_parts = []
+            if req.get('configuration'):
+                req_parts.append(f"config={req['configuration']}")
+            if req.get('location'):
+                req_parts.append(f"location={req['location']}")
+            if req.get('budget_max'):
+                req_parts.append(f"budget={req['budget_max']} Cr")
+            if req_parts:
+                context_info += f"\n**User Requirements:** {', '.join(req_parts)}"
+        
+        # Add last intent and topic if available
+        if session_state.get("last_intent"):
+            context_info += f"\n**Last Intent:** {session_state['last_intent']}"
+        if session_state.get("last_topic"):
+            context_info += f"\n**Last Topic:** {session_state['last_topic']}"
+        if session_state.get("conversation_phase"):
+            context_info += f"\n**Phase:** {session_state['conversation_phase']}"
 
     # Add user query with context
     user_message = f"Classify this query: {query}"
     if context_info:
-        user_message += f"\n\nSession context:{context_info}"
+        user_message += context_info
 
     messages.append({"role": "user", "content": user_message})
 
@@ -172,6 +196,12 @@ def _build_system_prompt() -> str:
 - For structured facts (RERA, price, configs, developer, location) → data_source="database" ALWAYS
 - For persuasive elaboration ONLY (investment pitch, sustainability benefits, amenity lifestyle) → data_source="gpt_generation"
 
+**IMPORTANT - Context-Aware Classification:**
+- If session context shows a project is being discussed, NEVER classify as "unsupported" or "ambiguous"
+- For vague follow-ups (e.g., "give more points") with project context → classify as "more_info_request" with HIGH confidence
+- Use conversation history to infer intent - don't mark as unclear if context makes it clear
+- When Last Intent or Last Topic is provided, use it to disambiguate vague queries
+
 **Examples:**
 
 Query: "I want a 2BHK in Whitefield under 2 Cr"
@@ -218,14 +248,25 @@ Query: "more pointers on avalon"
 }
 ```
 
-Query: "More pointers" (with session context: selected_project="Brigade Citrine")
+Query: "More pointers" (with session context: selected_project="Brigade Citrine", last_topic="sustainability")
 ```json
 {
   "intent": "more_info_request",
   "data_source": "gpt_generation",
-  "confidence": 0.75,
-  "reasoning": "Vague request for additional insights about selected project",
-  "extraction": {"project_name": "Brigade Citrine", "topic": "general_selling_points"}
+  "confidence": 0.85,
+  "reasoning": "Vague request but session context shows project and topic - continue conversation naturally",
+  "extraction": {"project_name": "Brigade Citrine", "topic": "sustainability"}
+}
+```
+
+Query: "give more points" (with session context: selected_project="Brigade Avalon", conversation_phase="evaluation")
+```json
+{
+  "intent": "more_info_request",
+  "data_source": "gpt_generation",
+  "confidence": 0.90,
+  "reasoning": "Follow-up request for additional information about current project",
+  "extraction": {"project_name": "Brigade Avalon", "topic": "general_selling_points"}
 }
 ```
 

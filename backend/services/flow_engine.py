@@ -840,12 +840,33 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
              action = "That's wonderful! I'm excited to help you schedule a site visit. This will give you a chance to see the property firsthand and ask any questions."
              next_node = "FACE_TO_FACE"
         elif intent == "request_info":
-             action = "I'd be happy to provide more details about any of these properties. What specific aspects would you like to know more about?"
-             next_node = "NODE 2A"  # Stay to answer questions
+             # If we have a selected project, use contextual response instead of asking
+             if state.selected_project_name:
+                 context = f"User asking for more info about {state.selected_project_name}"
+                 action = generate_contextual_response(
+                     user_input,
+                     context,
+                     f"Provide additional helpful information about {state.selected_project_name}. Be specific and actionable."
+                 )
+                 next_node = "NODE 2A"  # Stay to answer more questions
+             else:
+                 action = "I'd be happy to provide more details about any of these properties. What specific aspects would you like to know more about?"
+                 next_node = "NODE 2A"
         else:
-             # Ambiguous or unclear intent
-             action = "I'd be happy to help you further! Would you like to know more about these properties, or shall we schedule a site visit to see them in person?"
-             next_node = "NODE 2A"  # Stay in objection handler to wait for clarification
+             # Ambiguous or unclear intent - Use contextual response instead of generic clarification
+             if state.selected_project_name or state.last_shown_projects:
+                 # We have context - generate intelligent response
+                 project_context = f"Projects shown: {', '.join([p['name'] for p in state.last_shown_projects[:3]])}" if state.last_shown_projects else ""
+                 action = generate_contextual_response(
+                     user_input,
+                     f"User viewing properties. {project_context}",
+                     "Continue the conversation naturally. Provide helpful next steps or ask a specific question about their preferences."
+                 )
+                 next_node = "NODE 2A"
+             else:
+                 # No context - default prompt
+                 action = "I'd be happy to help you further! Would you like to know more about these properties, or shall we schedule a site visit to see them in person?"
+                 next_node = "NODE 2A"  # Stay in objection handler to wait for clarification
 
     # --- NODE 2B: Deep-Dive Project Pitch ---
     elif node == "NODE 2B":
@@ -875,9 +896,15 @@ RERA: {project.get('rera_number', 'N/A')}
     # --- NODE 2B_WAIT: Post-Pitch Handler (Smart Follow-up with LLM + Web Search) ---
     elif node == "NODE 2B_WAIT":
         if not state.selected_project_name:
-            # Safety: No project selected, ask them to select
-            action = "Which project would you like to know more about?"
-            next_node = "NODE 2A"
+            # Safety: No project selected, use context or ask them to select
+            if state.last_shown_projects:
+                # Use contextual response about available projects
+                projects_list = ", ".join([p['name'] for p in state.last_shown_projects[:3]])
+                action = f"I can provide more details about any of these properties: {projects_list}. Which one interests you?"
+                next_node = "NODE 2A"
+            else:
+                action = "Which project would you like to know more about?"
+                next_node = "NODE 2A"
         else:
             # Classify the follow-up intent using LLM
             project_location = state.cached_project_details.get('location', '') if state.cached_project_details else ''

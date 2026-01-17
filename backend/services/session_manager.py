@@ -42,8 +42,11 @@ class ConversationSession(BaseModel):
     # Flow Engine State (Strict Agent Mode)
     flow_state: Optional[Dict[str, Any]] = None
     
-    # Context Tracking
+    # Context Tracking - Enhanced for continuous conversation
     last_intent: Optional[str] = None  # To contextually handle "show more" etc.
+    last_topic: Optional[str] = None  # Last discussed topic (sustainability, investment, etc.)
+    last_shown_projects: List[Dict[str, Any]] = []  # Recently shown projects with details
+    conversation_phase: str = "discovery"  # discovery, evaluation, negotiation, closing
 
 
 class SessionManager:
@@ -159,6 +162,84 @@ class SessionManager:
         if session_id not in self.sessions:
             return []
         return self.sessions[session_id].messages[-count:]
+    
+    def save_session(self, session: ConversationSession) -> None:
+        """Persist session state after updates."""
+        if session.session_id in self.sessions:
+            self.sessions[session.session_id] = session
+            session.last_activity = datetime.now()
+            logger.debug(f"Session {session.session_id} saved with last_intent={session.last_intent}, last_topic={session.last_topic}")
+    
+    def get_context_summary(self, session_id: str) -> Dict[str, Any]:
+        """
+        Get enriched context summary for GPT fallback.
+        Returns comprehensive conversation context for intelligent responses.
+        """
+        if session_id not in self.sessions:
+            return {
+                "has_context": False,
+                "summary": "New conversation"
+            }
+        
+        session = self.sessions[session_id]
+        
+        # Build context summary
+        context = {
+            "has_context": True,
+            "session_id": session_id,
+            "message_count": len(session.messages),
+            "engagement_score": session.engagement_score,
+            "conversation_phase": session.conversation_phase,
+            
+            # Current state
+            "current_filters": session.current_filters,
+            "last_intent": session.last_intent,
+            "last_topic": session.last_topic,
+            
+            # Projects
+            "interested_projects": session.interested_projects,
+            "last_project": session.interested_projects[-1] if session.interested_projects else None,
+            "last_shown_projects": session.last_shown_projects[-5:] if session.last_shown_projects else [],
+            
+            # Sales tracking
+            "objections_raised": session.objections_raised,
+            "ctas_suggested": {
+                "meeting": session.meeting_suggested,
+                "site_visit": session.site_visit_suggested,
+                "callback": session.callback_suggested
+            },
+            
+            # Recent conversation
+            "recent_messages": session.messages[-10:] if session.messages else [],
+            
+            # Formatted summary for GPT
+            "summary": self._format_context_for_gpt(session)
+        }
+        
+        return context
+    
+    def _format_context_for_gpt(self, session: ConversationSession) -> str:
+        """Format session context as natural language for GPT."""
+        parts = []
+        
+        if session.interested_projects:
+            parts.append(f"Currently discussing: {session.interested_projects[-1]}")
+        
+        if session.last_topic:
+            parts.append(f"Last topic: {session.last_topic}")
+        
+        if session.current_filters:
+            filter_str = ", ".join([f"{k}={v}" for k, v in session.current_filters.items() if v])
+            if filter_str:
+                parts.append(f"User requirements: {filter_str}")
+        
+        if session.objections_raised:
+            parts.append(f"Objections raised: {', '.join(session.objections_raised)}")
+        
+        parts.append(f"Conversation phase: {session.conversation_phase}")
+        parts.append(f"Messages exchanged: {len(session.messages)}")
+        
+        return " | ".join(parts) if parts else "New conversation"
     
     def cleanup_expired_sessions(self):
         """Remove expired sessions to free memory."""

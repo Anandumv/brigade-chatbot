@@ -266,27 +266,57 @@ async def chat_query(request: ChatQueryRequest):
         request.query = normalized_query
         logger.info(f"Normalized query: '{original_query}' -> '{normalized_query}'")
 
+        # Step 0.5: Get or Create Session and Load Context
+        session = None
+        context_summary_dict = {}
+        if request.session_id:
+            session = session_manager.get_or_create_session(request.session_id)
+            context_summary_dict = session_manager.get_context_summary(request.session_id)
+        
+        # Step 0.6: Context Injection - Enrich vague queries with session context
+        from services.context_injector import (
+            enrich_query_with_context, 
+            inject_context_metadata,
+            should_use_gpt_fallback
+        )
+        
+        enriched_query = request.query
+        was_enriched = False
+        
+        if session:
+            enriched_query, was_enriched = enrich_query_with_context(request.query, session)
+            if was_enriched:
+                logger.info(f"Query enriched: '{request.query}' → '{enriched_query}'")
+                # Use enriched query for classification
+                request.query = enriched_query
+
+        # Get full context metadata
+        context_metadata = inject_context_metadata(original_query, session)
+
         # Step 1: GPT-First Intent Classification with Intelligent Data Source Routing
         # Get conversation history and session state for context
         conversation_history = []
         session_state = {}
-        if request.session_id:
-            session = session_manager.get_or_create_session(request.session_id)
-            # Format messages for GPT context
+        if session:
+            # Format messages for GPT context (now 10 turns for better context)
             conversation_history = [
                 {"role": msg.get("role", "user"), "content": msg.get("content", "")}
-                for msg in session.messages[-5:]
+                for msg in session.messages[-10:]
             ]
             session_state = {
                 "selected_project_name": session.interested_projects[-1] if session.interested_projects else None,
-                "requirements": session.current_filters
+                "requirements": session.current_filters,
+                "last_intent": session.last_intent,
+                "last_topic": session.last_topic,
+                "conversation_phase": session.conversation_phase
             }
         
-        # GPT-first classification with data source selection
+        # GPT-first classification with data source selection and enhanced context
         gpt_result = classify_intent_gpt_first(
             query=request.query,
             conversation_history=conversation_history,
-            session_state=session_state
+            session_state=session_state,
+            context_summary=context_summary_dict.get("summary")
         )
         
         intent = gpt_result.get("intent", "unsupported")
@@ -296,12 +326,51 @@ async def chat_query(request: ChatQueryRequest):
         
         logger.info(f"GPT Classification: intent={intent}, data_source={data_source}, confidence={gpt_confidence}")
         
-        # Fallback to keyword classifier if GPT confidence is too low
-        if gpt_confidence < 0.5:
+        # Fallback to keyword classifier if GPT confidence is too low AND no context
+        if gpt_confidence < 0.5 and not context_metadata.get("has_context"):
             logger.warning(f"GPT confidence too low ({gpt_confidence}), falling back to keyword classifier")
             intent = intent_classifier.classify_intent(request.query)
             data_source = "database"  # Default to database for fallback
             logger.info(f"Keyword fallback intent: {intent}")
+        
+        # CRITICAL: Check if we should use GPT fallback instead of specific handlers
+        # This prevents asking clarifying questions when context exists
+        use_gpt_fallback = False
+        if session and should_use_gpt_fallback(original_query, session, gpt_confidence):
+            use_gpt_fallback = True
+            logger.info("Routing to GPT fallback to maintain conversation flow")
+        
+        # If we're using GPT fallback, generate response directly
+        if use_gpt_fallback:
+            from services.gpt_content_generator import generate_contextual_response_with_full_history
+            
+            response_text = generate_contextual_response_with_full_history(
+                query=original_query,
+                conversation_history=conversation_history,
+                session_context=context_summary_dict,
+                goal="Continue the conversation naturally without asking clarifying questions"
+            )
+            
+            # Update session
+            if session:
+                session_manager.add_message(request.session_id, "user", original_query)
+                session_manager.add_message(request.session_id, "assistant", response_text[:500])
+                session.last_intent = intent
+                if extraction.get("topic"):
+                    session.last_topic = extraction["topic"]
+                session_manager.save_session(session)
+            
+            response_time_ms = int((time.time() - start_time) * 1000)
+            
+            return ChatQueryResponse(
+                answer=response_text,
+                sources=[],
+                confidence="High",
+                intent="gpt_contextual_fallback",
+                refusal_reason=None,
+                response_time_ms=response_time_ms,
+                suggested_actions=["Schedule site visit", "Compare projects", "Get more details"]
+            )
 
         # Contextual Override for "Show More" / "Tell me more"
         # If user asks to elaborate on a previous non-search topic, force it to 'more_info_request'
@@ -471,7 +540,8 @@ How can I assist you today?"""
             response_text, sales_intent, should_fallback, actions = await intelligent_sales.handle_query(
                 query=request.query,
                 context=context,
-                session_id=request.session_id
+                session_id=request.session_id,
+                conversation_history=conversation_history
             )
             
             if not should_fallback and response_text:
@@ -493,6 +563,8 @@ How can I assist you today?"""
                     # Update session with new intent (e.g. faq_budget_stretch) using sales_intent from intelligent handler
                     intent_val = sales_intent.value if hasattr(sales_intent, "value") else "sales_faq"
                     session.last_intent = intent_val
+                    if extraction.get("topic"):
+                        session.last_topic = extraction["topic"]
                     session_manager.save_session(session)
 
                 return ChatQueryResponse(
@@ -547,7 +619,8 @@ How can I assist you today?"""
             response_text, sales_intent, should_fallback, actions = await intelligent_sales.handle_query(
                 query=request.query,
                 context=context,
-                session_id=request.session_id
+                session_id=request.session_id,
+                conversation_history=conversation_history
             )
             
             if not should_fallback and response_text:
@@ -724,6 +797,15 @@ How can I assist you today?"""
             if request.session_id:
                 session_manager.add_message(request.session_id, "user", request.query)
                 session_manager.add_message(request.session_id, "assistant", flow_response.system_action[:500])
+                
+                # Update session state with intent and topic
+                session = session_manager.get_or_create_session(request.session_id)
+                session.last_intent = f"flow_{flow_response.current_node}"
+                if extraction.get("topic"):
+                    session.last_topic = extraction["topic"]
+                if extraction.get("project_name"):
+                    session_manager.record_interest(request.session_id, extraction["project_name"])
+                session_manager.save_session(session)
             
             # Log the interaction
             if request.user_id:
@@ -749,8 +831,39 @@ How can I assist you today?"""
                 suggested_actions=[] 
             )
 
-        # Step 3: For unsupported/unclear intents, let GPT handle intelligently
+        # Step 3: For unsupported/unclear intents, use GPT with context if available
         if intent == "unsupported":
+            # If we have session context, use contextual fallback
+            if session and context_summary_dict.get("has_context"):
+                logger.info("Unsupported intent with context - routing to contextual GPT fallback")
+                from services.gpt_content_generator import generate_contextual_response_with_full_history
+                
+                response_text = generate_contextual_response_with_full_history(
+                    query=original_query,
+                    conversation_history=conversation_history,
+                    session_context=context_summary_dict,
+                    goal="Help the user with their query using conversation context"
+                )
+                
+                # Update session
+                session_manager.add_message(request.session_id, "user", original_query)
+                session_manager.add_message(request.session_id, "assistant", response_text[:500])
+                session.last_intent = "contextual_fallback"
+                session_manager.save_session(session)
+                
+                response_time_ms = int((time.time() - start_time) * 1000)
+                
+                return ChatQueryResponse(
+                    answer=response_text,
+                    sources=[],
+                    confidence="Medium",
+                    intent="gpt_contextual",
+                    refusal_reason=None,
+                    response_time_ms=response_time_ms,
+                    suggested_actions=["Search properties", "Schedule meeting", "Get more info"]
+                )
+            
+            # No context - try general GPT response
             logger.info("Unsupported intent - routing to GPT for helpful response")
             
             try:

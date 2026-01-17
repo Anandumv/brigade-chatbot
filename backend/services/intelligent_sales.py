@@ -484,7 +484,8 @@ class IntelligentSalesHandler:
         self,
         query: str,
         intent: SalesIntent,
-        context: Optional[ConversationContext] = None
+        context: Optional[ConversationContext] = None,
+        conversation_history: Optional[List[Dict]] = None
     ) -> str:
         """
         Generate highly intelligent, context-aware response using GPT-4.
@@ -631,11 +632,12 @@ I'd love to help you further!
         self,
         query: str,
         context: Optional[ConversationContext] = None,
-        session_id: Optional[str] = None
+        session_id: Optional[str] = None,
+        conversation_history: Optional[List[Dict]] = None
     ) -> Tuple[str, SalesIntent, bool, List[str]]:
         """
         Main entry point for handling sales queries.
-        Now with Pixeltable FAQ integration and session-aware CTAs.
+        Now with Pixeltable FAQ integration, session-aware CTAs, and conversation history.
         
         Returns:
             (response_text, intent, should_fallback_to_rag, suggested_actions)
@@ -643,8 +645,33 @@ I'd love to help you further!
         intent = self.classify_intent(query)
         logger.info(f"Classified sales intent: {intent.value}")
         
-        # For unknown intents or property queries, fallback to RAG
-        if intent in [SalesIntent.UNKNOWN, SalesIntent.PROPERTY_QUERY]:
+        # For property queries, always fallback to RAG
+        if intent == SalesIntent.PROPERTY_QUERY:
+            return "", intent, True, []
+        
+        # For UNKNOWN intents with conversation context, try GPT with context first
+        if intent == SalesIntent.UNKNOWN:
+            if session_id and self.session_manager:
+                # Get session context
+                session = self.session_manager.get_or_create_session(session_id)
+                
+                # If we have conversation context, use GPT with full context
+                if len(session.messages) >= 2 or session.interested_projects:
+                    logger.info("UNKNOWN intent but has context - using GPT with conversation history")
+                    from services.gpt_content_generator import generate_contextual_response_with_full_history
+                    
+                    context_summary = self.session_manager.get_context_summary(session_id)
+                    response = generate_contextual_response_with_full_history(
+                        query=query,
+                        conversation_history=conversation_history or session.messages[-10:],
+                        session_context=context_summary,
+                        goal="Continue the sales conversation naturally"
+                    )
+                    
+                    if response:
+                        return response, intent, False, ["Explore properties", "Schedule meeting", "Ask questions"]
+            
+            # No context - fallback to RAG
             return "", intent, True, []
         
         
@@ -667,12 +694,20 @@ I'd love to help you further!
         
         if intent in faq_type_map and sales_intelligence:
             faq_type = faq_type_map[intent]
-            logger.info(f"Using Sales Intelligence for {faq_type}")
-            response = sales_intelligence.get_faq_response(faq_type)
+            # DISABLED: Static lookup bypassed to force GPT generation per user request
+            # response = sales_intelligence.get_faq_response(faq_type)
+            # logger.info(f"Using Sales Intelligence for {faq_type}")
+            pass
+
         
         # Fallback to GPT-4 if no response
         if not response:
-            response = await self.generate_intelligent_response(query, intent, context)
+            response = await self.generate_intelligent_response(
+                query, 
+                intent, 
+                context,
+                conversation_history
+            )
         
         # Track objections in session
         if session_id and self.session_manager:

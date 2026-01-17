@@ -288,3 +288,128 @@ Would you like to know more about the investment potential, sustainability featu
         logger.error(f"Hybrid enhancement failed: {e}")
         # Fallback: Just return facts
         return facts_section + "\n\nWould you like more details or schedule a site visit?"
+
+
+def generate_contextual_response_with_full_history(
+    query: str,
+    conversation_history: list,
+    session_context: Dict,
+    goal: str = "Continue the conversation naturally"
+) -> str:
+    """
+    Generate intelligent contextual responses using full conversation history.
+    
+    This is the ULTIMATE FALLBACK - never asks clarifying questions, always continues naturally.
+    
+    Args:
+        query: Current user query
+        conversation_history: Full conversation history (last 10 turns)
+        session_context: Rich session context from session_manager.get_context_summary()
+        goal: Specific goal for this response (optional)
+    
+    Returns:
+        Natural, context-aware response that continues the conversation
+    """
+    
+    # Build comprehensive context for GPT
+    context_parts = []
+    
+    # Add conversation summary
+    if session_context.get("summary"):
+        context_parts.append(f"**Conversation Summary:** {session_context['summary']}")
+    
+    # Add current state
+    if session_context.get("last_project"):
+        context_parts.append(f"**Currently Discussing:** {session_context['last_project']}")
+    
+    if session_context.get("last_topic"):
+        context_parts.append(f"**Last Topic:** {session_context['last_topic']}")
+    
+    if session_context.get("current_filters"):
+        filters = session_context['current_filters']
+        filter_strs = []
+        if filters.get('configuration'):
+            filter_strs.append(f"{filters['configuration']}")
+        if filters.get('location'):
+            filter_strs.append(f"in {filters['location']}")
+        if filters.get('budget_max'):
+            filter_strs.append(f"under ₹{filters['budget_max']} Cr")
+        if filter_strs:
+            context_parts.append(f"**User Requirements:** {' '.join(filter_strs)}")
+    
+    if session_context.get("objections_raised"):
+        context_parts.append(f"**Objections:** {', '.join(session_context['objections_raised'])}")
+    
+    context_str = "\n".join(context_parts) if context_parts else "New conversation"
+    
+    # Build system prompt
+    system_prompt = f"""You are an AI real estate sales assistant for Pinclick in Bangalore.
+
+{context_str}
+
+**YOUR CRITICAL INSTRUCTIONS:**
+1. NEVER ask clarifying questions like "What would you like to know?" or "Could you clarify?"
+2. Use the conversation context to infer what the user wants
+3. Continue the conversation naturally as if you fully understand the context
+4. If the user asks vague questions like "give more points", provide relevant information about the current topic/project
+5. Be helpful, informative, and sales-focused
+6. If uncertain, provide general helpful information and guide toward specific topics
+7. Keep responses conversational and engaging (200-400 words)
+
+**Your Goal:** {goal}
+
+**Response Guidelines:**
+- Use bullet points for readability
+- Bold key terms (project names, prices, configs)
+- Be persuasive but honest
+- End with a gentle call-to-action or question to keep conversation flowing
+- Reference the conversation context naturally"""
+
+    # Build messages with history
+    messages = [{"role": "system", "content": system_prompt}]
+    
+    # Add conversation history (last 10 turns for full context)
+    if conversation_history:
+        messages.extend(conversation_history[-10:])
+    
+    # Add current query
+    messages.append({"role": "user", "content": query})
+    
+    try:
+        response = client.chat.completions.create(
+            model=settings.effective_gpt_model,
+            temperature=0.7,
+            messages=messages,
+            max_tokens=500
+        )
+        
+        content = response.choices[0].message.content.strip()
+        logger.info(f"Generated contextual response with full history (query='{query[:50]}...', context_items={len(context_parts)})")
+        
+        return content
+    
+    except Exception as e:
+        logger.error(f"Contextual response generation failed: {e}")
+        
+        # Ultimate fallback - still try to be helpful
+        if session_context.get("last_project"):
+            return f"""I'd be happy to share more about **{session_context['last_project']}**. 
+
+Here are some key points:
+- It's a premium project with excellent amenities and location
+- Well-suited for your requirements
+- Great investment potential in this area
+
+Would you like to know more about pricing, amenities, location advantages, or schedule a site visit?"""
+        else:
+            return """I'm here to help you find the perfect property in Bangalore!
+
+I can assist with:
+- 🏠 Property search based on your budget and preferences
+- 📊 Project details and comparisons
+- 📍 Location insights and connectivity
+- 💰 Investment advice and ROI potential
+- 📅 Site visit scheduling
+
+What would you like to explore?"""
+
