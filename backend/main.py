@@ -80,12 +80,16 @@ def is_property_search_query(query: str, intent: str, filters: Optional[Dict] = 
     - Has explicit filters (config/budget/location)
     - Contains search phrases like "show me", "find", "search for"
     """
+    # Convert Pydantic model to dict if needed
+    if filters and hasattr(filters, 'dict'):
+        filters = filters.dict()
+    
     # Explicit property search intent
     if intent == "property_search":
         return True
 
     # Has filters from UI or extraction
-    if filters and any(filters.values()):
+    if filters and isinstance(filters, dict) and any(filters.values()):
         return True
 
     # Search phrases
