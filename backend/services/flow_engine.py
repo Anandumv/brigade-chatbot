@@ -737,9 +737,9 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
                 query_lower = user_input.lower()
                 min_price_keywords = ["minimum budget", "min budget", "starting price", "lowest price", "cheapest", "least expensive", "start from", "starts from", "start price"]
                 
-                if matches and any(kw in query_lower for kw in min_price_keywords):
-                    # Calculate minimum budget from matches
-                    min_price_proj = min(matches, key=lambda x: x.get('budget_min', float('inf')))
+                if match_details and any(kw in query_lower for kw in min_price_keywords):
+                    # Calculate minimum budget from match_details
+                    min_price_proj = min(match_details, key=lambda x: x.get('budget_min', float('inf')))
                     min_price_val = min_price_proj.get('budget_min', 0) / 100
                     
                     direct_answer = f"💡 **The minimum budget required starts at ₹{min_price_val:.2f} Cr** with {min_price_proj.get('name')}.\n\n"
