@@ -135,32 +135,36 @@ def _build_system_prompt() -> str:
 
 **PATH 1: DATABASE** (Facts that EXIST in database)
 - property_search: "show me 2BHK", "find flats in Whitefield"
-- project_facts: "price of X", "RERA of Y", "possession date of Z", "configuration of X"
-- Database contains: name, developer, location, price, RERA, configuration, possession date, status
+- project_facts: "price of X", "RERA of Y", "possession date of Z", "tell me about X", "details of Y", "amenities in X"
+- Database contains: name, developer, location, price, RERA, configuration, possession date, status, amenities, highlights, usp
 
 **PATH 2: GPT SALES CONSULTANT** (Everything else - DEFAULT)
 - sales_conversation: Generic FAQs, objections, follow-ups, advice, chitchat
 - Examples: "How to stretch budget?", "What is EMI?", "more", "tell me more", "too expensive"
-- Project questions NOT in DB: "nearby amenities of X", "how far is airport from Y", "investment potential"
+- Project questions NOT in DB: "how far is airport from Y", "investment potential", "nearby schools"
 
 **CRITICAL ROUTING RULES:**
 
 1. **PROPERTY_SEARCH** (→ database):
    - ONLY if user explicitly wants to find/search properties
-   - Keywords: "show me", "find", "search for", "looking for"
-   - Has filters: BHK + (location OR budget)
+   - Keywords: "show me", "find", "search for", "looking for", "need", "want"
+   - Has ANY filter: BHK OR location OR budget (not all required)
    - data_source: "database"
 
-2. **PROJECT_FACTS** (→ database):
-   - User asks for facts that EXIST in database schema
-   - Database facts ONLY: price, RERA, configuration, possession date, developer, location
-   - Examples: "price of Citrine", "RERA number of Neopolis", "possession date of Avalon"
+2. **PROJECT_FACTS** (→ database) - **EXPANDED**:
+   - User asks for ANY information about a SPECIFIC project
+   - Broad queries: "tell me about X", "details of Y", "information about Z", "describe X", "what is X"
+   - Specific facts: price, RERA, configuration, possession, developer, location, amenities, facilities, features, highlights, usp
+   - Examples:
+     * "Tell me about Brigade Citrine" → database (project details)
+     * "Amenities in Avalon" → database (amenities field)
+     * "Details of Neopolis" → database (all project fields)
+     * "Price of Citrine" → database (price field)
    - data_source: "database"
 
 3. **SALES_CONVERSATION** (→ GPT) - **DEFAULT for everything else**:
    - Questions about things NOT in database:
-     * Amenities: "nearby amenities of X", "schools near Y"
-     * Distances: "how far is airport from X", "distance to office"
+     * Distance/Location: "how far is airport from X", "distance to office", "nearby schools"
      * Advice: "investment potential", "why buy in Whitefield", "pros and cons"
    - Generic questions: "How to stretch budget?", "What is EMI?", "loan eligibility"
    - Follow-ups: "more", "tell me more", "continue", "give more points"
@@ -232,14 +236,25 @@ Query: "What is the price of Brigade Citrine?"
 }
 ```
 
-Query: "Nearby amenities of Brigade Citrine"
+Query: "Tell me about Brigade Citrine"
 ```json
 {
-  "intent": "sales_conversation",
-  "data_source": "gpt_generation",
-  "confidence": 0.90,
-  "reasoning": "Amenities info not in database - needs GPT inference",
-  "extraction": {"project_name": "Brigade Citrine", "topic": "amenities"}
+  "intent": "project_facts",
+  "data_source": "database",
+  "confidence": 0.95,
+  "reasoning": "Broad project detail query - fetch from database",
+  "extraction": {"project_name": "Brigade Citrine"}
+}
+```
+
+Query: "Amenities in Brigade Citrine"
+```json
+{
+  "intent": "project_facts",
+  "data_source": "database",
+  "confidence": 0.93,
+  "reasoning": "Amenities field exists in database",
+  "extraction": {"project_name": "Brigade Citrine", "fact_type": "amenities"}
 }
 ```
 

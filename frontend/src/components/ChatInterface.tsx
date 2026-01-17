@@ -192,6 +192,79 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
         }
     };
 
+    // Handle "Show Nearby" button click from ProjectCard
+    const handleShowNearby = async (location: string) => {
+        if (isLoading) return;
+
+        const query = `show nearby ${location}`;
+        
+        // Create user message
+        const userMessage: Message = {
+            id: generateId(),
+            role: 'user',
+            content: query,
+            timestamp: new Date(),
+        };
+
+        setMessages((prev) => [...prev, userMessage]);
+        setIsLoading(true);
+        setError(null);
+
+        // Add loading message
+        const loadingMessage: Message = {
+            id: generateId(),
+            role: 'assistant',
+            content: '',
+            timestamp: new Date(),
+            isLoading: true,
+        };
+        setMessages((prev) => [...prev, loadingMessage]);
+
+        try {
+            const response = await apiService.sendQueryWithFilters(
+                query,
+                selectedFilters,
+                userId,
+                sessionId
+            );
+
+            // Process response similar to handleSubmit
+            const nudge = response.data?.nudge;
+            const urgencySignals = response.data?.urgency_signals;
+            const sentiment = response.data?.sentiment;
+            const userProfileData = response.data?.user_profile;
+
+            const assistantMessage: Message = {
+                id: generateId(),
+                role: 'assistant',
+                content: response.answer,
+                timestamp: new Date(),
+                confidence: response.confidence,
+                sources: response.sources,
+                intent: response.intent,
+                isRefusal: response.is_refusal,
+                refusalReason: response.refusal_reason,
+                suggested_actions: response.suggested_actions,
+                projects: response.projects,
+                nudge: nudge || response.nudge,
+                urgency_signals: urgencySignals || response.urgency_signals,
+                sentiment: sentiment || response.sentiment,
+                user_profile: userProfileData || response.user_profile,
+                coaching_prompt: response.coaching_prompt,
+            };
+
+            setMessages((prev) =>
+                prev.filter((m) => !m.isLoading).concat(assistantMessage)
+            );
+        } catch (err) {
+            console.error('Show nearby error:', err);
+            setError('Failed to search nearby properties. Please try again.');
+            setMessages((prev) => prev.filter((m) => !m.isLoading));
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     // Build a natural language query from filters and trigger search
     const handleApplyFilters = async () => {
         if (isLoading) return;
@@ -523,6 +596,7 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                                                             <div key={idx} className="relative">
                                                                 <ProjectCard
                                                                     project={adaptedProject}
+                                                                    onShowNearby={handleShowNearby}
                                                                 />
                                                                 {/* Phase 1: Schedule Visit Button */}
                                                                 <button

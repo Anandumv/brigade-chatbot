@@ -10,16 +10,36 @@ import {
     Building2,
     Info,
     Home,
-    CheckCircle
+    CheckCircle,
+    Navigation
 } from 'lucide-react';
 import { ProjectInfo } from '@/types';
 
 interface ProjectCardProps {
     project: ProjectInfo;
+    onShowNearby?: (location: string) => void;
 }
 
-export const ProjectCard: React.FC<ProjectCardProps> = ({ project }) => {
+export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onShowNearby }) => {
     const [isExpanded, setIsExpanded] = useState(false);
+
+    // Extract location name from project location string
+    const extractLocationName = (location: string | undefined): string | null => {
+        if (!location) return null;
+        // Parse "Whitefield, East Bangalore" -> "Whitefield"
+        const parts = location.split(',');
+        let locationName = parts[0].trim();
+        // Remove common suffixes
+        locationName = locationName.replace(/\s+Road$/i, '').replace(/\s+road$/i, '');
+        return locationName;
+    };
+
+    const handleShowNearby = () => {
+        const locationName = extractLocationName(project.location || project.full_address);
+        if (locationName && onShowNearby) {
+            onShowNearby(locationName);
+        }
+    };
 
     // Parse configuration string to extract unit details
     const parseConfiguration = (config: string | undefined): Array<{type: string, area: string, price: string}> => {
@@ -139,9 +159,17 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project }) => {
 
                 {/* Basic Info Section */}
                 <div className="space-y-2.5 mt-4">
-                    <div className="flex items-center text-sm text-gray-600">
-                        <MapPin className="w-4 h-4 mr-2 text-gray-400 flex-shrink-0" />
-                        <span className="truncate">{project.location}</span>
+                    <div className="flex items-center justify-between text-sm text-gray-600">
+                        <div className="flex items-center flex-1 min-w-0">
+                            <MapPin className="w-4 h-4 mr-2 text-gray-400 flex-shrink-0" />
+                            <span className="truncate">{project.location}</span>
+                        </div>
+                        {/* Distance badge if available */}
+                        {(project as any)._distance && (
+                            <span className="ml-2 text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap flex-shrink-0">
+                                {(project as any)._distance} km
+                            </span>
+                        )}
                     </div>
 
                     <div className="flex items-center text-sm text-gray-600">
@@ -171,6 +199,17 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project }) => {
                             )}
                         </div>
                     </div>
+                )}
+
+                {/* Show Nearby Button */}
+                {onShowNearby && extractLocationName(project.location || project.full_address) && (
+                    <button
+                        onClick={handleShowNearby}
+                        className="w-full mt-3 flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors duration-200 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                    >
+                        <Navigation className="w-4 h-4" />
+                        Show Nearby
+                    </button>
                 )}
 
                 {/* Expand/Collapse Button */}
