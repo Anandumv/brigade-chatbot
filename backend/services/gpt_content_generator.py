@@ -179,6 +179,16 @@ Elaborate on:
 - Health and wellness facilities
 - Community and social aspects
 """,
+        "meeting_scheduling": """
+You are helping a customer understand how to schedule a meeting or site visit with Pinclick.
+Explain:
+- Different meeting options (office visit, site visit, video call)
+- What to expect during the meeting
+- Benefits of meeting in person (see actual property, exclusive offers)
+- How to schedule (share preferred date/time/contact)
+- Reassure them it's no obligation, just exploration
+Keep it warm, friendly, and encouraging. End with asking for their preferred time.
+""",
         "general_selling_points": """
 Provide a well-rounded overview covering:
 - 2-3 strongest selling points of this project

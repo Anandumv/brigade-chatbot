@@ -369,42 +369,41 @@ How can I assist you today?"""
                     suggested_actions=actions
                 )
 
-        # Step 1.6b: Handle meeting_request intent
+        # Step 1.6b: Handle meeting_request intent - GPT generates response
         if intent == "meeting_request":
-            logger.info("Routing to meeting request handler")
-            response_time_ms = int((time.time() - start_time) * 1000)
+            logger.info("Routing to GPT for meeting request")
             
-            meeting_response = """📅 **Let's Schedule Your Meeting!**
-
-I can help you arrange a meeting with our property consultant. Here's how:
-
-**Meeting Options:**
-🏢 **Office Visit** - Meet at our office for a detailed discussion
-🏗️ **Site Visit** - Visit the property site in person
-💻 **Video Call** - Quick virtual meeting at your convenience
-
-**To schedule:**
-1. Share your preferred date and time
-2. Tell me your contact number or email
-3. I'll confirm the appointment
-
-**What's included:**
-✓ Personalized property recommendations
-✓ Detailed pricing and payment plans
-✓ Documentation assistance
-✓ No obligation - just exploration!
-
-👉 **When would you like to meet? Share your preferred date/time!**"""
-            
-            return ChatQueryResponse(
-                answer=meeting_response,
-                sources=[],
-                confidence="High",
-                intent="meeting_request",
-                refusal_reason=None,
-                response_time_ms=response_time_ms,
-                suggested_actions=["Schedule now", "Call me back", "Later"]
-            )
+            try:
+                from services.gpt_content_generator import generate_insights
+                
+                # Generate meeting guidance using GPT
+                meeting_context = {
+                    "name": "Meeting Request",
+                    "location": "Bangalore",
+                    "amenities": "Office visits, Site visits, Video calls available"
+                }
+                
+                response_text = generate_insights(
+                    project_facts=meeting_context,
+                    topic="meeting_scheduling",
+                    query=request.query,
+                    user_requirements=None
+                )
+                
+                response_time_ms = int((time.time() - start_time) * 1000)
+                
+                return ChatQueryResponse(
+                    answer=response_text,
+                    sources=[],
+                    confidence="High",
+                    intent="meeting_request",
+                    refusal_reason=None,
+                    response_time_ms=response_time_ms,
+                    suggested_actions=["Schedule now", "Call me back", "Later"]
+                )
+            except Exception as e:
+                logger.error(f"GPT meeting generation failed: {e}")
+                # Fallback to flow engine
 
         # Step 1.7: Handle sales objection intents with intelligent handler
         if intent == "sales_objection":
@@ -566,19 +565,50 @@ I can help you arrange a meeting with our property consultant. Here's how:
                 suggested_actions=[] 
             )
 
-        # Step 3: For unsupported intents, refuse instead of web search
+        # Step 3: For unsupported/unclear intents, let GPT handle intelligently
         if intent == "unsupported":
-            logger.info("Unsupported intent - refusing")
-            response_time_ms = int((time.time() - start_time) * 1000)
+            logger.info("Unsupported intent - routing to GPT for helpful response")
             
-            return ChatQueryResponse(
-                answer="I apologize, I can only assist with property search, project details, and sales inquiries related to our portfolio.",
-                sources=[],
-                confidence="Low",
-                intent=intent,
-                refusal_reason="unsupported_intent",
-                response_time_ms=response_time_ms
-            )
+            try:
+                from services.gpt_content_generator import generate_insights
+                
+                # Let GPT try to provide a helpful response
+                general_context = {
+                    "name": "Pinclick Real Estate",
+                    "location": "Bangalore",
+                    "amenities": "Property search, site visits, investment advice, meeting scheduling"
+                }
+                
+                response_text = generate_insights(
+                    project_facts=general_context,
+                    topic="general_selling_points",
+                    query=request.query,
+                    user_requirements=None
+                )
+                
+                response_time_ms = int((time.time() - start_time) * 1000)
+                
+                return ChatQueryResponse(
+                    answer=response_text,
+                    sources=[],
+                    confidence="Medium",
+                    intent="gpt_general",
+                    refusal_reason=None,
+                    response_time_ms=response_time_ms,
+                    suggested_actions=["Search properties", "Schedule meeting", "Get more info"]
+                )
+            except Exception as e:
+                logger.error(f"GPT general response failed: {e}")
+                response_time_ms = int((time.time() - start_time) * 1000)
+                
+                return ChatQueryResponse(
+                    answer="I'm here to help with property search, project details, and arranging site visits. How can I assist you today?",
+                    sources=[],
+                    confidence="Low",
+                    intent=intent,
+                    refusal_reason=None,
+                    response_time_ms=response_time_ms
+                )
 
         # DISABLED: Unsupported intent web search fallback
         # if intent == "unsupported":
