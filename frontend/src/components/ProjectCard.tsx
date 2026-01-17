@@ -36,7 +36,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onShowNearby 
     };
 
     const handleShowNearby = () => {
-        const locationName = extractLocationName(project.location || project.full_address);
+        const locationName = extractLocationName(project.location || project.locality);
         if (locationName && onShowNearby) {
             onShowNearby(locationName);
         }
@@ -256,7 +256,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onShowNearby 
                 )}
 
                 {/* Show Nearby Button */}
-                {onShowNearby && extractLocationName(project.location || project.full_address) && (
+                {onShowNearby && extractLocationName(project.location || project.locality) && (
                     <button
                         onClick={handleShowNearby}
                         className="w-full mt-3 flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors duration-200 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
