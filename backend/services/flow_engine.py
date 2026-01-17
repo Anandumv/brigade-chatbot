@@ -646,13 +646,22 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
                 
                 if loc_term:
                     # Check if location term matches ANY relevant field
-                    # landmarks like "Airport" or "Manyata" might be in description/USP
                     matches_loc = loc_term in p_loc
                     matches_desc = loc_term in p_desc
                     matches_usp = loc_term in p_usp
                     
-                    if not (matches_loc or matches_desc or matches_usp): 
+                    if matches_loc:
+                        p['_loc_match_type'] = 'strict'
+                    elif matches_desc or matches_usp:
+                        p['_loc_match_type'] = 'broad'
+                    else:
                         continue
+            
+            # Post-filtering: If we have strict location matches, filter out the broad ones
+            # This prevents "Sarjapur (near Whitefield)" showing up for "Whitefield" query if actual Whitefield projects exist
+            has_strict_matches = any(p.get('_loc_match_type') == 'strict' for p in projects)
+            if has_strict_matches:
+                projects = [p for p in projects if p.get('_loc_match_type') == 'strict']
                 
                 # Filter Config (Normalize: remove spaces and dots)
                 p_conf_norm = p['configuration'].lower().replace(" ", "").replace(".", "")
