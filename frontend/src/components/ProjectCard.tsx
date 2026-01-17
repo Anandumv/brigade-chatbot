@@ -18,29 +18,10 @@ import { ProjectInfo } from '@/types';
 
 interface ProjectCardProps {
     project: ProjectInfo;
-    onShowNearby?: (location: string) => void;
 }
 
-export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onShowNearby }) => {
+export const ProjectCard: React.FC<ProjectCardProps> = ({ project }) => {
     const [isExpanded, setIsExpanded] = useState(false);
-
-    // Extract location name from project location string
-    const extractLocationName = (location: string | undefined): string | null => {
-        if (!location) return null;
-        // Parse "Whitefield, East Bangalore" -> "Whitefield"
-        const parts = location.split(',');
-        let locationName = parts[0].trim();
-        // Remove common suffixes
-        locationName = locationName.replace(/\s+Road$/i, '').replace(/\s+road$/i, '');
-        return locationName;
-    };
-
-    const handleShowNearby = () => {
-        const locationName = extractLocationName(project.location || project.locality);
-        if (locationName && onShowNearby) {
-            onShowNearby(locationName);
-        }
-    };
 
     // Parse configuration string to extract unit details
     const parseConfiguration = (config: string | undefined): Array<{type: string, area: string, price: string}> => {
@@ -253,17 +234,6 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onShowNearby 
                             )}
                         </div>
                     </div>
-                )}
-
-                {/* Show Nearby Button */}
-                {onShowNearby && extractLocationName(project.location || project.locality) && (
-                    <button
-                        onClick={handleShowNearby}
-                        className="w-full mt-3 flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors duration-200 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
-                    >
-                        <Navigation className="w-4 h-4" />
-                        Show Nearby
-                    </button>
                 )}
 
                 {/* Expand/Collapse Button */}

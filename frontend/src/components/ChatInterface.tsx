@@ -192,111 +192,6 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
         }
     };
 
-    // Handle "Show Nearby" button click from ProjectCard
-    const handleShowNearby = async (location: string) => {
-        if (isLoading) return;
-
-        const query = `show nearby ${location}`;
-        
-        // Create user message
-        const userMessage: Message = {
-            id: generateId(),
-            role: 'user',
-            content: query,
-            timestamp: new Date(),
-        };
-
-        setMessages((prev) => [...prev, userMessage]);
-        setIsLoading(true);
-        setError(null);
-
-        // Add loading message
-        const loadingMessage: Message = {
-            id: generateId(),
-            role: 'assistant',
-            content: '',
-            timestamp: new Date(),
-            isLoading: true,
-        };
-        setMessages((prev) => [...prev, loadingMessage]);
-
-        try {
-            const response = await apiService.sendQueryWithFilters(
-                query,
-                selectedFilters,
-                userId,
-                sessionId
-            );
-
-            // Process response similar to handleSubmit
-            // Extract enhanced UX data from response
-            let nudge: ProactiveNudge | undefined = response.nudge;
-            let urgencySignals: UrgencySignal[] | undefined = response.urgency_signals;
-            let sentiment: SentimentData | undefined = response.sentiment;
-            let userProfileData: UserProfileData | undefined = response.user_profile;
-
-            if (userProfileData) {
-                setUserProfile(userProfileData);
-            }
-
-            // Parse nudge from response text if not in structured data
-            if (!nudge && response.answer.includes('🎯')) {
-                const nudgeMatch = response.answer.match(/🎯\s*(.+?)(?:\n\n|$)/);
-                if (nudgeMatch) {
-                    const nudgeText = nudgeMatch[1];
-                    // Infer nudge type from message
-                    let nudgeType: ProactiveNudge['type'] = 'decision_ready';
-                    if (nudgeText.toLowerCase().includes('viewed') && nudgeText.toLowerCase().includes('times')) {
-                        nudgeType = 'repeat_views';
-                    } else if (nudgeText.toLowerCase().includes('location')) {
-                        nudgeType = 'location_focus';
-                    } else if (nudgeText.toLowerCase().includes('budget')) {
-                        nudgeType = 'budget_concern';
-                    } else if (nudgeText.toLowerCase().includes('ready') || nudgeText.toLowerCase().includes('decide')) {
-                        nudgeType = 'decision_ready';
-                    }
-                    
-                    nudge = {
-                        type: nudgeType,
-                        message: nudgeText,
-                        action: nudgeText.toLowerCase().includes('schedule') ? 'schedule_visit' : undefined,
-                        priority: nudgeText.toLowerCase().includes('ready') ? 'high' : 'medium',
-                    };
-                }
-            }
-
-            const assistantMessage: Message = {
-                id: generateId(),
-                role: 'assistant',
-                content: response.answer,
-                timestamp: new Date(),
-                confidence: response.confidence,
-                sources: response.sources,
-                intent: response.intent,
-                isRefusal: response.is_refusal,
-                refusalReason: response.refusal_reason,
-                suggested_actions: response.suggested_actions,
-                projects: response.projects,
-                // Phase 2: Enhanced UX data
-                nudge: nudge || response.nudge,
-                urgency_signals: urgencySignals || response.urgency_signals,
-                sentiment: sentiment || response.sentiment,
-                user_profile: userProfileData || response.user_profile,
-                coaching_prompt: response.coaching_prompt,
-            };
-
-            setMessages((prev) =>
-                prev.filter((m) => !m.isLoading).concat(assistantMessage)
-            );
-        } catch (err) {
-            console.error('Show nearby error:', err);
-            setError('Failed to search nearby properties. Please try again.');
-            setMessages((prev) => prev.filter((m) => !m.isLoading));
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
     // Build a natural language query from filters and trigger search
     const handleApplyFilters = async () => {
         if (isLoading) return;
@@ -628,7 +523,6 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                                                             <div key={idx} className="relative w-full">
                                                                 <ProjectCard
                                                                     project={adaptedProject}
-                                                                    onShowNearby={handleShowNearby}
                                                                 />
                                                             </div>
                                                         );
