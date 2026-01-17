@@ -197,6 +197,14 @@ class HybridRetrievalService:
                                          kw in str(r.get('builder', '')).lower() 
                                          for kw in dev_keywords)]
                 logger.info(f"After developer filter '{filters.developer_name}': {len(filtered_results)} results")
+
+            # Apply Project Name filter (Specific project search)
+            if filters.project_name and filters.project_name.strip():
+                p_name_lower = filters.project_name.lower()
+                filtered_results = [r for r in filtered_results 
+                                   if p_name_lower in str(r.get('name', '')).lower()]
+                logger.info(f"After project name filter '{filters.project_name}': {len(filtered_results)} results")
+
             
             # Apply budget filter (price in Cr)
             if filters.max_price_inr:
@@ -248,11 +256,14 @@ class HybridRetrievalService:
                     max_cr = r.get('budget_max', 0) / 100.0 if r.get('budget_max') else None
                     
                     formatted.append({
+                        "id": r.get('project_id', ''), # Frontend expects 'id'
+                        "name": r.get('name', ''),     # Frontend expects 'name'
+                        "developer": r.get('developer', ''), # Frontend expects 'developer'
                         "project_id": r.get('project_id', ''),
                         "project_name": r.get('name', ''),
-                        "developer_name": r.get('developer', ''), # Schema uses 'developer', not 'builder'
+                        "developer_name": r.get('developer', ''), 
                         "location": r.get('location', ''),
-                        "city": r.get('zone', '') or r.get('location', ''), # Use zone or fallback
+                        "city": r.get('zone', '') or r.get('location', ''),
                         "locality": r.get('location', ''),
                         "status": r.get('status', ''),
                         "possession_year": r.get('possession_year'),
@@ -477,6 +488,9 @@ class HybridRetrievalService:
                 }
                 
                 formatted.append({
+                    "id": r.get('project_id', r.get('name')),
+                    "name": r.get('name'),
+                    "developer": r.get('builder', 'Brigade Group'),
                     "project_name": r.get('name'),
                     "developer_name": r.get('builder', 'Brigade Group'),
                     "location": r.get('location'),

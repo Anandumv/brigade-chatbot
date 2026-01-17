@@ -875,6 +875,7 @@ How can I assist you today?"""
             logger.info("Unsupported intent - routing to GPT for helpful response")
             
             try:
+                from services.gpt_content_generator import generate_insights
                 
                 # Let GPT try to provide a helpful response
                 general_context = {
@@ -970,15 +971,11 @@ How can I assist you today?"""
             if not request.filters:
                 filters = filter_extractor.extract_filters(request.query)
             else:
-                filters = filter_extractor.extract_filters(request.query) 
-                # Trust query extraction on backend
+                filters = filter_extractor.extract_filters(request.query) # Re-extract to be safe or use provided? Use provided usually.
+                # Actually, main.py schema defines filters as dict. We need to convert to PropertyFilters model?
+                # filter_extractor expects query. If request.filters provided (from frontend), utilize it.
+                # Let's trust extraction from query for now as it's more robust on backend unless frontend is very specific.
                 pass 
-
-            # CRITICAL: Inject detected project name if extracted filters missed it
-            # 'project_name' is detected earlier in the function via keyword matching
-            if project_name and not filters.project_name:
-                logger.info(f"Injecting detected project name '{project_name}' into search filters")
-                filters.project_name = project_name
 
             # Perform Hybrid Retrieval
             search_results = await hybrid_retrieval.search_with_filters(

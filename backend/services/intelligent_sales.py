@@ -485,7 +485,8 @@ class IntelligentSalesHandler:
         query: str,
         intent: SalesIntent,
         context: Optional[ConversationContext] = None,
-        conversation_history: Optional[List[Dict]] = None
+        conversation_history: Optional[List[Dict]] = None,
+        session_context: Optional[Dict] = None
     ) -> str:
         """
         Generate highly intelligent, context-aware response using GPT-4.
@@ -509,6 +510,40 @@ class IntelligentSalesHandler:
             if context.interested_projects:
                 additional_context += f"\nProjects customer showed interest in: {', '.join(context.interested_projects)}"
         
+        # CRITICAL: Add session context with search results
+        if session_context and session_context.get("has_context"):
+            # Add information about recently shown projects
+            if session_context.get("last_shown_projects"):
+                projects = session_context["last_shown_projects"]
+                project_count = len(projects)
+                project_names = [p.get("name", "Unknown") for p in projects[:5]]  # Top 5
+                
+                additional_context += f"\n\n🔍 **CRITICAL CONTEXT - Recent Search Results:**"
+                additional_context += f"\n- Just showed customer {project_count} matching properties"
+                additional_context += f"\n- Top projects shown: {', '.join(project_names)}"
+                
+                # Add budget/config info from search
+                if projects and projects[0].get("budget_min"):
+                    budget_range = f"₹{projects[0]['budget_min']/100:.1f} - ₹{projects[-1]['budget_max']/100:.1f} Cr"
+                    additional_context += f"\n- Price range of shown properties: {budget_range}"
+            
+            # Add last discussed project details
+            if session_context.get("last_project"):
+                additional_context += f"\n- Currently discussing: {session_context['last_project']}"
+            
+            # Add user requirements
+            if session_context.get("current_filters"):
+                filters = session_context["current_filters"]
+                filter_parts = []
+                if filters.get("configuration"):
+                    filter_parts.append(filters["configuration"])
+                if filters.get("location"):
+                    filter_parts.append(f"in {filters['location']}")
+                if filters.get("budget_max"):
+                    filter_parts.append(f"under ₹{filters['budget_max']} Cr")
+                if filter_parts:
+                    additional_context += f"\n- Customer requirements: {' '.join(filter_parts)}"
+        
         # Use Master Prompt for dynamic generation
         from services.master_prompt import SALES_ADVISOR_SYSTEM, get_objection_prompt, get_faq_prompt
         
@@ -522,6 +557,7 @@ class IntelligentSalesHandler:
         # Add context from static knowledge if available, but treating it as "Reference" not "Script"
         if additional_context:
             user_prompt += f"\n\nREFERENCE KNOWLEDGE (Use as guide, not script):\n{additional_context}"
+            user_prompt += f"\n\n⚠️ IMPORTANT: Your response MUST reference the specific projects and search results shown to the customer. Don't give generic advice - be specific about the properties they just saw."
 
         response = await self._call_llm(
             system_prompt=SALES_ADVISOR_SYSTEM,
@@ -633,11 +669,12 @@ I'd love to help you further!
         query: str,
         context: Optional[ConversationContext] = None,
         session_id: Optional[str] = None,
-        conversation_history: Optional[List[Dict]] = None
+        conversation_history: Optional[List[Dict]] = None,
+        session_context: Optional[Dict] = None
     ) -> Tuple[str, SalesIntent, bool, List[str]]:
         """
         Main entry point for handling sales queries.
-        Now with Pixeltable FAQ integration, session-aware CTAs, and conversation history.
+        Now with Pixeltable FAQ integration, session-aware CTAs, conversation history, and session context.
         
         Returns:
             (response_text, intent, should_fallback_to_rag, suggested_actions)
@@ -660,11 +697,13 @@ I'd love to help you further!
                     logger.info("UNKNOWN intent but has context - using GPT with conversation history")
                     from services.gpt_content_generator import generate_contextual_response_with_full_history
                     
-                    context_summary = self.session_manager.get_context_summary(session_id)
+                    if not session_context:
+                        session_context = self.session_manager.get_context_summary(session_id)
+                    
                     response = generate_contextual_response_with_full_history(
                         query=query,
                         conversation_history=conversation_history or session.messages[-10:],
-                        session_context=context_summary,
+                        session_context=session_context,
                         goal="Continue the sales conversation naturally"
                     )
                     
@@ -706,7 +745,8 @@ I'd love to help you further!
                 query, 
                 intent, 
                 context,
-                conversation_history
+                conversation_history,
+                session_context
             )
         
         # Track objections in session

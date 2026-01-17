@@ -45,6 +45,7 @@ class PropertyFilters(BaseModel):
 
     # Developer
     developer_name: Optional[str] = Field(None, description="Developer/company name")
+    project_name: Optional[str] = Field(None, description="Specific project name")
     
     # Property Type (From flowchart)
     property_type: Optional[List[str]] = Field(None, description="['apartment', 'villa', 'plot', 'row house']")
@@ -68,6 +69,7 @@ class PropertyFilters(BaseModel):
             self.max_area_sqft,
             self.status,
             self.developer_name,
+            self.project_name,
             self.property_type
         ])
 
