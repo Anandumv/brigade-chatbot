@@ -310,7 +310,8 @@ async def chat_query(request: ChatQueryRequest):
         
         if is_project_detail_request(request.query):
             matched_project_name = extract_project_name_from_query(request.query)
-            
+            project = None  # Safe initialization
+
             if matched_project_name:
                 logger.info(f"Fuzzy matched project: '{matched_project_name}'")
                 project = get_project_from_database(matched_project_name)
@@ -320,7 +321,7 @@ async def chat_query(request: ChatQueryRequest):
             # If it contains specific keywords like "price", "location", "amenities", "distance", etc., let GPT handle it.
             is_general_request = is_project_detail_request(request.query) and len(request.query.split()) < 10
 
-            if is_general_request:
+            if is_general_request and project:
                 # Override intent to project_details and show project info
                 intent = "project_details"
                 extraction["project_name"] = project.get("name")
