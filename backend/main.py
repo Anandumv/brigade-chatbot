@@ -1376,36 +1376,42 @@ async def chat_query(request: ChatQueryRequest):
                     )
 
                 # Enrich projects with missing data (amenities, nearby places, etc.)
+                # NOTE: Enrichment is disabled for now to prevent timeouts
+                # Each enrichment makes GPT calls (5-10s each), and with multiple projects
+                # this easily exceeds 60s timeout. Can re-enable with async batching later.
                 projects_list = search_results["projects"]
-                enriched_projects = []
-                for project in projects_list:
-                    enrichment_types = []
-                    
-                    # Check what needs enrichment
-                    if not project.get('amenities') or len(str(project.get('amenities', ''))) < 30:
-                        enrichment_types.append("amenities")
-                    if not project.get('nearby_places'):
-                        enrichment_types.append("nearby_places")
-                    if not project.get('connectivity'):
-                        enrichment_types.append("connectivity")
-                    
-                    # Enrich if needed
-                    if enrichment_types:
-                        try:
-                            enriched = await project_enrichment.enrich_project(
-                                project=project,
-                                enrichment_types=enrichment_types,
-                                query=request.query
-                            )
-                            enriched_projects.append(enriched)
-                        except Exception as e:
-                            logger.error(f"Error enriching project {project.get('name')}: {e}")
-                            enriched_projects.append(project)  # Use original if enrichment fails
-                    else:
-                        enriched_projects.append(project)
                 
-                # Update projects list with enriched data
-                projects_list = enriched_projects
+                # Skip enrichment for now to prevent timeouts
+                # TODO: Re-enable with async batching or make it optional
+                # enriched_projects = []
+                # for project in projects_list:
+                #     enrichment_types = []
+                #     
+                #     # Check what needs enrichment
+                #     if not project.get('amenities') or len(str(project.get('amenities', ''))) < 30:
+                #         enrichment_types.append("amenities")
+                #     if not project.get('nearby_places'):
+                #         enrichment_types.append("nearby_places")
+                #     if not project.get('connectivity'):
+                #         enrichment_types.append("connectivity")
+                #     
+                #     # Enrich if needed
+                #     if enrichment_types:
+                #         try:
+                #             enriched = await project_enrichment.enrich_project(
+                #                 project=project,
+                #                 enrichment_types=enrichment_types,
+                #                 query=request.query
+                #             )
+                #             enriched_projects.append(enriched)
+                #         except Exception as e:
+                #             logger.error(f"Error enriching project {project.get('name')}: {e}")
+                #             enriched_projects.append(project)  # Use original if enrichment fails
+                #     else:
+                #         enriched_projects.append(project)
+                # 
+                # # Update projects list with enriched data
+                # projects_list = enriched_projects
                 
                 # Check if this is a minimum budget query and calculate answer
                 min_budget_answer = None
