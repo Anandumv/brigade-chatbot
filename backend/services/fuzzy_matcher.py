@@ -93,7 +93,13 @@ def extract_project_name_from_query(query: str, known_projects: Optional[List[st
         for word in query_words:
             # Try fuzzy match against all known project names
             for project in known_projects:
-                project_lower = project.lower()
+                # Handle both dict and string formats
+                if isinstance(project, dict):
+                    project_name = project.get('name', '')
+                else:
+                    project_name = str(project)
+                
+                project_lower = project_name.lower()
                 # Check if word matches any part of project name
                 project_words = project_lower.split()
                 

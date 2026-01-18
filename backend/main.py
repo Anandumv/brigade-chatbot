@@ -1601,7 +1601,14 @@ async def chat_query(request: ChatQueryRequest):
                     from services.fuzzy_matcher import extract_project_name_from_query
                     available_projects = session_state.get("available_projects", [])
                     if available_projects:
-                        project_name = extract_project_name_from_query(request.query, available_projects)
+                        # Extract project names as strings for fuzzy matching
+                        project_names = []
+                        for p in available_projects:
+                            if isinstance(p, dict):
+                                project_names.append(p.get('name', ''))
+                            else:
+                                project_names.append(str(p))
+                        project_name = extract_project_name_from_query(request.query, project_names)
                         if project_name:
                             logger.info(f"✅ Fuzzy matched project: '{project_name}' from query: '{request.query}'")
                         else:
