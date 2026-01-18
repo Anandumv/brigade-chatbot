@@ -253,7 +253,42 @@ class ContextUnderstandingService:
         Auto-completes incomplete queries.
         """
         enriched = query
-        query_lower = query.lower()
+        query_lower = query.lower().strip()
+        
+        # Handle affirmative responses (yes, yeah, sure, ok) - check last assistant message
+        affirmative_responses = ["yes", "yeah", "yep", "sure", "ok", "okay", "alright", "fine", "correct"]
+        if query_lower in affirmative_responses:
+            # Get last assistant message to see what was asked
+            recent_messages = context.get("conversation", {}).get("recent_messages", [])
+            if recent_messages:
+                # Find last assistant message
+                for msg in reversed(recent_messages):
+                    if msg.get("role") == "assistant":
+                        last_assistant_msg = msg.get("content", "").lower()
+                        
+                        # Check if it was asking about amenities/features/details
+                        if any(term in last_assistant_msg for term in ["amenities", "features", "unique features", "details", "more details", "more information"]):
+                            # Extract what was asked about
+                            if "amenities" in last_assistant_msg or "unique features" in last_assistant_msg:
+                                topic = "amenities and unique features"
+                            elif "details" in last_assistant_msg:
+                                topic = "details"
+                            else:
+                                topic = "more information"
+                            
+                            # Get project from context
+                            project_name = None
+                            if context.get("projects", {}).get("selected"):
+                                selected = context["projects"]["selected"]
+                                project_name = selected.get('name') if isinstance(selected, dict) else str(selected)
+                            elif context.get("projects", {}).get("last_shown"):
+                                last_project = context["projects"]["last_shown"][0]
+                                project_name = last_project.get('name') if isinstance(last_project, dict) else str(last_project)
+                            
+                            if project_name:
+                                enriched = f"{topic} of {project_name}"
+                                logger.info(f"✅ Enriched affirmative response: '{query}' → '{enriched}' based on last question")
+                            break
         
         # If query is very vague, add context
         vague_patterns = ["more", "details", "about it", "tell me", "what about"]
