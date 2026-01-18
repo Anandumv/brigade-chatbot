@@ -50,7 +50,7 @@ class ConversationSession(BaseModel):
 
     # ENHANCED: Conversation coaching metrics
     objection_count: int = 0  # Number of objections raised
-    coaching_prompts_shown: List[str] = []  # History of coaching prompts shown
+    coaching_prompts_shown: List[Dict[str, Any]] = []  # History of coaching prompts shown (with type and timestamp)
     last_message_time: Optional[datetime] = None  # For silence detection
     projects_viewed_count: int = 0  # Cumulative count of unique projects viewed
     
