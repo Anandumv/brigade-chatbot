@@ -276,7 +276,13 @@ class ConversationDirector:
                     triggered_rule = rule_name
                     break
 
+        # Debug logging to understand why coaching isn't triggering
         if not triggered_rule:
+            logger.debug(f"🔍 No coaching rule triggered. Session: {len(session.get('messages', []))} messages, "
+                        f"{len(session.get('last_shown_projects', []))} projects, "
+                        f"stage={context.get('conversation_stage')}, "
+                        f"real_data_used={context.get('real_data_used')}, "
+                        f"query_type={context.get('query_type')}")
             return None
 
         # Build coaching prompt

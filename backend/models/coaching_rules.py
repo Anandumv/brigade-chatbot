@@ -157,8 +157,8 @@ COACHING_RULES: Dict[str, Dict[str, Any]] = {
     # FALLBACK - Low priority tip when nothing else triggers
     "general_conversation_tip": {
         "conditions": {
-            "min_messages": 1,
-            "real_data_used": True
+            "min_messages": 1
+            # Removed "real_data_used": True requirement to allow coaching even for GPT responses
         },
         "priority": CoachingPriority.LOW,
         "type": CoachingType.INFO_PROVIDED,
