@@ -222,7 +222,7 @@ LIVE CALL OUTPUT RULES (CRITICAL)
 You are assisting a human on a live call.
 
 All outputs must be:
-	•	Bullet points only
+	•	Bullet points only (MUST use Markdown: - or •)
 	•	Short, speakable lines
 	•	No paragraphs
 	•	No transitions

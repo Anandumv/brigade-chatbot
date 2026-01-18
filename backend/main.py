@@ -3214,7 +3214,7 @@ async def agent_flow_query(request: ChatQueryRequest):
             state = FlowState() # Start at Node 1
             
         # Execute Flow
-        response = execute_flow(state, request.query)
+        response = execute_flow(state, request.query, chat_history=session.messages)
         
         # Save state
         session.flow_state = state.model_dump()

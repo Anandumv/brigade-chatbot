@@ -149,13 +149,19 @@ def generate_persuasion_text(topic: str, context: str) -> str:
     except Exception:
         return "Could not generate persuasion text."
 
-def classify_user_intent(user_input: str, context: str) -> dict:
+def classify_user_intent(user_input: str, context: str, chat_history: List[Dict[str, str]] = []) -> dict:
     """Uses LLM to classify user intent and sentiment in conversation."""
     try:
         client = openai.OpenAI(
             api_key=settings.openai_api_key,
             base_url=settings.openai_base_url
         )
+        
+        # Format history for context
+        history_text = ""
+        if chat_history:
+            history_text = "\nRecent Conversation History:\n" + "\n".join([f"{msg['role']}: {msg['content']}" for msg in chat_history[-5:]])
+
         response = client.chat.completions.create(
             model=settings.effective_gpt_model,
             messages=[
@@ -178,7 +184,7 @@ Analyze user input and return JSON:
 
 """
                 },
-                {"role": "user", "content": f"Context: {context}\nUser said: {user_input}"}
+                {"role": "user", "content": f"Context: {context}\n{history_text}\nUser said: {user_input}"}
             ],
             response_format={"type": "json_object"}
         )
@@ -198,18 +204,23 @@ Analyze user input and return JSON:
         else:
             return {"intent": "ambiguous", "confidence": 0.5, "sentiment": "neutral", "explanation": "No clear match"}
 
-def generate_contextual_response(user_input: str, context: str, conversation_goal: str) -> str:
+def generate_contextual_response(user_input: str, context: str, conversation_goal: str, chat_history: List[Dict[str, str]] = []) -> str:
     """Generates a contextual, natural response using LLM for continuous conversation."""
     try:
         client = openai.OpenAI(
             api_key=settings.openai_api_key,
             base_url=settings.openai_base_url
         )
+        
+        # Format history
+        history_text = ""
+        if chat_history:
+            history_text = "\nRecent Conversation History:\n" + "\n".join([f"{msg['role']}: {msg['content']}" for msg in chat_history[-6:]])
+            
         response = client.chat.completions.create(
             model=settings.effective_gpt_model,
             messages=[
                 {
-                    "role": "system",
                     "role": "system",
                     "content": f"""{SALES_AGENT_SYSTEM_PROMPT}
 
@@ -217,9 +228,10 @@ def generate_contextual_response(user_input: str, context: str, conversation_goa
 
 TASK: GENERATE SPEAKABLE RESPONSE
 Current conversation context: {context}
+{history_text}
 Your immediate goal: {conversation_goal}
 
-Override: Ensure output is strictly bullet points as per System Prompt."""
+Override: Ensure output is strictly bullet points as per System Prompt. Start every bullet point with a hyphen (-) or bullet character (•)."""
                 },
                 {"role": "user", "content": f"Customer said: '{user_input}'. specific_instruction: Generate a response to achieve the goal."}
             ]
@@ -325,7 +337,7 @@ Use needs_web_search=false for project_details (database has this) and investmen
         }
 
 # --- NODE LOGIC ---
-def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
+def execute_flow(state: FlowState, user_input: str, chat_history: List[Dict[str, str]] = []) -> FlowResponse:
     # 1. Update Requirements (Merge new input with existing state)
     old_reqs = state.requirements.model_copy()
     new_reqs = extract_requirements_llm(user_input)
@@ -341,7 +353,7 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
     
     # 3. Classify Intent for Interceptors
     context = f"Current node: {node}. Extracted reqs: {merged_reqs.model_dump()}"
-    classification = classify_user_intent(user_input, context)
+    classification = classify_user_intent(user_input, context, chat_history)
     intent = classification.get("intent", "ambiguous")
 
     # --- REQUIREMENT REFINEMENT INTERCEPTOR ---
@@ -931,7 +943,8 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
                  action = generate_contextual_response(
                      user_input,
                      context,
-                     f"Provide additional helpful information about {state.selected_project_name}. Be specific and actionable."
+                     f"Provide additional helpful information about {state.selected_project_name}. Be specific and actionable.",
+                     chat_history=chat_history
                  )
                  next_node = "NODE 2A"  # Stay to answer more questions
              else:
@@ -945,7 +958,8 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
                  action = generate_contextual_response(
                      user_input,
                      f"User viewing properties. {project_context}",
-                     "Continue the conversation naturally. Provide helpful next steps or ask a specific question about their preferences."
+                     "Continue the conversation naturally. Provide helpful next steps or ask a specific question about their preferences.",
+                     chat_history=chat_history
                  )
                  next_node = "NODE 2A"
              else:
@@ -974,7 +988,8 @@ RERA: {project.get('rera_number', 'N/A')}
         action = generate_contextual_response(
             user_input,
             details,
-            f"Generate a persuasive, high-impact deep-dive pitch for {p_name}. Focus on its unique selling points, amenities, and why it's a perfect fit for the user's requirements ({merged_reqs.configuration} in {merged_reqs.location}). Guide them towards a site visit."
+            f"Generate a persuasive, high-impact deep-dive pitch for {p_name}. Focus on its unique selling points, amenities, and why it's a perfect fit for the user's requirements ({merged_reqs.configuration} in {merged_reqs.location}). Guide them towards a site visit.",
+            chat_history=chat_history
         )
         next_node = "NODE 2B_WAIT"
 
@@ -1021,14 +1036,16 @@ RERA: {project.get('rera_number', 'N/A')}
                         action = generate_contextual_response(
                             user_input,
                             f"User asked about {state.selected_project_name} in {project_location}. External data: {nearby_info[:500]}",
-                            "Answer their specific question using the external amenity data provided. Be specific with names and distances. Then ask about scheduling a site visit."
+                            "Answer their specific question using the external amenity data provided. Be specific with names and distances. Then ask about scheduling a site visit.",
+                            chat_history=chat_history
                         )
                     else:
                         # Web search failed, use LLM only
                         action = generate_contextual_response(
                             user_input,
                             f"User wants info about {state.selected_project_name} in {project_location}. Focus on location benefits.",
-                            "Provide a compelling answer about location/connectivity/neighborhood. Be persuasive about area advantages."
+                            "Provide a compelling answer about location/connectivity/neighborhood. Be persuasive about area advantages.",
+                            chat_history=chat_history
                         )
                 else:
                     action = "I'd be happy to tell you more about the location! What specific aspects are you interested in?"
@@ -1059,7 +1076,8 @@ Description: {project_facts.get('description', '')}
                 action = generate_contextual_response(
                     user_input,
                     facts_context,
-                    "Answer their specific question using the project data. Be factual and specific."
+                    "Answer their specific question using the project data. Be factual and specific.",
+                    chat_history=chat_history
                 )
                 next_node = "NODE 2B_WAIT"
 
@@ -1076,7 +1094,8 @@ Description: {project_facts.get('description', '')}
                     action = generate_contextual_response(
                         user_input,
                         f"User has an objection about {state.selected_project_name}.",
-                        "Address their concern empathetically, provide reassurance, and ask if they'd like to explore alternatives or proceed with a site visit."
+                        "Address their concern empathetically, provide reassurance, and ask if they'd like to explore alternatives or proceed with a site visit.",
+                        chat_history=chat_history
                     )
                     next_node = "NODE 2B_WAIT"
 
@@ -1085,7 +1104,8 @@ Description: {project_facts.get('description', '')}
                 action = generate_contextual_response(
                     user_input,
                     f"User has a question about {state.selected_project_name}.",
-                    "Answer helpfully and guide them towards scheduling a site visit."
+                    "Answer helpfully and guide them towards scheduling a site visit.",
+                    chat_history=chat_history
                 )
                 next_node = "NODE 2B_WAIT"
 
@@ -1095,7 +1115,8 @@ Description: {project_facts.get('description', '')}
         action = generate_contextual_response(
             user_input, 
             f"User wants {merged_reqs.configuration} in {merged_reqs.location} under {merged_reqs.budget_max} Cr. No exact matches found.",
-            "Empathize with budget constraint, but gently ask if they can stretch by 10-20% to see premium options with better amenities/ROI."
+            "Empathize with budget constraint, but gently ask if they can stretch by 10-20% to see premium options with better amenities/ROI.",
+            chat_history=chat_history
         )
         next_node = "NODE 3_WAIT"  # Wait for user response
 
@@ -1178,7 +1199,8 @@ Description: {project_facts.get('description', '')}
             closing = generate_contextual_response(
                 user_input,
                 f"User agreed to stretch budget. Showing upscale properties: {', '.join(upsell_list[:2])}.",
-                "Express excitement about these premium finds and push for a site visit."
+                "Express excitement about these premium finds and push for a site visit.",
+                chat_history=chat_history
             )
             action = f"{base_action}\n\n{closing}"
             next_node = "FACE_TO_FACE"
@@ -1191,7 +1213,8 @@ Description: {project_facts.get('description', '')}
         action = generate_contextual_response(
             user_input,
             f"User rejected initial budget stretch for {merged_reqs.location}. We need to justify why market prices are higher here.",
-            "Explain why market prices in this premium area are higher and why stretching the budget is a sound investment for long-term appreciation. End with a question asking if they'd consider exploring properties slightly above their range."
+            "Explain why market prices in this premium area are higher and why stretching the budget is a sound investment for long-term appreciation. End with a question asking if they'd consider exploring properties slightly above their range.",
+            chat_history=chat_history
         )
         next_node = "NODE 5_WAIT"
 
@@ -1214,7 +1237,8 @@ Description: {project_facts.get('description', '')}
         action = generate_contextual_response(
             user_input,
             f"User rejected budget stretch for {merged_reqs.location}. We need to pivot location.",
-            "Ask if they are open to nearby areas (within 10km) which might offer better value or fit their budget."
+            "Ask if they are open to nearby areas (within 10km) which might offer better value or fit their budget.",
+            chat_history=chat_history
         )
         next_node = "NODE 6_WAIT"
 
@@ -1346,7 +1370,8 @@ Description: {project_facts.get('description', '')}
         action = generate_contextual_response(
             user_input,
             "Shown options might include Under Construction context.",
-            "Ask about their possession timeline preference: Immediate vs comfortable waiting a few months?"
+            "Ask about their possession timeline preference: Immediate vs comfortable waiting a few months?",
+            chat_history=chat_history
         )
         next_node = "NODE 8_WAIT"
 
@@ -1374,7 +1399,8 @@ Description: {project_facts.get('description', '')}
         pitch = generate_contextual_response(
             user_input,
             f"User prefers earlier possession than suggested projects. Current reqs: {merged_reqs.model_dump()}",
-            "Explain the strategic benefits of investing in projects with a slightly later possession (e.g., lower entry price, better appreciation potential, flexible payment plans, and more choices). Be very persuasive."
+            "Explain the strategic benefits of investing in projects with a slightly later possession (e.g., lower entry price, better appreciation potential, flexible payment plans, and more choices). Be very persuasive.",
+            chat_history=chat_history
         )
         action = f"{pitch}\n\nGiven these benefits, would you like to schedule a meeting to discuss the payment plan and potential ROI?"
         next_node = "FACE_TO_FACE"
@@ -1446,7 +1472,8 @@ Description: {project_facts.get('description', '')}
             uc_pitch = generate_contextual_response(
                 user_input,
                 "User wants ready-to-move, but we only have Under Construction. Key benefits: Lower Entry Price (save 20%), High Appreciation, Flexi Payment Plans.",
-                "Convince them to consider Under Construction options by highlighting checking out nearby ready options OR discussing the financial benefits of UC."
+                "Convince them to consider Under Construction options by highlighting checking out nearby ready options OR discussing the financial benefits of UC.",
+                chat_history=chat_history
             )
             action = uc_pitch
             next_node = "NODE 10_WAIT"
