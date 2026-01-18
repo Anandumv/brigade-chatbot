@@ -274,16 +274,18 @@ class ContextUnderstandingService:
         
         # If query mentions "these" or "those", add location/project context
         if "these" in query_lower or "those" in query_lower:
-            if context["conversation"]["mentioned_locations"]:
-                locations = ", ".join(context["conversation"]["mentioned_locations"][:2])
+            mentioned_locations = context.get("conversation", {}).get("mentioned_locations", [])
+            if mentioned_locations:
+                locations = ", ".join(mentioned_locations[:2])
                 enriched = f"{query} in {locations}"
         
         # If query asks for "nearby" or "more nearby", add location context
         if "nearby" in query_lower or "near" in query_lower:
-            if context["conversation"]["mentioned_locations"]:
-                location = context["conversation"]["mentioned_locations"][-1]
+            mentioned_locations = context.get("conversation", {}).get("mentioned_locations", [])
+            if mentioned_locations:
+                location = mentioned_locations[-1]
                 enriched = f"{query} near {location}"
-            elif context["requirements"].get("location"):
+            elif context.get("requirements", {}).get("location"):
                 enriched = f"{query} near {context['requirements']['location']}"
         
         return enriched
