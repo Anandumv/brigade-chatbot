@@ -1157,141 +1157,10 @@ async def chat_query(request: ChatQueryRequest):
                 coaching_prompt=coaching_prompt
             )
         
-        # Step 1.7: FUZZY PROJECT NAME DETECTION
-        # Intercept queries like "need details of avalon" or "more info on folium"
-        from services.fuzzy_matcher import (
-            extract_project_name_from_query, 
-            get_project_from_database, 
-            is_project_detail_request
-        )
-        
-        if is_project_detail_request(request.query):
-            matched_project_name = extract_project_name_from_query(request.query)
-            project = None  # Safe initialization
-
-            if matched_project_name:
-                logger.info(f"Fuzzy matched project: '{matched_project_name}'")
-                project = get_project_from_database(matched_project_name)
-                
-            # Determine if this is a generic request or a specific question
-            # Simple heuristic: if query length is short and contains "details", "info", "about", it's generic.
-            # If it contains specific keywords like "price", "location", "amenities", "distance", etc., let GPT handle it.
-            is_general_request = is_project_detail_request(request.query) and len(request.query.split()) < 10
-
-            if is_general_request and project:
-                # Override intent to project_details and show project info
-                intent = "project_details"
-                extraction["project_name"] = project.get("name")
-                logger.info(f"Overriding to project_details for: {project.get('name')}")
-                
-                # Generate project details response directly
-                from services.flow_engine import clean_configuration_string, format_configuration_table
-                
-                proj = project
-                response_parts = [f"🏠 **{proj.get('name')}** - Here's everything you need to know:\n\n"]
-                
-                if proj.get('developer'):
-                    response_parts.append(f"**🏗️ Developer:** {proj.get('developer')}\n")
-                
-                response_parts.append(f"**📍 Location:** {proj.get('location')}\n")
-                
-                budget_min = proj.get('budget_min', 0) / 100 if proj.get('budget_min') else 0
-                budget_max = proj.get('budget_max', 0) / 100 if proj.get('budget_max') else 0
-                response_parts.append(f"**💰 Price Range:** ₹{budget_min:.2f} - ₹{budget_max:.2f} Cr\n")
-                
-                if proj.get('configuration'):
-                    config_table = format_configuration_table(proj.get('configuration', ''))
-                    response_parts.append(f"**🛏️ Configurations:**\n{config_table}\n")
-                
-                response_parts.append(f"**📊 Status:** {proj.get('status')}\n")
-                response_parts.append(f"**📅 Possession:** {proj.get('possession_quarter', '')} {proj.get('possession_year', '')}\n")
-                
-                if proj.get('rera_number'):
-                    response_parts.append(f"**📋 RERA:** {proj.get('rera_number')}\n")
-                
-                if proj.get('usp') and len(proj.get('usp', '')) > 5:
-                    response_parts.append(f"\n**✨ Why this property?**\n{proj.get('usp')}\n")
-                
-                if proj.get('amenities'):
-                    amenities = proj.get('amenities', '').replace("[", "").replace("]", "").replace("'", "")
-                    response_parts.append(f"\n**🎯 Key Amenities:** {amenities}\n")
-                
-                # Brochure Download
-                if proj.get('brochure_url'):
-                    response_parts.append(f"\n[📄 **Download Brochure**]({proj.get('brochure_url')})\n")
-                
-                # RM Details
-                rm = proj.get('rm_details', {})
-                if rm:
-                    response_parts.append(f"\n👤 **Relationship Manager:** {rm.get('name', 'Expert')} ({rm.get('contact', '')})\n")
-                
-                # Registration Process
-                if proj.get('registration_process'):
-                    response_parts.append(f"\n📝 **Registration Process:**\n{proj.get('registration_process')}\n")
-                
-                response_parts.append("\n👉 **Ready to see it in person? Schedule a site visit!**")
-                
-                response_time_ms = int((time.time() - start_time) * 1000)
-                
-                # Record interest
-                try:
-                    # Logging interaction (stubbed out as record_interaction is not available)
-                    pass 
-                    # flow_engine.record_interaction(
-                    #     session_id=request.session_id,
-                    #     user_query=request.query,
-                    #     intent="project_details",
-                    #     response="\n".join(response_parts),
-                    #     project_name=project.get("name")
-                    # )
-                except Exception as e:
-                    logger.error(f"Failed to record interaction: {e}")
-
-                answer_text = "\n".join(response_parts)
-                
-                # Update session with messages
-                if session and request.session_id:
-                    session_manager.add_message(request.session_id, "user", original_query)
-                    session_manager.add_message(request.session_id, "assistant", answer_text[:500])
-                    session.last_intent = "project_details"
-                    
-                    # CRITICAL: Save project to last_shown_projects
-                    if project and project.get('name'):
-                        if not hasattr(session, 'last_shown_projects') or not session.last_shown_projects:
-                            session.last_shown_projects = []
-                        existing_names = {p.get('name') for p in session.last_shown_projects if isinstance(p, dict) and p.get('name')}
-                        if project.get('name') not in existing_names:
-                            session.last_shown_projects.insert(0, project)
-                            logger.info(f"✅ Saved project '{project.get('name')}' to last_shown_projects")
-                    
-                    session_manager.save_session(session)
-                
-                coaching_prompt = _get_coaching_for_response(
-                    session, request.session_id, request.query, "project_details",
-                    search_performed=False, data_source="database", budget_alternatives_shown=False
-                )
-                return ChatQueryResponse(
-                    answer=answer_text,
-                    sources=[{
-                        "document": "projects_table",
-                        "excerpt": f"Details for {project.get('name')}",
-                        "similarity": 1.0
-                    }],
-                    confidence="High",
-                    intent="project_details",
-                    refusal_reason=None,
-                    response_time_ms=0, # Calculated later if needed or placeholder
-                    suggested_actions=[],
-                    coaching_prompt=coaching_prompt
-                )
-            elif project:
-                # Specific question ("distance of airport from avalon")
-                # Route to GPT but inject project name so generator knows context
-                logger.info(f"Specific project question detected for: {project.get('name')}")
-                intent = "more_info_request"
-                data_source = "gpt_generation"
-                extraction["project_name"] = project.get("name")
-                extraction["topic"] = "specific_query"
+        # Step 1.7: REMOVED - Keyword-based fuzzy project detection
+        # GPT now handles ALL project detection as the primary method
+        # Fuzzy matching is only used as a fallback AFTER GPT classification (see project_facts handler)
+        # This ensures GPT is always the first method, with fuzzy matching as backup
 
         # Extract and merge filters early (needed for context and search)
         filters = filter_extractor.extract_filters(request.query)
@@ -1638,48 +1507,49 @@ async def chat_query(request: ChatQueryRequest):
 
                         if results:
                             project = results[0]
+                            project_dict = dict(project)  # Convert to dict for consistency
 
                             # Format structured project response
                             response_parts = []
-                            response_parts.append(f"# {project.get('name', 'Unknown Project')}")
+                            response_parts.append(f"# {project_dict.get('name', 'Unknown Project')}")
 
-                            if project.get('developer'):
-                                response_parts.append(f"**Developer**: {project['developer']}")
+                            if project_dict.get('developer'):
+                                response_parts.append(f"**Developer**: {project_dict['developer']}")
 
-                            if project.get('location'):
-                                response_parts.append(f"**Location**: {project['location']}")
+                            if project_dict.get('location'):
+                                response_parts.append(f"**Location**: {project_dict['location']}")
 
-                            if project.get('configuration'):
-                                response_parts.append(f"**Configurations**: {project['configuration']}")
+                            if project_dict.get('configuration'):
+                                response_parts.append(f"**Configurations**: {project_dict['configuration']}")
 
-                            if project.get('price_range'):
-                                price = project['price_range']
+                            if project_dict.get('price_range'):
+                                price = project_dict['price_range']
                                 if isinstance(price, dict):
                                     response_parts.append(f"**Price Range**: ₹{price.get('min_display', 'N/A')} - ₹{price.get('max_display', 'N/A')}")
                                 else:
                                     response_parts.append(f"**Price**: {price}")
 
-                            if project.get('possession_year'):
-                                response_parts.append(f"**Possession**: Q{project.get('possession_quarter', '')} {project['possession_year']}")
+                            if project_dict.get('possession_year'):
+                                response_parts.append(f"**Possession**: Q{project_dict.get('possession_quarter', '')} {project_dict['possession_year']}")
 
-                            if project.get('amenities'):
-                                response_parts.append(f"\n**Amenities**:\n{project['amenities']}")
+                            if project_dict.get('amenities'):
+                                response_parts.append(f"\n**Amenities**:\n{project_dict['amenities']}")
 
-                            if project.get('highlights'):
-                                response_parts.append(f"\n**Highlights**:\n{project['highlights']}")
+                            if project_dict.get('highlights'):
+                                response_parts.append(f"\n**Highlights**:\n{project_dict['highlights']}")
 
-                            if project.get('usp'):
-                                usp = project['usp']
+                            if project_dict.get('usp'):
+                                usp = project_dict['usp']
                                 if isinstance(usp, list):
                                     response_parts.append(f"\n**USP**:\n" + "\n".join(f"• {u}" for u in usp))
                                 else:
                                     response_parts.append(f"\n**USP**: {usp}")
 
-                            if project.get('rera_number'):
-                                response_parts.append(f"\n**RERA**: {project['rera_number']}")
+                            if project_dict.get('rera_number'):
+                                response_parts.append(f"\n**RERA**: {project_dict['rera_number']}")
 
-                            if project.get('brochure_url'):
-                                response_parts.append(f"\n📄 [View Brochure]({project['brochure_url']})")
+                            if project_dict.get('brochure_url'):
+                                response_parts.append(f"\n📄 [View Brochure]({project_dict['brochure_url']})")
 
                             response_text = "\n\n".join(response_parts)
                             response_time_ms = int((time.time() - start_time) * 1000)
@@ -1689,10 +1559,9 @@ async def chat_query(request: ChatQueryRequest):
                                 session_manager.add_message(request.session_id, "user", original_query)
                                 session_manager.add_message(request.session_id, "assistant", response_text[:500])
                                 session.last_intent = "project_facts"
-                                session_manager.record_interest(request.session_id, project.get('name'))
+                                session_manager.record_interest(request.session_id, project_dict.get('name'))
                                 
                                 # CRITICAL: Save project to last_shown_projects
-                                project_dict = dict(project)  # Convert to dict if needed
                                 if project_dict.get('name'):
                                     if not hasattr(session, 'last_shown_projects') or not session.last_shown_projects:
                                         session.last_shown_projects = []
@@ -1703,7 +1572,7 @@ async def chat_query(request: ChatQueryRequest):
                                 
                                 session_manager.save_session(session)
 
-                            logger.info(f"✅ Returned database project details for: {project.get('name')}")
+                            logger.info(f"✅ Returned database project details for: {project_dict.get('name')}")
 
                             coaching_prompt = _get_coaching_for_response(
                                 session, request.session_id, request.query, "project_facts",
@@ -1717,7 +1586,7 @@ async def chat_query(request: ChatQueryRequest):
                                 refusal_reason=None,
                                 response_time_ms=response_time_ms,
                                 suggested_actions=["Schedule site visit", "View similar projects", "Get brochure"],
-                                projects=[project],
+                                projects=[project_dict],
                                 coaching_prompt=coaching_prompt
                             )
                     except Exception as e:
