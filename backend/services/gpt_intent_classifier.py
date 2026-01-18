@@ -208,7 +208,7 @@ def classify_intent_gpt_first(
 def _build_system_prompt() -> str:
     """Build the system prompt for GPT intent classification using production Sales Agent GPT principles."""
 
-    return f"""{SALES_AGENT_SYSTEM_PROMPT}
+    return SALES_AGENT_SYSTEM_PROMPT + """
 
 ⸻
 
