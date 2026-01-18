@@ -139,10 +139,14 @@ def classify_intent_gpt_first(
         
         # CRITICAL: Add available projects list for GPT to match against
         if session_state.get("available_projects"):
-            projects_list = [p.get('name') for p in session_state['available_projects'][:30]]  # First 30 for context
+            projects_list = [p.get('name') for p in session_state['available_projects'][:50]]  # First 50 for better matching
             context_info += f"\n**Available Projects (sample):** {', '.join(projects_list)}"
             context_info += f"\n**Total Available Projects:** {len(session_state['available_projects'])}"
-            context_info += "\n**CRITICAL:** Match partial project names from query to this list. Use fuzzy matching. Examples: 'Green Vista' → 'Green Vista in Bellandur', 'citrine' → 'Brigade Citrine'."
+            context_info += "\n**CRITICAL TYPO HANDLING:**"
+            context_info += "\n- Match project names from query (even with typos) to this list"
+            context_info += "\n- Examples: 'avalon' → 'Brigade Avalon', 'avlon' → 'Brigade Avalon', 'citrine' → 'Brigade Citrine'"
+            context_info += "\n- Also handle fact type typos: 'prise' → 'price', 'ammenities' → 'amenities', 'rera numbr' → 'rera_number'"
+            context_info += "\n- ALWAYS extract project_name when query mentions ANY project-related word, even with typos"
         
         if session_state.get("requirements"):
             req = session_state["requirements"]
@@ -258,14 +262,23 @@ If query is ambiguous, use context to infer most likely intent. Never ask for cl
   * Query has typos → understand despite spelling errors
   * Query is in mixed language → understand multilingual queries
 
-**PROJECT NAME MATCHING:**
-- If query mentions ANY part of a project name, match it to available_projects
-- Examples:
-  * "Green Vista" → match to "Green Vista in Bellandur" or "Green Vista Phase 2"
-  * "lets pitch citrine" → match to "Brigade Citrine"
-  * "avalon price" → match to "Brigade Avalon"
-- Use fuzzy matching: "green" could match "Green Vista", "Green Park", etc.
+**PROJECT NAME MATCHING (CRITICAL - HANDLE TYPOS):**
+- If query mentions ANY part of a project name (even with typos), match it to available_projects
+- **TYPO HANDLING EXAMPLES:**
+  * "avalon prise" → project_name: "Brigade Avalon", fact_type: "price" (handle BOTH typos)
+  * "citrine ammenities" → project_name: "Brigade Citrine", fact_type: "amenities" (handle BOTH typos)
+  * "brigade avlon" → project_name: "Brigade Avalon" (handle project name typo)
+  * "avalon" → match to "Brigade Avalon" (partial name)
+  * "citrine" → match to "Brigade Citrine" (partial name)
+  * "green vista" → match to "Green Vista in Bellandur" (partial match)
+- **FACT TYPE TYPO HANDLING:**
+  * "prise" → fact_type: "price"
+  * "ammenities" → fact_type: "amenities"
+  * "rera numbr" → fact_type: "rera_number"
+  * "locaton" → fact_type: "location"
+- Use fuzzy matching against available_projects list: "green" could match "Green Vista", "Green Park", etc.
 - If multiple matches, prefer the one in session_state.last_shown_projects or interested_projects
+- **ALWAYS extract project_name when query mentions ANY project-related word, even with typos**
 
 **SESSION CONTEXT USAGE (NEVER LOSE CONTEXT):**
 - If query is vague (e.g., "price", "location", "amenities") and doesn't mention project:
@@ -332,12 +345,21 @@ If query is ambiguous, use context to infer most likely intent. Never ask for cl
    - **CRITICAL**: If query asks about distance/connectivity, route to GPT but extract project_name for context
    - data_source: "gpt_generation"
 
-**Entity Extraction:**
+**Entity Extraction (CRITICAL - HANDLE TYPOS):**
 - configuration: "2BHK", "3BHK", "4BHK"
 - budget_max: In lakhs (2 Cr = 200 lakhs)
 - location: "Whitefield", "Sarjapur", "East Bangalore"
-- project_name: Extract from query OR session context (last_shown_projects, interested_projects)
-- fact_type: "price", "location", "amenities", "general" (for project_facts)
+- **project_name: ALWAYS extract from query (even with typos) OR session context**
+  * Match typos to available_projects: "avlon" → "Brigade Avalon", "citrine" → "Brigade Citrine"
+  * Use fuzzy matching against available_projects list
+  * If not in query, use last_shown_projects[0] or interested_projects[-1]
+- **fact_type: Extract and normalize typos**
+  * "prise" → "price"
+  * "ammenities" → "amenities"
+  * "rera numbr" → "rera_number"
+  * "locaton" → "location"
+  * "possesion" → "possession"
+  * "config" → "configuration"
 - topic: For sales_conversation (budget_stretch, emi, investment, amenities, location_benefits)
 
 **Return JSON:**
@@ -433,6 +455,50 @@ Query: "Amenities in Brigade Citrine"
   "confidence": 0.93,
   "reasoning": "Amenities field exists in database",
   "extraction": {"project_name": "Brigade Citrine", "fact_type": "amenities"}
+}
+```
+
+Query: "avalon prise" (typo in both project name and fact type)
+```json
+{
+  "intent": "project_facts",
+  "data_source": "database",
+  "confidence": 0.95,
+  "reasoning": "Query about price with typo - match 'avalon' to 'Brigade Avalon' from available_projects, 'prise' → 'price'",
+  "extraction": {"project_name": "Brigade Avalon", "fact_type": "price"}
+}
+```
+
+Query: "citrine ammenities" (typo in both project name and fact type)
+```json
+{
+  "intent": "project_facts",
+  "data_source": "database",
+  "confidence": 0.95,
+  "reasoning": "Query about amenities with typo - match 'citrine' to 'Brigade Citrine' from available_projects, 'ammenities' → 'amenities'",
+  "extraction": {"project_name": "Brigade Citrine", "fact_type": "amenities"}
+}
+```
+
+Query: "brigade avlon" (typo in project name)
+```json
+{
+  "intent": "project_facts",
+  "data_source": "database",
+  "confidence": 0.95,
+  "reasoning": "Project name with typo - match 'avlon' to 'Brigade Avalon' from available_projects",
+  "extraction": {"project_name": "Brigade Avalon"}
+}
+```
+
+Query: "rera numbr" (typo in fact type, no project mentioned - use context)
+```json
+{
+  "intent": "project_facts",
+  "data_source": "database",
+  "confidence": 0.90,
+  "reasoning": "RERA query with typo - use last_shown_projects context, 'numbr' → 'rera_number'",
+  "extraction": {"project_name": "Brigade Avalon", "fact_type": "rera_number"}
 }
 ```
 
