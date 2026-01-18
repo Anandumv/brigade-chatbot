@@ -9,7 +9,8 @@ import { ResponseCard } from './ResponseCard';
 import { ProjectCard } from './ProjectCard';
 import { FilterPanel } from './FilterPanel';
 import { QuickReplies, getQuickRepliesForIntent } from './QuickReplies';
-import { Send, Loader2, Sparkles, User, AlertCircle, Zap } from '@/components/icons';
+import { Send, Loader2, User, AlertCircle, Zap } from '@/components/icons';
+import { PinClickLogo, PinClickLogoIcon } from './PinClickLogo';
 // Phase 1: Scheduling components
 import { ScheduleVisitModal } from './scheduling';
 // Phase 2: Enhanced UX components
@@ -307,8 +308,7 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
             {/* Minimal Header */}
             <div className="flex-shrink-0 py-4 bg-white/80 backdrop-blur-md border-b border-gray-200 flex justify-center items-center z-10 sticky top-0">
                 <a href="/" className="font-semibold text-gray-800 tracking-tight flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer">
-                    <Sparkles className="w-4 h-4 text-orange-500" />
-                    Pin Click Sales Assist
+                    <PinClickLogo size={24} showText={true} />
                 </a>
             </div>
 
@@ -326,11 +326,11 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                 {messages.length === 0 ? (
                     <div className="flex flex-col items-center justify-center min-h-[50vh] sm:min-h-[60vh] text-center space-y-6 sm:space-y-8 animate-fade-in px-2 sm:px-4 pt-8">
                         <div className="space-y-3 sm:space-y-4">
-                            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-gradient-to-br from-gray-900 to-gray-800 flex items-center justify-center shadow-xl mx-auto ring-4 ring-white">
-                                <Sparkles className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
+                            <div className="flex flex-col items-center justify-center">
+                                <PinClickLogo size={80} showText={true} className="mb-2" />
                             </div>
                             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">
-                                Pin Click Sales Assist
+                                Sales Assist
                             </h1>
                             <p className="text-gray-500 max-w-sm sm:max-w-md text-sm sm:text-base px-4 leading-relaxed">
                                 Your AI Sales Copilot. Ask about projects, prices, or anything related to your client requirement
@@ -381,8 +381,8 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                             >
                                 {/* Bot Icon */}
                                 {message.role === 'assistant' && (
-                                    <div className="w-8 h-8 flex-shrink-0 rounded-full bg-gradient-to-br from-gray-900 to-gray-800 flex items-center justify-center mt-1 shadow-sm ring-2 ring-white">
-                                        <Sparkles className="w-4 h-4 text-white" />
+                                    <div className="w-8 h-8 flex-shrink-0 rounded-full bg-white flex items-center justify-center mt-1 shadow-sm ring-2 ring-gray-100">
+                                        <PinClickLogoIcon size={20} />
                                     </div>
                                 )}
 
