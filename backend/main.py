@@ -1362,14 +1362,19 @@ async def chat_query(request: ChatQueryRequest):
                         query=request.query,
                         filters=filters
                     )
-                except (NameError, AttributeError) as e:
-                    # If hybrid_retrieval is not available, import it
-                    logger.warning(f"hybrid_retrieval not available, re-importing: {e}")
-                    from services.hybrid_retrieval import hybrid_retrieval
-                    search_results = await hybrid_retrieval.search_with_filters(
-                        query=request.query,
-                        filters=filters
-                    )
+                except Exception as e:
+                    # If hybrid_retrieval fails, log and re-import
+                    logger.warning(f"hybrid_retrieval error, re-importing: {e}")
+                    try:
+                        from services.hybrid_retrieval import hybrid_retrieval
+                        search_results = await hybrid_retrieval.search_with_filters(
+                            query=request.query,
+                            filters=filters
+                        )
+                    except Exception as e2:
+                        logger.error(f"Failed to use hybrid_retrieval after re-import: {e2}")
+                        # Return empty results to trigger fallback
+                        search_results = {"projects": [], "sources": []}
 
                 # Check if zero results - trigger intelligent fallback
                 if len(search_results["projects"]) == 0:
@@ -1518,6 +1523,19 @@ async def chat_query(request: ChatQueryRequest):
                 # Update projects list with enriched data
                 projects_list = enriched_projects
                 
+                # Check if this is a minimum budget query and calculate answer
+                min_budget_answer = None
+                query_lower = request.query.lower()
+                min_price_keywords = ["minimum budget", "min budget", "starting price", "lowest price", "cheapest", "least expensive", "start from", "starts from", "start price"]
+                
+                if projects_list and any(kw in query_lower for kw in min_price_keywords):
+                    # Calculate minimum budget from results
+                    min_price_proj = min(projects_list, key=lambda x: x.get('budget_min', float('inf')) if x.get('budget_min') else float('inf'))
+                    min_price_val = min_price_proj.get('budget_min', 0)
+                    if min_price_val and min_price_val > 0:
+                        min_price_val_cr = min_price_val / 100  # Convert lakhs to crores
+                        min_budget_answer = f"💡 **The minimum budget required starts at ₹{min_price_val_cr:.2f} Cr** with {min_price_proj.get('name', 'available projects')}.\n\n"
+                
                 # Check for better-value configurations and format response
                 better_value_count = sum(1 for p in projects_list if p.get("_better_value", False))
                 regular_count = len(projects_list) - better_value_count
@@ -1566,8 +1584,28 @@ async def chat_query(request: ChatQueryRequest):
                 project_name = context_metadata.get("extraction", {}).get("project_name")
 
                 if not project_name:
-                    # GPT extraction should have project_name - if not, log warning
+                    # GPT extraction should have project_name - if not, try fuzzy matching as fallback
                     logger.warning(f"GPT classified as project_facts but didn't extract project_name. Query: {request.query}")
+                    logger.info("Attempting fuzzy matching fallback...")
+                    
+                    # Try fuzzy matching from query
+                    from services.fuzzy_matcher import extract_project_name_from_query
+                    available_projects = session_state.get("available_projects", [])
+                    if available_projects:
+                        project_name = extract_project_name_from_query(request.query, available_projects)
+                        if project_name:
+                            logger.info(f"✅ Fuzzy matched project: '{project_name}' from query: '{request.query}'")
+                        else:
+                            # Try from session context
+                            if session and hasattr(session, 'last_shown_projects') and session.last_shown_projects:
+                                last_project = session.last_shown_projects[0] if isinstance(session.last_shown_projects[0], dict) else None
+                                if last_project:
+                                    project_name = last_project.get('name')
+                                    logger.info(f"✅ Using last shown project from context: '{project_name}'")
+                            elif session and hasattr(session, 'interested_projects') and session.interested_projects:
+                                project_name = session.interested_projects[-1] if isinstance(session.interested_projects[-1], str) else None
+                                if project_name:
+                                    logger.info(f"✅ Using interested project from context: '{project_name}'")
 
                 if project_name:
                     logger.info(f"Fetching project details for: {project_name}")
@@ -2497,9 +2535,13 @@ How can I assist you today?"""
                     filters=filters
                 )
             except (NameError, AttributeError) as e:
-                # If hybrid_retrieval is not available, import it
-                logger.warning(f"hybrid_retrieval not available, re-importing: {e}")
-                from services.hybrid_retrieval import hybrid_retrieval
+                # If hybrid_retrieval fails, log and re-import
+                logger.warning(f"hybrid_retrieval error, re-importing: {e}")
+                try:
+                    from services.hybrid_retrieval import hybrid_retrieval
+                except Exception as e2:
+                    logger.error(f"Failed to import hybrid_retrieval: {e2}")
+                    raise
                 search_results = await hybrid_retrieval.search_with_filters(
                     query=request.query,
                     filters=filters
