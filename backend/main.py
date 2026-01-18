@@ -1241,14 +1241,13 @@ async def chat_query(request: ChatQueryRequest):
                         filters=filters
                     )
                 except (NameError, AttributeError) as e:
-                    # If hybrid_retrieval is not available, import it at module level
+                    # If hybrid_retrieval is not available, import it
                     logger.warning(f"hybrid_retrieval not available: {e}")
-                    # Import at module level to avoid scoping issues
+                    # Import module and use directly to avoid scoping issues
                     import services.hybrid_retrieval as hr_module
-                    global hybrid_retrieval
-                    hybrid_retrieval = hr_module.hybrid_retrieval
+                    hr_instance = hr_module.hybrid_retrieval
                     try:
-                        search_results = await hybrid_retrieval.search_with_filters(
+                        search_results = await hr_instance.search_with_filters(
                             query=request.query,
                             filters=filters
                         )
@@ -2427,14 +2426,13 @@ How can I assist you today?"""
                     filters=filters
                 )
             except (NameError, AttributeError) as e:
-                # If hybrid_retrieval is not available, import it at module level
+                # If hybrid_retrieval is not available, import it
                 logger.warning(f"hybrid_retrieval not available: {e}")
-                # Import at module level to avoid scoping issues
+                # Import module and use directly to avoid scoping issues
                 import services.hybrid_retrieval as hr_module
-                global hybrid_retrieval
-                hybrid_retrieval = hr_module.hybrid_retrieval
+                hr_instance = hr_module.hybrid_retrieval
                 try:
-                    search_results = await hybrid_retrieval.search_with_filters(
+                    search_results = await hr_instance.search_with_filters(
                         query=request.query,
                         filters=filters
                     )
@@ -2918,14 +2916,13 @@ async def filtered_search(request: ChatQueryRequest):
                 filters=filters
             )
         except (NameError, AttributeError) as e:
-            # If hybrid_retrieval is not available, import it at module level
+            # If hybrid_retrieval is not available, import it
             logger.warning(f"hybrid_retrieval not available: {e}")
-            # Import at module level to avoid scoping issues
+            # Import module and use directly to avoid scoping issues
             import services.hybrid_retrieval as hr_module
-            global hybrid_retrieval
-            hybrid_retrieval = hr_module.hybrid_retrieval
+            hr_instance = hr_module.hybrid_retrieval
             try:
-                search_results = await hybrid_retrieval.search_with_filters(
+                search_results = await hr_instance.search_with_filters(
                     query=request.query,
                     filters=filters
                 )
