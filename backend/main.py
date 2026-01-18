@@ -1240,11 +1240,14 @@ async def chat_query(request: ChatQueryRequest):
                         query=request.query,
                         filters=filters
                     )
-                except Exception as e:
-                    # If hybrid_retrieval fails, log and re-import
-                    logger.warning(f"hybrid_retrieval error, re-importing: {e}")
+                except (NameError, AttributeError) as e:
+                    # If hybrid_retrieval is not available, import it at module level
+                    logger.warning(f"hybrid_retrieval not available: {e}")
+                    # Import at module level to avoid scoping issues
+                    import services.hybrid_retrieval as hr_module
+                    global hybrid_retrieval
+                    hybrid_retrieval = hr_module.hybrid_retrieval
                     try:
-                        from services.hybrid_retrieval import hybrid_retrieval
                         search_results = await hybrid_retrieval.search_with_filters(
                             query=request.query,
                             filters=filters
@@ -1253,6 +1256,10 @@ async def chat_query(request: ChatQueryRequest):
                         logger.error(f"Failed to use hybrid_retrieval after re-import: {e2}")
                         # Return empty results to trigger fallback
                         search_results = {"projects": [], "sources": []}
+                except Exception as e:
+                    # For other exceptions, just log and return empty results
+                    logger.error(f"hybrid_retrieval search failed: {e}")
+                    search_results = {"projects": [], "sources": []}
 
                 # Check if zero results - trigger intelligent fallback
                 if len(search_results["projects"]) == 0:
@@ -2420,17 +2427,24 @@ How can I assist you today?"""
                     filters=filters
                 )
             except (NameError, AttributeError) as e:
-                # If hybrid_retrieval fails, log and re-import
-                logger.warning(f"hybrid_retrieval error, re-importing: {e}")
+                # If hybrid_retrieval is not available, import it at module level
+                logger.warning(f"hybrid_retrieval not available: {e}")
+                # Import at module level to avoid scoping issues
+                import services.hybrid_retrieval as hr_module
+                global hybrid_retrieval
+                hybrid_retrieval = hr_module.hybrid_retrieval
                 try:
-                    from services.hybrid_retrieval import hybrid_retrieval
+                    search_results = await hybrid_retrieval.search_with_filters(
+                        query=request.query,
+                        filters=filters
+                    )
                 except Exception as e2:
-                    logger.error(f"Failed to import hybrid_retrieval: {e2}")
+                    logger.error(f"Failed to use hybrid_retrieval after re-import: {e2}")
                     raise
-                search_results = await hybrid_retrieval.search_with_filters(
-                    query=request.query,
-                    filters=filters
-                )
+            except Exception as e:
+                # For other exceptions, just log and re-raise
+                logger.error(f"hybrid_retrieval search failed: {e}")
+                raise
             
             # Structured search doesn't use vector chunks
             chunks = []
@@ -2904,13 +2918,24 @@ async def filtered_search(request: ChatQueryRequest):
                 filters=filters
             )
         except (NameError, AttributeError) as e:
-            # If hybrid_retrieval is not available, import it
-            logger.warning(f"hybrid_retrieval not available, re-importing: {e}")
-            from services.hybrid_retrieval import hybrid_retrieval
-            search_results = await hybrid_retrieval.search_with_filters(
-                query=request.query,
-                filters=filters
-            )
+            # If hybrid_retrieval is not available, import it at module level
+            logger.warning(f"hybrid_retrieval not available: {e}")
+            # Import at module level to avoid scoping issues
+            import services.hybrid_retrieval as hr_module
+            global hybrid_retrieval
+            hybrid_retrieval = hr_module.hybrid_retrieval
+            try:
+                search_results = await hybrid_retrieval.search_with_filters(
+                    query=request.query,
+                    filters=filters
+                )
+            except Exception as e2:
+                logger.error(f"Failed to use hybrid_retrieval after re-import: {e2}")
+                search_results = {"projects": [], "sources": []}
+        except Exception as e:
+            # For other exceptions, just log and return empty results
+            logger.error(f"hybrid_retrieval search failed: {e}")
+            search_results = {"projects": [], "sources": []}
 
         # Step 3: Check if any results found
         if not search_results["projects"]:
