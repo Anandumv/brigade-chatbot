@@ -139,14 +139,21 @@ def classify_intent_gpt_first(
         
         # CRITICAL: Add available projects list for GPT to match against
         if session_state.get("available_projects"):
-            projects_list = [p.get('name') for p in session_state['available_projects'][:50]]  # First 50 for better matching
-            context_info += f"\n**Available Projects (sample):** {', '.join(projects_list)}"
-            context_info += f"\n**Total Available Projects:** {len(session_state['available_projects'])}"
-            context_info += "\n**CRITICAL TYPO HANDLING:**"
-            context_info += "\n- Match project names from query (even with typos) to this list"
-            context_info += "\n- Examples: 'avalon' → 'Brigade Avalon', 'avlon' → 'Brigade Avalon', 'citrine' → 'Brigade Citrine'"
-            context_info += "\n- Also handle fact type typos: 'prise' → 'price', 'ammenities' → 'amenities', 'rera numbr' → 'rera_number'"
-            context_info += "\n- ALWAYS extract project_name when query mentions ANY project-related word, even with typos"
+            projects_list = [p.get('name') if isinstance(p, dict) else str(p) for p in session_state['available_projects'][:50]]  # First 50 for better matching
+            projects_list = [p for p in projects_list if p]  # Filter out None/empty
+            if projects_list:
+                context_info += f"\n**Available Projects (sample):** {', '.join(projects_list[:30])}"  # Show first 30 in context
+                context_info += f"\n**Total Available Projects:** {len(session_state['available_projects'])}"
+                context_info += "\n**CRITICAL TYPO HANDLING - READ CAREFULLY:**"
+                context_info += "\n- Match project names from query (even with typos) to the EXACT names in the list above"
+                context_info += "\n- Examples: Query 'avalon prise' → Match 'avalon' to 'Brigade Avalon' from list, 'prise' → 'price'"
+                context_info += "\n- Examples: Query 'citrine ammenities' → Match 'citrine' to 'Brigade Citrine' from list, 'ammenities' → 'amenities'"
+                context_info += "\n- Examples: Query 'brigade avlon' → Match 'avlon' to 'Brigade Avalon' from list (typo handling)"
+                context_info += "\n- FACT TYPE TYPOS: 'prise' → 'price', 'ammenities' → 'amenities', 'rera numbr' → 'rera_number'"
+                context_info += "\n- **MANDATORY**: If query contains ANY word that matches (even partially) a project name in the list above, you MUST extract project_name in the extraction field"
+                context_info += "\n- **MANDATORY**: Use EXACT project name from the list above (e.g., 'Brigade Avalon', not 'avalon' or 'Avalon')"
+            else:
+                logger.warning("available_projects list is empty or has no names")
         
         if session_state.get("requirements"):
             req = session_state["requirements"]
