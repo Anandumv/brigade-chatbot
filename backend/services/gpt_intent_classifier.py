@@ -94,7 +94,7 @@ def classify_intent_gpt_first(
             if req.get("location"):
                 req_parts.append(f"location={req['location']}")
             if req.get("budget_max"):
-                req_parts.append(f"budget≤{req['budget_max']}")
+                req_parts.append(f"budget<={req['budget_max']}")
             if req.get("configuration"):
                 req_parts.append(f"config={req['configuration']}")
             if req_parts:
