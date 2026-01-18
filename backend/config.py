@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     embedding_dimensions: int = 1536
 
     # LLM Configuration
-    gpt_model: str = "gpt-4-turbo-preview"  # OpenAI model name
+    gpt_model: str = "gpt-4-turbo"  # OpenAI model name (updated from gpt-4-turbo-preview)
     llm_model: Optional[str] = None  # Alias for gpt_model from env
     max_tokens: int = 1500
 
