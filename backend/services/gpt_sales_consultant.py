@@ -253,12 +253,21 @@ CRITICAL REQUIREMENTS FOR LIVE CALLS:
 • Use real estate terminology and market insights
 • Structure as: Main point → Supporting detail → Call-to-action where relevant
 
-EXAMPLE FORMAT:
-• [Main Advantage]: [Specific benefit] - [Why it matters for customer]
-• [Another Point]: [Details] - [Sales angle]
-• [Key Benefit]: [Explanation] - [How to position this]
+**FORMATTING REQUIREMENTS (MANDATORY):**
+• **ALWAYS use bold (**text**) for key points, main benefits, and important terms**
+• Format each bullet as: • **Main Point**: Supporting detail
+• Bold the most important words in each bullet (e.g., **unique features**, **long-term value**, **ROI**, **resale value**)
+• Use **bold** for numbers, percentages, and key selling points
+• Make bullets scannable - bold helps sales people quickly identify key talking points
 
-Generate a comprehensive response that helps during live sales calls."""
+EXAMPLE FORMAT:
+• **Highlight unique features** not available in lower-priced properties - positions as premium investment
+• **Emphasize long-term value gains** and **ROI** - shows financial wisdom of stretching budget
+• **Discuss potential for higher resale value** - addresses future returns concern
+• **Mention financing options** that can ease initial budget constraints - removes immediate barrier
+• **Showcase premium amenities** and **exclusive community benefits** - justifies premium pricing
+
+Generate a comprehensive response that helps during live sales calls. EVERY bullet point MUST have bold text for key terms."""
             else:
                 return "Continue the property search conversation naturally"
 
@@ -500,6 +509,14 @@ ADDITIONAL CONTEXT-SPECIFIC RULES:
 3. **CONVERSATION HISTORY**: All previous messages are in the conversation history below
 4. **SENTIMENT AWARENESS**: {tone_instructions if tone_instructions else "Customer sentiment: Neutral - respond professionally"}
 5. **INFERENCE FROM CONTEXT**: If user says vague phrases ("more", "nearby", "these areas"), check context above and conversation history below
+
+**CRITICAL FORMATTING REQUIREMENT:**
+• **ALWAYS use bold (**text**) for key points, main benefits, numbers, and important terms in EVERY response**
+• Format bullets as: • **Main Point**: supporting detail
+• Bold the most important words: **unique features**, **ROI**, **value**, **premium**, **exclusive**, **investment potential**, etc.
+• Bold all numbers and percentages: **₹1.25 Cr**, **10 mins**, **15-20%**, etc.
+• Bold project names, locations, and key selling points
+• This makes responses scannable and helps sales people quickly identify talking points during calls
 
 REMEMBER: You are a silent sales brain running during a live call. Every token must earn its place.
 """
