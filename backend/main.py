@@ -1941,6 +1941,10 @@ async def chat_query(request: ChatQueryRequest):
             response_time_ms=response_time_ms,
             suggested_actions=[],
             coaching_prompt=coaching_prompt if 'coaching_prompt' in locals() else None
+            if coaching_prompt:
+                logger.info(f"✅ Returning coaching_prompt in response: {coaching_prompt.get('type')} - {coaching_prompt.get('message')[:50]}...")
+            else:
+                logger.debug(f"⚠️ No coaching_prompt in response for query: {request.query[:50]}")
         )
 
         # Step 1.5: Handle greetings immediately without RAG (LEGACY - unreachable code)
