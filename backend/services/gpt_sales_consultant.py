@@ -232,7 +232,35 @@ def determine_conversation_goal(intent: str, query: str, session: ConversationSe
             topic = extraction.get("topic", "general")
             return f"Answer the user's question about {project_name} regarding {topic}. Be specific, concise, and sales-oriented."
         else:
-            return "Continue the property search conversation naturally"
+            # Detect generic sales questions that need comprehensive responses
+            query_lower = query.lower()
+            is_generic_sales_question = any(phrase in query_lower for phrase in [
+                "why buy", "why choose", "why invest", "why this", "why that",
+                "advantages of", "benefits of", "pros of", "why is", "why are",
+                "what are the", "tell me about", "explain", "help me understand"
+            ])
+            
+            if is_generic_sales_question:
+                # Extract topic from query for comprehensive response
+                topic = detect_sales_topic(query)
+                return f"""Provide a COMPREHENSIVE, CALL-READY response about {topic}. 
+
+CRITICAL REQUIREMENTS FOR LIVE CALLS:
+• Provide 6-10 detailed bullet points (not just 2-3)
+• Each bullet must be speakable during a live call (concise but complete)
+• Include specific benefits, advantages, and selling points
+• Make it actionable and persuasive for sales conversations
+• Use real estate terminology and market insights
+• Structure as: Main point → Supporting detail → Call-to-action where relevant
+
+EXAMPLE FORMAT:
+• [Main Advantage]: [Specific benefit] - [Why it matters for customer]
+• [Another Point]: [Details] - [Sales angle]
+• [Key Benefit]: [Explanation] - [How to position this]
+
+Generate a comprehensive response that helps during live sales calls."""
+            else:
+                return "Continue the property search conversation naturally"
 
     else:
         # Default: Continue conversation naturally
@@ -257,6 +285,44 @@ def detect_objection_type(query: str) -> str:
         return "trust"
     else:
         return "general"
+
+
+def detect_sales_topic(query: str) -> str:
+    """Detect the sales topic from a generic sales question."""
+    
+    query_lower = query.lower()
+    
+    # Under Construction / Ready to Move
+    if any(phrase in query_lower for phrase in ["under construction", "construction", "not ready", "still building"]):
+        return "under construction properties"
+    elif any(phrase in query_lower for phrase in ["ready to move", "rtm", "ready possession", "immediate possession"]):
+        return "ready to move properties"
+    
+    # Location-based questions
+    locations = ["whitefield", "sarjapur", "electronic city", "koramangala", "indiranagar", 
+                 "marathahalli", "hebbal", "yelahanka", "bellandur", "varthur", "panathur", "oracle"]
+    for loc in locations:
+        if loc in query_lower:
+            return f"investing in {loc.title()}"
+    
+    # Investment-related
+    if any(phrase in query_lower for phrase in ["investment", "roi", "appreciation", "returns", "resale"]):
+        return "real estate investment"
+    
+    # Budget/Financing
+    if any(phrase in query_lower for phrase in ["budget", "emi", "loan", "financing", "payment"]):
+        return "budget and financing options"
+    
+    # Amenities
+    if any(phrase in query_lower for phrase in ["amenities", "facilities", "features"]):
+        return "property amenities and facilities"
+    
+    # Location advantages
+    if any(phrase in query_lower for phrase in ["location", "connectivity", "nearby", "proximity"]):
+        return "location advantages and connectivity"
+    
+    # Generic fallback
+    return "real estate investment in Bangalore"
 
 
 def format_context_for_prompt(context: dict) -> str:
@@ -449,12 +515,22 @@ REMEMBER: You are a silent sales brain running during a live call. Every token m
     messages.append({"role": "user", "content": query})
 
     try:
+        # Determine if this is a generic sales question that needs comprehensive response
+        query_lower = query.lower()
+        is_comprehensive_question = any(phrase in query_lower for phrase in [
+            "why buy", "why choose", "why invest", "advantages of", "benefits of", 
+            "what are the", "tell me about", "explain", "help me understand"
+        ])
+        
+        # Use higher max_tokens for comprehensive sales questions (6-10 bullet points)
+        max_tokens = 1000 if is_comprehensive_question else 600
+        
         # Call GPT
         response = client.chat.completions.create(
             model=settings.effective_gpt_model,
             messages=messages,
             temperature=0.7,
-            max_tokens=600
+            max_tokens=max_tokens
         )
 
         return response.choices[0].message.content.strip()
