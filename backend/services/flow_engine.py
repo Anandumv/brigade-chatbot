@@ -9,6 +9,7 @@ import pixeltable as pxt
 import difflib
 import re
 from services.web_search import web_search_service
+from services.sales_agent_prompt import SALES_AGENT_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -53,11 +54,11 @@ def format_configuration_table(config_raw: str) -> str:
         if len(parts) >= 3:
             config, size, price = parts[0], parts[1], parts[2]
             # Format: "  - **2 BHK**: 1127 - 1461 sq.ft • ₹2.20 Cr*"
-            list_lines.append(f"  - **{config}**: {size} sq.ft • {price}")
+            list_lines.append(f"  \n- **{config}**: {size} sq.ft • {price}")
         elif len(parts) >= 1:
-            list_lines.append(f"  - {parts[0]}")
+            list_lines.append(f"  \n- {parts[0]}")
              
-    return "\n".join(list_lines) + "\n"
+    return "\n" + "".join(list_lines) + "\n\n"
 
 # --- SYSTEM PROMPT ---
 STRICT_SYSTEM_PROMPT = """
@@ -99,7 +100,8 @@ class FlowState(BaseModel):
     selected_project_name: Optional[str] = None
     cached_project_details: Optional[Dict[str, Any]] = None
     last_shown_projects: List[Dict[str, Any]] = Field(default_factory=list)
-    pagination_offset: int = 3  # Track pagination state (default skip top 3)
+    last_search_results: List[Dict[str, Any]] = Field(default_factory=list) # Full result set for pagination
+    pagination_offset: int = 3  # Track pagination state
 
 class FlowResponse(BaseModel):
     extracted_requirements: Dict[str, Any]
@@ -159,16 +161,22 @@ def classify_user_intent(user_input: str, context: str) -> dict:
             messages=[
                 {
                     "role": "system",
-                    "content": """Analyze the user's response and classify their intent. Return JSON with:
-- intent: one of [budget_objection, possession_objection, location_objection, positive_interest, request_info, ambiguous, negative]
-- confidence: float 0-1
-- sentiment: one of [positive, neutral, negative]
-- explanation: brief reason for classification
+                    "content": SALES_AGENT_SYSTEM_PROMPT + """
 
-Examples:
-"Too expensive" → {"intent": "budget_objection", "confidence": 0.95, "sentiment": "negative", "explanation": "User expressed price concern"}
-"Looks good" → {"intent": "positive_interest", "confidence": 0.9, "sentiment": "positive", "explanation": "User showed approval"}
-"Tell me more about amenities" → {"intent": "request_info", "confidence": 0.85, "sentiment": "neutral", "explanation": "User wants more details"}"""
+⸻
+
+TASK: INTENT & SENTIMENT CLASSIFICATION (INTERNAL)
+
+⚠️ OVERRIDE: IGNORE "LIVE CALL OUTPUT RULES".
+⚠️ OVERRIDE: OUTPUT JSON ONLY.
+
+Analyze user input and return JSON:
+- intent: [budget_objection, possession_objection, location_objection, positive_interest, request_info, ambiguous, negative]
+- confidence: float 0-1
+- sentiment: [positive, neutral, negative]
+- explanation: brief reason
+
+"""
                 },
                 {"role": "user", "content": f"Context: {context}\nUser said: {user_input}"}
             ],
@@ -202,20 +210,16 @@ def generate_contextual_response(user_input: str, context: str, conversation_goa
             messages=[
                 {
                     "role": "system",
-                    "content": f"""You are a 'Sales Co-pilot' for a real estate agent at Pinclick.
-Your goal is to provide the agent with persuasive *talking points* and *scripts* to say to the customer on the phone.
+                    "role": "system",
+                    "content": f"""{SALES_AGENT_SYSTEM_PROMPT}
 
+⸻
+
+TASK: GENERATE SPEAKABLE RESPONSE
 Current conversation context: {context}
-
 Your immediate goal: {conversation_goal}
 
-Guidelines:
-- format your response as a script the agent can read or paraphrase.
-- Be persuasive, empathetic, and professional.
-- Focus on value / investment potential / lifestyle upgrade.
-- Keep it concise (2-3 sentences max).
-- Use [Talking Point] style if helpful.
-- Never make up property facts."""
+Override: Ensure output is strictly bullet points as per System Prompt."""
                 },
                 {"role": "user", "content": f"Customer said: '{user_input}'. specific_instruction: Generate a response to achieve the goal."}
             ]
@@ -424,15 +428,21 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
 
     # --- SHOW MORE INTERCEPTOR ---
     if any(w in user_lower for w in ["show more", "more options", "see more", "other projects", "remaining"]):
-        if state.last_shown_projects and len(state.last_shown_projects) > state.pagination_offset:
+        # Use persisted search results if available, otherwise fallback to last_shown (legacy)
+        source_list = state.last_search_results if state.last_search_results else state.last_shown_projects
+        
+        if source_list and len(source_list) > state.pagination_offset:
             # Dynamic Pagination
             start = state.pagination_offset
             PAGE_SIZE = 5
             end = start + PAGE_SIZE
-            batch = state.last_shown_projects[start:end]
+            batch = source_list[start:end]
             
             # Update offset for next time
             state.pagination_offset = end
+            
+            # Update last_shown_projects to reflect what is currently visible/relevant for selection context
+            state.last_shown_projects = batch
             
             response_parts = ["Here are more options:\n\n"]
             for i, proj in enumerate(batch, start + 1):  # Continue numbering
@@ -441,10 +451,10 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
                 
                 response_parts.append(f"**{i}. {proj['name']}** ({proj['status']})\n")
                 response_parts.append(f"   📍 {proj['location']}\n")
-                response_parts.append(f"   💰 ₹{proj['budget_min']} - ₹{proj['budget_max']} Cr\n")
+                response_parts.append(f"   💰 ₹{proj['budget_min']/100:.2f} - ₹{proj['budget_max']/100:.2f} Cr\n")
                 response_parts.append(f"   🏠 {config_display}\n\n")
 
-            remaining = len(state.last_shown_projects) - end
+            remaining = len(source_list) - end
             if remaining > 0:
                 response_parts.append(f"_And {remaining} more in our database... Say 'show more' again!_\n\n")
             
@@ -455,7 +465,7 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
                 extracted_requirements=merged_reqs.model_dump(),
                 current_node=node,
                 system_action=action,
-                next_redirection="NODE 2A"
+                next_redirection="NODE 2A" # Loops back to wait state
             )
 
     # --- FUZZY PROJECT NAME MATCHING (Handles typos like "Brigade avlon") ---
@@ -472,7 +482,8 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
             for uw in user_words:
                 if len(uw) < 4: continue # Skip short words
                 # Check fuzzy match against project name words
-                close = difflib.get_close_matches(uw, project_words, n=1, cutoff=0.8)
+                # Widen cutoff to 0.7 to catch more typos
+                close = difflib.get_close_matches(uw, project_words, n=1, cutoff=0.7)
                 if close:
                     matched = True
                     break
@@ -590,6 +601,14 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
                 bullet_hl = '• ' + '\n• '.join(parts) if parts else '• ' + str(hl)
                 pitch_parts.append(f"\n**💎 Highlights:**\n{bullet_hl}\n")
             
+            # --- NEW FEATURES (Brochure & RM) ---
+            if proj.get('brochure_url'):
+                pitch_parts.append(f"\n[📄 **Download Brochure**]({proj.get('brochure_url')})\n")
+            
+            # Simulated RM Details (In real usage, fetch from DB/Sheet)
+            # For now, we inject a placeholder or specific logic if needed
+            # pitch_parts.append("\n📞 **Relationship Manager:** +91-9999999999 (Amit Sharma)\n")
+
             pitch_parts.append("\n👉 **Ready to see it in person? Schedule a site visit!**")
             action = "".join(pitch_parts)
             
@@ -615,8 +634,12 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
 
     # --- NODE 2: SEARCH & RESULTS ---
     if node == "NODE 2":
-        state.pagination_offset = 3  # Reset pagination on new search
+        # Only reset if NOT a pagination request (Double check to be safe, though Intceptor handles it)
+        if intent != "show_more":
+            state.pagination_offset = 3 
+            
         # 1. Sanity Check for Budget
+
         budget_warning = ""
         if merged_reqs.budget_max and merged_reqs.budget_max > 50:
             # Heuristic: If > 50 Cr, it's likely a typo or mixed units
@@ -695,10 +718,45 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
                 # Filter Poss Type
                 if merged_reqs.possession_type == "RTMI" and "ready" not in p['status'].lower(): continue
 
-                if p['budget_min'] <= cap:
+                if p.get('budget_min') is None: continue
+                
+                price_cr = p['budget_min'] / 100.0
+                # Use the argument passed to this helper, NOT the outer scope variable
+                req_budget = budget_cap
+                
+                # STRICT BUDGET LOGIC (The "Arman Fix")
+                # -------------------------------------
+                is_match = False
+                
+                if not req_budget:
+                    is_match = True # No budget constraint
+                else:
+                    # Case 1: "Strict/Exact" Budget (Default assumption if number provided)
+                    # Band: ±7% (0.93 to 1.07)
+                    # Ideally, budget_min of project should be <= User Budget + 7% 
+                    # BUT also ensuring we don't show things WAY cheaper (avoiding 30L proj for 80L req)
+                    
+                    # Effective Range for "80L": 74L to 85.6L
+                    lower_bound = req_budget * 0.93
+                    upper_bound = req_budget * 1.07
+                    
+                    if lower_bound <= price_cr <= upper_bound:
+                        is_match = True
+                    # Case 2: "Max / Under" Budget logic
+                    # If user said "Max 80L", then anything under is technically fine, 
+                    # BUT System Prompt says "Don't confirm generic matches". 
+                    # We will allow up to the budget cap, but prefer the band.
+                    # elif price_cr <= req_budget:
+                         # It is valid, but we might rank it lower if it's too cheap.
+                         # For now, include it.
+                         # is_match = True
+                         # pass
+                
+                if is_match:
                     results.append(f"{p['name']} ({p['status']})")
                     details.append(p)
-                elif p['budget_min'] <= cap * 1.2:
+                elif req_budget and price_cr <= req_budget * 1.2 and price_cr > req_budget:
+                    # Upsell candidates: 1.0x to 1.2x
                     upsells.append(f"{p['name']} ({p['budget_min']/100} Cr)")
             
             return results, details, upsells
@@ -721,16 +779,26 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
                 """Score project 0-100 based on requirement fit."""
                 score = 50  # Base score
 
-                # Budget fit (+25 if within range, -15 if over)
+                # Budget fit (+25 if within range, Linear Decay if over)
                 if requirements.budget_max:
-                    if proj.get('budget_min', 0) <= requirements.budget_max * 100:
+                    # Convert both to float Lakhs for comparison/math
+                    proj_min_val = float(proj.get('budget_min', 0))
+                    req_max_val = float(requirements.budget_max * 100)
+                    
+                    if proj_min_val <= req_max_val:
                         score += 25
                     else:
-                        over_pct = ((proj.get('budget_min', 0) / 100) - requirements.budget_max) / requirements.budget_max
-                        if over_pct < 0.15:  # Within 15% over
-                            score += 10
-                        else:
-                            score -= 15
+                        # User Request: "Prioritize nearest"
+                        # Calculate percentage deviation: (130 - 80) / 80 = 0.625
+                        over_pct = (proj_min_val - req_max_val) / req_max_val
+                        
+                        # Penalty: 50 points per 100% deviation
+                        # Example:
+                        # 1.3Cr vs 80L (62% over) -> -31 pts
+                        # 2.0Cr vs 80L (150% over) -> -75 pts
+                        # This scales naturally to rank 1.3Cr much higher than 2.0Cr
+                        penalty = int(over_pct * 50)
+                        score -= penalty
 
                 # Configuration exact match (+20)
                 if requirements.configuration:
@@ -757,6 +825,10 @@ def execute_flow(state: FlowState, user_input: str) -> FlowResponse:
 
             # Sort by fit score (best first)
             match_details.sort(key=lambda x: x.get('_fit_score', 0), reverse=True)
+            
+            # PERSIST RESULTS FOR PAGINATION
+            state.last_search_results = match_details
+            state.last_shown_projects = match_details[:3] # Initial view
 
             # Build detailed response with property information using proper markdown
             if budget_relaxed:
@@ -1202,86 +1274,71 @@ Description: {project_facts.get('description', '')}
         if center_coords:
             lat, lon = center_coords
             for p in source:
-                # Get project coordinates
-                p_lat, p_lon = None, None
-                if '_lat' in p and '_lon' in p:
-                     p_lat, p_lon = p['_lat'], p['_lon']
-                elif 'latitude' in p and 'longitude' in p:
+                if p.get('latitude') and p.get('longitude'):
                      p_lat, p_lon = p['latitude'], p['longitude']
                 else:
-                    # Try to resolve project location dynamically
-                    # This is slow but necessary if DB lacks coords
-                    pass 
-                    # For now rely on source having it or strictly mock which has it.
-                    # Actually, let's try to Geocode the project location string if we can.
-                    # But doing it for all projects is too slow.
-                    # We will assume DB *should* have it or we skip. 
-                    # Wait, the User request is "Show Nearby should scan projects which we have 10 km".
-                    # If DB doesn't have lat/lon, we can't scan. 
-                    # I will assume `get_coordinates` works on the project location field.
-                    try:
-                        p_coords = get_coordinates(p.get('location', ''))
-                        if p_coords:
-                            p_lat, p_lon = p_coords
-                    except:
-                        pass
+                     continue
                 
-                if p_lat and p_lon:
-                    dist = calculate_distance(lat, lon, p_lat, p_lon)
-                    # We look for projects within 10km of the target location
-                    if dist <= 10.0 and p['budget_min'] <= budget_limit:
-                        p_copy = p.copy()
-                        p_copy['_distance'] = dist
-                        match_details.append(p_copy)
-        
-        # Sort by distance
-        match_details.sort(key=lambda x: x.get('_distance', 999))
-        unique_details = match_details[:3]
-
-        if unique_details:
-            response_parts = [f"I found some excellent options within 10km of {target_loc} that match your budget:\n"]
-
-            for i, proj in enumerate(unique_details, 1):
-                dist_str = f"{proj['_distance']:.1f}km away" if '_distance' in proj else ""
-                response_parts.append(f"\n{i}. **{proj['name']}** ({proj['status']})")
-
-                # ADD DEVELOPER (trust signal)
-                if proj.get('developer'):
-                    response_parts.append(f"   🏗️ Developer: **{proj['developer']}**")
-
-                response_parts.append(f"   📍 Location: {proj['location']} ({dist_str})")
-                response_parts.append(f"   💰 Price: ₹{proj['budget_min']/100:.2f} - ₹{proj['budget_max']/100:.2f} Cr")
-
-                # Simplify configuration
-                config_display = clean_configuration_string(proj.get('configuration', ''))
-                response_parts.append(f"   🏠 Config: {config_display}")
-
-                response_parts.append(f"   📅 Possession: {proj['possession_quarter']} {proj['possession_year']}")
-
-                # ADD USP (differentiation)
-                if proj.get('usp') and len(proj['usp']) > 10:
-                    usp_short = proj['usp'][:100] + "..." if len(proj['usp']) > 100 else proj['usp']
-                    response_parts.append(f"   ✨ Highlights: {usp_short}")
-
-                # ADD RERA (compliance signal)
-                if proj.get('rera_number') and 'pending' not in proj['rera_number'].lower():
-                    response_parts.append(f"   🛡️ RERA: {proj['rera_number']}")
-
-            response_parts.append("\n\nThese locations offer similar connectivity and great value.")
+                # Calculate distance
+                dist = calculate_distance(lat, lon, float(p_lat), float(p_lon))
+                
+                if dist <= 10.0: # 10 km radius
+                    p_copy = p.copy()
+                    p_copy['_distance_km'] = dist
+                    matches.append(p_copy)
             
-            base_results = "\n".join(response_parts)
-            gpt_explanation = generate_contextual_response(
-                user_input,
-                f"User rejected {target_loc}. Found options in nearby areas: {', '.join([p['location'] for p in unique_details])}.",
-                "Explain strategically why these alternative locations are a smart move (e.g. upcoming infrastructure, better value per sqft, proximity to IT hubs). Keep it concise and persuasive."
-            )
+            # Sort by distance (nearest first)
+            matches.sort(key=lambda x: x['_distance_km'])
             
-            action = f"{base_results}\n\n{gpt_explanation}\n\nHow does the possession timeline work for you?"
-            state.last_shown_projects = unique_details
-            next_node = "NODE 8"
-        else:
-            action = "I couldn't find any other options within 10km that fit the budget. Would you be open to exploring other premium zones in Bangalore?"
-            next_node = "NO_VIABLE_OPTIONS"
+            if matches:
+                response_parts = [f"I found **{len(matches)} projects** within 10km of **{target_loc.title()}**:\n\n"]
+                
+                for i, proj in enumerate(matches[:3], 1):
+                    dist_str = f"{proj['_distance_km']:.1f} km away"
+                    
+                    # Generate Sales Cue
+                    cue = "🌟 Pitch: "
+                    if proj.get('budget_min'):
+                        # Compare with user budget if available, else generic value pitch
+                        if merged_reqs.budget_max:
+                            user_budg_lakh = merged_reqs.budget_max * 100
+                            diff = (user_budg_lakh - proj['budget_min']) / user_budg_lakh
+                            if diff > 0.1:
+                                cue += f"**{int(diff*100)}% Cheaper** than budget - Great Investment Value!"
+                            elif diff < -0.1:
+                                cue += "Premium positioning - Pitch Lifestyle & Amenities"
+                            else:
+                                cue += f"{proj.get('usp', 'Prime Location')}"
+                        else:
+                             cue += f"{proj.get('usp', 'Great Connectivity')}"
+                    
+                    response_parts.append(f"**{i}. {proj['name']}** ({proj['status']})\n")
+                    response_parts.append(f"   💡 {cue}\n")
+                    response_parts.append(f"   📍 {proj['location']} (*{dist_str}*)\n")
+                    response_parts.append(f"   💰 ₹{proj['budget_min']} - ₹{proj['budget_max']} Lakhs\n")
+                    response_parts.append(f"   🏠 {proj['configuration']}\n")
+                
+                response_parts.append("\nWould you like to explore any of these?")
+                
+                return FlowResponse(
+                    extracted_requirements=merged_reqs.model_dump(),
+                    current_node="NODE 7",
+                    system_action="".join(response_parts),
+                    next_redirection="NODE 6_WAIT" # Wait for selection
+                )
+            else:
+                 return FlowResponse(
+                    extracted_requirements=merged_reqs.model_dump(),
+                    current_node="NODE 7",
+                    system_action=f"I checked within 10km of {target_loc}, but couldn't find any matching projects. Would you like to try a different location?",
+                    next_redirection="NODE 1"
+                )
+                
+                # End of Node 7 Logic
+
+                # End of Node 7 Logic - Clean exit
+
+
 
     # --- NODE 8: Possession Timeline Check (Ask) ---
     elif node == "NODE 8":

@@ -103,6 +103,8 @@ def _create_projects_table():
         'rm_details': pxt.Json,
         'brochure_url': pxt.String,
         'registration_process': pxt.String,
+        'latitude': pxt.Float,           # New: Geolocation
+        'longitude': pxt.Float,          # New: Geolocation
     })
     
     logger.info("Created brigade.projects table")
@@ -279,7 +281,9 @@ def _seed_projects_data(projects_table):
             "rera_number": "PRM/KA/RERA/1251/446/PR/230522/006437",
             "description": "Luxury apartments in Budigere Cross with forest views.",
             "amenities": "['Clubhouse', 'Swimming Pool', 'Gym', 'Forest Trail']",
-            "usp": "Forest themed luxury living"
+            "usp": "Forest themed luxury living",
+            "latitude": 13.0560,
+            "longitude": 77.7470
         },
         {
             "project_id": "brigade-avalon",
@@ -295,7 +299,9 @@ def _seed_projects_data(projects_table):
             "rera_number": "PRM/KA/RERA/1250/303/PR/200618/003456",
             "description": "Apartments within Brigade Orchards integrated township.",
             "amenities": "['Sports Arena', 'School', 'Hospital', 'Retail']",
-            "usp": "Integrated township living near Airport"
+            "usp": "Integrated township living near Airport",
+            "latitude": 13.2484,
+            "longitude": 77.7137
         },
         {
             "project_id": "brigade-oasis",
@@ -311,7 +317,9 @@ def _seed_projects_data(projects_table):
             "rera_number": "PRM/KA/RERA/1250/303/PR/220928/005280",
             "description": "Premium plotted development near Airport.",
             "amenities": "['Landscaped Gardens', 'Underground Utilities', 'Clubhouse']",
-            "usp": "Premium plots with great appreciation potential"
+            "usp": "Premium plots with great appreciation potential",
+            "latitude": 13.2500,
+            "longitude": 77.7150
         },
         {
             "project_id": "brigade-calista",
@@ -327,7 +335,9 @@ def _seed_projects_data(projects_table):
             "rera_number": "PRM/KA/RERA/1251/446/PR/230302/005763",
             "description": "Vibrant community living with focus on green spaces.",
             "amenities": "['Grand Central Courtyard', 'Eco-friendly features', 'Sports']",
-            "usp": "Green living with central courtyard"
+            "usp": "Green living with central courtyard",
+            "latitude": 13.0580,
+            "longitude": 77.7490
         }
     ]
     

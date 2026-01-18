@@ -243,31 +243,7 @@ def determine_conversation_goal(intent: str, query: str, session: ConversationSe
             if is_generic_sales_question:
                 # Extract topic from query for comprehensive response
                 topic = detect_sales_topic(query)
-                return f"""Provide a COMPREHENSIVE, CALL-READY response about {topic}. 
-
-CRITICAL REQUIREMENTS FOR LIVE CALLS:
-• Provide 6-10 detailed bullet points (not just 2-3)
-• Each bullet must be speakable during a live call (concise but complete)
-• Include specific benefits, advantages, and selling points
-• Make it actionable and persuasive for sales conversations
-• Use real estate terminology and market insights
-• Structure as: Main point → Supporting detail → Call-to-action where relevant
-
-**FORMATTING REQUIREMENTS (MANDATORY):**
-• **ALWAYS use bold (**text**) for key points, main benefits, and important terms**
-• Format each bullet as: • **Main Point**: Supporting detail
-• Bold the most important words in each bullet (e.g., **unique features**, **long-term value**, **ROI**, **resale value**)
-• Use **bold** for numbers, percentages, and key selling points
-• Make bullets scannable - bold helps sales people quickly identify key talking points
-
-EXAMPLE FORMAT:
-• **Highlight unique features** not available in lower-priced properties - positions as premium investment
-• **Emphasize long-term value gains** and **ROI** - shows financial wisdom of stretching budget
-• **Discuss potential for higher resale value** - addresses future returns concern
-• **Mention financing options** that can ease initial budget constraints - removes immediate barrier
-• **Showcase premium amenities** and **exclusive community benefits** - justifies premium pricing
-
-Generate a comprehensive response that helps during live sales calls. EVERY bullet point MUST have bold text for key terms."""
+                return f"Provide a COMPREHENSIVE, CALL-READY response about {topic}. Focus on specific benefits, advantages, and market insights. Ensure 6-10 bullet points that are strictly speakable and actionable."
             else:
                 return "Continue the property search conversation naturally"
 
@@ -334,100 +310,61 @@ def detect_sales_topic(query: str) -> str:
     return "real estate investment in Bangalore"
 
 
+import json
+import datetime
+
 def format_context_for_prompt(context: dict) -> str:
-    """Format context dictionary into readable prompt section."""
+    """Format context dictionary into the STRICT JSON object defined in System Prompt."""
 
-    lines = []
+    # Map session requirements to Prompt's 'context' object schema
+    reqs = context.get("requirements", {})
+    projects_shown = context.get("last_shown_projects", [])
+    
+    # Infer budget details
+    budget_val = reqs.get("budget_max")
+    budget_struct = {
+        "value": budget_val,
+        "type": "exact" if budget_val else None,
+        "upper_limit": budget_val
+    }
 
-    # Shown projects
-    if context.get("last_shown_projects"):
-        lines.append("**PROJECTS SHOWN TO USER:**")
-        for i, proj in enumerate(context["last_shown_projects"], 1):
-            lines.append(f"{i}. {proj['name']}")
-            lines.append(f"   - Price: {proj['price']}")
-            lines.append(f"   - Config: {proj['config']}")
-            lines.append(f"   - Location: {proj['location']}")
-            if proj.get("highlights"):
-                lines.append(f"   - Highlights: {proj['highlights']}")
-        lines.append("")
+    # Infer unit types
+    config = reqs.get("configuration")
+    unit_types = [config] if config else []
 
-    # User requirements
-    req = context.get("requirements", {})
-    if any(req.values()):
-        lines.append("**USER REQUIREMENTS:**")
-        if req.get("configuration"):
-            lines.append(f"- Configuration: {req['configuration']}")
-        if req.get("budget_max"):
-            lines.append(f"- Budget: Up to ₹{req['budget_max']} Cr")
-        if req.get("location"):
-            lines.append(f"- Location: {req['location']}")
-        lines.append("")
+    # Infer micro locations
+    loc = reqs.get("location")
+    micro_locs = [loc] if loc else []
 
-    # Interested projects
-    if context.get("interested_projects"):
-        lines.append(f"**INTERESTED IN:** {', '.join(context['interested_projects'])}")
-        lines.append("")
+    structured_context = {
+        "buyer_intent": "project_discovery" if not context.get("interested_projects") else "project_detail",
+        "budget": budget_struct,
+        "unit_type": unit_types,
+        "location_zone": None, # Not tracked in simple filters yet
+        "micro_locations": micro_locs,
+        "possession_preference": None, # Not tracked in simple filters yet
+        "constraints_history": context.get("objections_raised", []),
+        "last_confirmed_at": datetime.datetime.now().isoformat(),
+        # Add extra context not in strict schema but helpful for LLM "Memory"
+        "_meta": {
+            "projects_shown_count": len(projects_shown),
+            "last_shown_project_names": [p["name"] for p in projects_shown[:3]],
+            "interested_projects": context.get("interested_projects", []),
+            "last_topic": context.get("last_topic"),
+            "conversation_phase": context.get("conversation_phase")
+        }
+    }
 
-    # Objections raised
-    if context.get("objections_raised"):
-        lines.append(f"**OBJECTIONS RAISED:** {', '.join(context['objections_raised'])}")
-        lines.append("")
+    return f"""
+PERSISTENT CONTEXT OBJECT (INTERNAL STATE):
+```json
+{json.dumps(structured_context, indent=2)}
+```
 
-    # Current topic (prominent display)
-    if context.get("last_topic"):
-        lines.append(f"**CURRENT DISCUSSION TOPIC:** {context['last_topic']}")
-        lines.append("")
-
-    # Conversation phase
-    if context.get("conversation_phase"):
-        lines.append(f"**CONVERSATION PHASE:** {context['conversation_phase']}")
-        lines.append("")
-
-    # Recent conversation summary (last 2-3 messages)
-    recent_messages = context.get("recent_messages", [])
-    if recent_messages:
-        lines.append("**RECENT CONVERSATION (for context inference):**")
-        # Show last 3 messages for context
-        for msg in recent_messages[-3:]:
-            role = msg.get("role", "user")
-            content = msg.get("content", "")[:200]  # Truncate to avoid token overflow
-            if content:
-                lines.append(f"- {role.upper()}: {content}")
-        lines.append("")
-        
-        # Extract and list locations mentioned in recent messages
-        import re
-        locations_mentioned = set()
-        common_locations = ["whitefield", "sarjapur", "electronic city", "koramangala", "indiranagar", "marathahalli", "hebbal", "yelahanka", "bellandur", "varthur"]
-        for msg in recent_messages:
-            content = msg.get("content", "").lower()
-            for loc in common_locations:
-                if loc in content:
-                    locations_mentioned.add(loc.title())
-        if locations_mentioned:
-            lines.append(f"**LOCATIONS MENTIONED IN CONVERSATION:** {', '.join(sorted(locations_mentioned))}")
-            lines.append("")
-        
-        # Extract project names mentioned
-        projects_mentioned = set()
-        if context.get("last_shown_projects"):
-            for proj in context["last_shown_projects"]:
-                projects_mentioned.add(proj.get("name", ""))
-        if context.get("interested_projects"):
-            projects_mentioned.update(context["interested_projects"])
-        if projects_mentioned:
-            lines.append(f"**PROJECTS MENTIONED IN CONVERSATION:** {', '.join(sorted(projects_mentioned))}")
-            lines.append("")
-
-    # Messages count
-    if context.get("messages_count"):
-        lines.append(f"**CONVERSATION TURNS:** {context['messages_count']}")
-        lines.append("")
-
-    if not lines:
-        return "New conversation - no prior context"
-
-    return "\n".join(lines)
+RECENT ACTIVITY:
+- Shown: {', '.join([p['name'] for p in projects_shown[:3]])}
+- Last User Msg Truncated: "{str(context.get('recent_messages', [{}])[-1].get('content', ''))[-100:]}"
+"""
 
 
 async def call_gpt_consultant(
@@ -494,31 +431,16 @@ async def call_gpt_consultant(
 
 ⸻
 
-CURRENT CONVERSATION CONTEXT:
+CURRENT CONTEXT STATE (DATABASE & SESSION):
 {context_section}
 
 YOUR GOAL FOR THIS TURN:
 {goal}{tone_instructions}
 
-⸻
-
-ADDITIONAL CONTEXT-SPECIFIC RULES:
-
-1. **PROJECTS SHOWN**: Reference projects from context above when relevant
-2. **USER REQUIREMENTS**: Use budget, location, configuration from context
-3. **CONVERSATION HISTORY**: All previous messages are in the conversation history below
-4. **SENTIMENT AWARENESS**: {tone_instructions if tone_instructions else "Customer sentiment: Neutral - respond professionally"}
-5. **INFERENCE FROM CONTEXT**: If user says vague phrases ("more", "nearby", "these areas"), check context above and conversation history below
-
-**CRITICAL FORMATTING REQUIREMENT:**
-• **ALWAYS use bold (**text**) for key points, main benefits, numbers, and important terms in EVERY response**
-• Format bullets as: • **Main Point**: supporting detail
-• Bold the most important words: **unique features**, **ROI**, **value**, **premium**, **exclusive**, **investment potential**, etc.
-• Bold all numbers and percentages: **₹1.25 Cr**, **10 mins**, **15-20%**, etc.
-• Bold project names, locations, and key selling points
-• This makes responses scannable and helps sales people quickly identify talking points during calls
-
-REMEMBER: You are a silent sales brain running during a live call. Every token must earn its place.
+FORMATTING OVERRIDE:
+- Use strictly bullet points for all lists or multiple points.
+- Start each bullet on a NEW LINE.
+- Keep paragraphs short (max 2 sentences).
 """
 
     # Build messages

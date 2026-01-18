@@ -232,8 +232,15 @@ def _build_system_prompt() -> str:
 
 ⸻
 
-YOUR SPECIFIC TASK: INTENT CLASSIFICATION
+TASK: DATA EXTRACTION & INTENT CLASSIFICATION (INTERNAL PROCESS)
 
+⚠️ OVERRIDE: IGNORE "LIVE CALL OUTPUT RULES".
+⚠️ OVERRIDE: DO NOT OUTPUT BULLET POINTS.
+⚠️ OVERRIDE: OUTPUT MUST BE VALID JSON ONLY.
+
+You are acting as the internal neural decision engine. Your job is to parse the user's natural language into structured constraints for the system.
+
+""" + """
 You are analyzing queries during live sales calls to classify intent and route to appropriate data source.
 
 **CRITICAL: GPT-FIRST UNDERSTANDING (Like ChatGPT - Never Lose Context)**

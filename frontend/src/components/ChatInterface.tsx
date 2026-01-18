@@ -34,7 +34,7 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
     // Phase 1: Scheduling state
     const [showScheduleModal, setShowScheduleModal] = useState(false);
     const [selectedProjectForSchedule, setSelectedProjectForSchedule] = useState<ProjectInfo | null>(null);
-    
+
     // Phase 2: Enhanced UX state
     const [userProfile, setUserProfile] = useState<UserProfileData | undefined>();
     const [showWelcomeBanner, setShowWelcomeBanner] = useState(true);
@@ -143,7 +143,7 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                     } else if (nudgeText.toLowerCase().includes('ready') || nudgeText.toLowerCase().includes('decide')) {
                         nudgeType = 'decision_ready';
                     }
-                    
+
                     nudge = {
                         type: nudgeType,
                         message: nudgeText,
@@ -330,7 +330,7 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                                 <PinClickLogo size={80} showText={true} className="mb-2" />
                             </div>
                             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">
-                                Sales Assist
+                                Pin Click Sales Assist
                             </h1>
                             <p className="text-gray-500 max-w-sm sm:max-w-md text-sm sm:text-base px-4 leading-relaxed">
                                 Your AI Sales Copilot. Ask about projects, prices, or anything related to your client requirement
@@ -418,7 +418,7 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                                                         onAction={handleNudgeAction}
                                                         onDismiss={() => {
                                                             // Remove nudge from message
-                                                            setMessages(prev => prev.map(m => 
+                                                            setMessages(prev => prev.map(m =>
                                                                 m.id === message.id ? { ...m, nudge: undefined } : m
                                                             ));
                                                         }}
@@ -464,11 +464,11 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                                                         const adaptProjectData = (apiProject: any) => {
                                                             // Handle price range - can be object or need to calculate
                                                             let priceInfo: any = apiProject.price_range;
-                                                            
+
                                                             if (!priceInfo || typeof priceInfo === 'string') {
                                                                 const minCr = (apiProject.budget_min || 0) / 100;
                                                                 const maxCr = (apiProject.budget_max || 0) / 100;
-                                                                
+
                                                                 let priceDisplay = 'Price on Request';
                                                                 if (minCr > 0) {
                                                                     if (maxCr > minCr) {
@@ -517,7 +517,7 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                                                         };
 
                                                         const adaptedProject = adaptProjectData(project);
-                                                        
+
                                                         return (
                                                             <div key={idx} className="relative w-full">
                                                                 <ProjectCard
