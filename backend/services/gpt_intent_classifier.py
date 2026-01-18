@@ -180,7 +180,7 @@ def classify_intent_gpt_first(
             model=settings.effective_gpt_model,
             temperature=0.0,  # Deterministic classification
             messages=messages,
-            max_tokens=300,
+            max_tokens=500,  # Increased to ensure full extraction is returned
             response_format={"type": "json_object"}  # Force JSON output
         )
 
@@ -193,7 +193,15 @@ def classify_intent_gpt_first(
         result.setdefault("reasoning", "No reasoning provided")
         result.setdefault("extraction", {})
 
+        # Enhanced logging to debug extraction issues
+        extraction = result.get("extraction", {})
+        project_name = extraction.get("project_name")
         logger.info(f"GPT Classification: intent={result['intent']}, data_source={result['data_source']}, confidence={result['confidence']}")
+        logger.info(f"GPT Extraction: {extraction}")
+        if not project_name and result['intent'] == 'project_facts':
+            logger.warning(f"⚠️ GPT classified as project_facts but extraction.project_name is missing! Query: '{query[:100]}'")
+            logger.warning(f"   Full extraction: {extraction}")
+            logger.warning(f"   Reasoning: {result.get('reasoning', 'N/A')}")
 
         return result
 
