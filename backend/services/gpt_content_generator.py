@@ -14,10 +14,11 @@ from services.sales_agent_prompt import SALES_AGENT_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
-# Initialize OpenAI client
+# Initialize OpenAI client with timeout
 client = OpenAI(
     api_key=settings.openai_api_key,
-    base_url=settings.openai_base_url
+    base_url=settings.openai_base_url,
+    timeout=30.0  # 30 second timeout for API calls
 )
 
 

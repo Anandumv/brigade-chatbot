@@ -14,10 +14,11 @@ from services.sales_agent_prompt import SALES_AGENT_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
-# Initialize OpenAI client
+# Initialize OpenAI client with timeout
 client = OpenAI(
     api_key=settings.openai_api_key,
-    base_url=settings.openai_base_url
+    base_url=settings.openai_base_url,
+    timeout=30.0  # 30 second timeout for API calls
 )
 
 
@@ -562,4 +563,12 @@ Query: "Too expensive for me"
 ```
 
 Now classify the user's query following these rules. Use GPT understanding to match partial project names, use session context for vague queries, and never lose context. Return ONLY valid JSON, no other text.
+
+**CRITICAL EXTRACTION REQUIREMENT:**
+If you classify as "project_facts", you MUST include "project_name" in the extraction field. This is MANDATORY, not optional.
+- If query has typos (e.g., "avalon prise"), extract: {"project_name": "Brigade Avalon", "fact_type": "price"}
+- If query is vague (e.g., "price"), use last_shown_projects or interested_projects from context
+- If query mentions a project (even with typos), match it to available_projects list and extract the EXACT project name
+
+**DO NOT return project_facts intent without project_name in extraction. This will cause errors.**
 """
