@@ -65,7 +65,11 @@ body {
 }
 
 .prose strong {
-  font-weight: 600;
+  font-weight: 700;
+  color: #1a1a2e;
+  background-color: rgba(255, 193, 7, 0.1);
+  padding: 0.1em 0.2em;
+  border-radius: 0.2em;
 }
 
 /* Animation classes */

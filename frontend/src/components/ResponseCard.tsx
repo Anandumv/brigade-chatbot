@@ -99,7 +99,7 @@ export function ResponseCard({
                     </div>
                 )}
 
-                <div className="prose prose-sm sm:prose-base max-w-none text-gray-700 prose-p:leading-relaxed prose-headings:text-gray-900 prose-strong:text-gray-900 prose-strong:font-semibold">
+                <div className="prose prose-sm sm:prose-base max-w-none text-gray-700 prose-p:leading-relaxed prose-headings:text-gray-900 prose-strong:text-gray-900 prose-strong:font-bold prose-strong:bg-yellow-50 prose-strong:px-1 prose-strong:rounded">
                     <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         components={components}
