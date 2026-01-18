@@ -256,13 +256,17 @@ class ContextUnderstandingService:
         vague_patterns = ["more", "details", "about it", "tell me", "what about"]
         if any(pattern in query_lower for pattern in vague_patterns):
             # Add project context if available
-            if context["projects"]["selected"]:
-                enriched = f"{query} about {context['projects']['selected']}"
-            elif context["projects"]["last_shown"]:
+            if context.get("projects", {}).get("selected"):
+                selected = context["projects"]["selected"]
+                if isinstance(selected, dict):
+                    enriched = f"{query} about {selected.get('name', selected)}"
+                else:
+                    enriched = f"{query} about {selected}"
+            elif context.get("projects", {}).get("last_shown"):
                 last_project = context["projects"]["last_shown"][0]
-                enriched = f"{query} about {last_project.get('name')}"
+                enriched = f"{query} about {last_project.get('name') if isinstance(last_project, dict) else last_project}"
             # Add topic context if available
-            elif context["session"].get("last_topic"):
+            elif context.get("session", {}).get("last_topic"):
                 enriched = f"{query} regarding {context['session']['last_topic']}"
         
         # If query mentions "these" or "those", add location/project context
