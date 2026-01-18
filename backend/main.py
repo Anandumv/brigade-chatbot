@@ -1322,8 +1322,7 @@ async def chat_query(request: ChatQueryRequest):
         
         # Removed extract_question_topic and understand_query_intent functions
         # GPT intent classifier handles all query understanding - no pattern matching needed
-        
-        def extract_query_context(session, conversation_history, request, intent_result: dict) -> dict:
+        # All intent handling is done by GPT classification above - this legacy code removed
             """
             Extract relevant context for ANY query type based on intent.
             CRITICAL: Always check persistent context first - it should NEVER be lost.
