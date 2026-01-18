@@ -28,29 +28,36 @@ class IntelligentFallbackService:
     """
     
     def __init__(self):
-        self.max_radius_km = 10.0  # Search within 10km
+        self.max_radius_km = 10.0  # Default search within 10km
         self.max_alternatives = 3   # Return up to 3 alternatives
         
     async def find_intelligent_alternatives(
         self,
         filters: PropertyFilters,
         original_query: str,
-        max_results: int = 3
+        max_results: int = 3,
+        aggressive_mode: bool = False
     ) -> Dict[str, Any]:
         """
         Find intelligent alternatives when no exact match exists.
         
         Strategy:
-        1. Find projects within 10km radius of requested location
-        2. Filter by budget <= requested budget (affordability focus)
+        1. Find projects within radius (10km default, 20km in aggressive mode)
+        2. Filter by budget (affordable or slightly above, wider range in aggressive mode)
         3. Rank by budget fit, proximity, and configuration match
         4. Generate value-focused sales pitches
+        
+        Args:
+            filters: PropertyFilters with search criteria
+            original_query: Original user query
+            max_results: Maximum number of alternatives to return
+            aggressive_mode: If True, expand radius to 20km and budget range to 2x
         
         Returns:
             Dict with: alternatives (list), answer (string with pitches), projects (list), sources (list)
         """
         try:
-            logger.info(f"Finding intelligent alternatives for: {original_query}")
+            logger.info(f"Finding intelligent alternatives for: {original_query} (aggressive_mode={aggressive_mode})")
             logger.info(f"Filters: {filters.model_dump(exclude_none=True)}")
             
             # Step 1: Extract location and get coordinates
@@ -64,10 +71,12 @@ class IntelligentFallbackService:
                 logger.info(f"Could not geocode location: {location_name}")
                 return self._empty_response()
             
-            # Step 2: Get projects within radius
+            # Step 2: Get projects within radius (expand in aggressive mode)
+            search_radius = 20.0 if aggressive_mode else self.max_radius_km
+            logger.info(f"Searching within {search_radius}km radius")
             nearby_projects = await hybrid_retrieval.get_projects_within_radius(
                 location_name=location_name,
-                radius_km=self.max_radius_km
+                radius_km=search_radius
             )
             
             if not nearby_projects:
@@ -76,13 +85,32 @@ class IntelligentFallbackService:
             
             logger.info(f"Found {len(nearby_projects)} projects within radius")
             
-            # Step 3: Filter by budget (only show affordable options)
-            affordable_projects = self._filter_by_budget(nearby_projects, filters)
+            # Step 3: Filter by budget (wider range in aggressive mode)
+            affordable_projects = self._filter_by_budget(nearby_projects, filters, aggressive_mode=aggressive_mode)
             logger.info(f"After budget filter: {len(affordable_projects)} projects")
             
             if not affordable_projects:
                 logger.info("No affordable alternatives found")
                 return self._empty_response()
+            
+            # Step 3.5: SALES LOGIC - Add better-value configurations (N+1 BHK if within budget)
+            if filters.bedrooms:
+                better_value_projects = self._add_better_value_configurations(
+                    all_projects=affordable_projects,
+                    requested_bedrooms=filters.bedrooms,
+                    max_budget_lakhs=filters.max_price_inr / 100000 if filters.max_price_inr else None
+                )
+                
+                # Combine affordable and better-value, avoiding duplicates
+                seen_ids = {p.get('project_id') or p.get('name') for p in affordable_projects}
+                for bv in better_value_projects:
+                    bv_id = bv.get('project_id') or bv.get('name')
+                    if bv_id not in seen_ids:
+                        bv['_better_value'] = True
+                        affordable_projects.append(bv)
+                        seen_ids.add(bv_id)
+                
+                logger.info(f"After better-value addition: {len(affordable_projects)} projects")
             
             # Step 4: Rank and select top alternatives
             ranked_projects = self._rank_alternatives(affordable_projects, filters, center_coords)
@@ -124,14 +152,20 @@ class IntelligentFallbackService:
     def _filter_by_budget(
         self,
         projects: List[Dict[str, Any]],
-        filters: PropertyFilters
+        filters: PropertyFilters,
+        aggressive_mode: bool = False
     ) -> List[Dict[str, Any]]:
         """
         Filter projects by budget - prioritize affordable options but also include
         slightly above budget options if no affordable ones exist.
+        
+        In aggressive_mode:
+        - Shows properties from 0.5x to 2x requested budget
+        - Prioritizes showing something over nothing
         """
         affordable = []
         slightly_above = []
+        wider_range = []
         
         # Extract requested budget (in lakhs)
         requested_budget_lakhs = None
@@ -153,19 +187,30 @@ class IntelligentFallbackService:
                 elif budget_min <= requested_budget_lakhs * 1.5:
                     # Include projects up to 50% above budget as "slightly above"
                     slightly_above.append(project)
+                elif aggressive_mode and budget_min <= requested_budget_lakhs * 2.0:
+                    # In aggressive mode, include up to 2x budget
+                    wider_range.append(project)
+                
+                # In aggressive mode, also include properties slightly below budget
+                # (if user asked for "under 70 lacs", show 50-70 lacs range too)
+                if aggressive_mode and budget_min >= requested_budget_lakhs * 0.5 and budget_min < requested_budget_lakhs:
+                    if project not in affordable:
+                        affordable.append(project)
             else:
                 # No budget specified, include all
                 affordable.append(project)
         
-        # If we have affordable options, return those
+        # Priority: affordable > slightly_above > wider_range (aggressive mode only)
         if affordable:
             return affordable
         
-        # If no affordable options, return slightly above budget
-        # (better to show something than nothing)
         if slightly_above:
             logger.info(f"No affordable alternatives, showing {len(slightly_above)} slightly above budget")
             return slightly_above
+        
+        if aggressive_mode and wider_range:
+            logger.info(f"No affordable or slightly above alternatives, showing {len(wider_range)} in wider range (up to 2x budget)")
+            return wider_range
         
         return []
     
@@ -190,6 +235,42 @@ class IntelligentFallbackService:
         
         return scored_projects
     
+    def _add_better_value_configurations(
+        self,
+        all_projects: List[Dict[str, Any]],
+        requested_bedrooms: List[int],
+        max_budget_lakhs: Optional[float]
+    ) -> List[Dict[str, Any]]:
+        """
+        Add (N+1) BHK options if they fit within budget.
+        Sales logic: Show better value when available.
+        """
+        better_value = []
+        
+        def normalize(s):
+            return str(s).lower().strip() if s else ""
+        
+        for req_bhk in requested_bedrooms:
+            next_bhk = req_bhk + 1
+            
+            for project in all_projects:
+                # Check if project has (N+1) BHK configuration
+                conf = normalize(project.get('configuration', ''))
+                has_next_bhk = f"{next_bhk}" in conf
+                
+                if not has_next_bhk:
+                    continue
+                
+                # Check if it fits within budget
+                budget_min = project.get('budget_min', 0)
+                if budget_min and budget_min > 0:
+                    if max_budget_lakhs is None or budget_min <= max_budget_lakhs:
+                        # This is a better-value option
+                        better_value.append(project)
+        
+        logger.info(f"Found {len(better_value)} better-value configurations in fallback")
+        return better_value
+
     def _calculate_score(
         self,
         project: Dict[str, Any],

@@ -10,6 +10,7 @@ import logging
 from typing import Dict, List, Optional
 from openai import OpenAI
 from config import settings
+from services.sales_agent_prompt import SALES_AGENT_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,8 @@ def classify_intent_gpt_first(
     query: str,
     conversation_history: Optional[List[Dict]] = None,
     session_state: Optional[Dict] = None,
-    context_summary: Optional[str] = None
+    context_summary: Optional[str] = None,
+    comprehensive_context: Optional[Dict] = None
 ) -> Dict:
     """
     GPT-4 primary classifier with intelligent data source selection.
@@ -57,12 +59,66 @@ def classify_intent_gpt_first(
     # Build comprehensive context info
     context_info = ""
     
-    # Use context summary if available (preferred)
-    if context_summary:
+    # Use comprehensive context if available (preferred - most complete)
+    if comprehensive_context:
+        ctx = comprehensive_context
+        context_info += "\n\n**COMPREHENSIVE CONTEXT:**\n"
+        
+        # Session state
+        if ctx.get("session"):
+            sess = ctx["session"]
+            if sess.get("last_intent"):
+                context_info += f"- Last Intent: {sess['last_intent']}\n"
+            if sess.get("last_topic"):
+                context_info += f"- Last Topic: {sess['last_topic']}\n"
+            if sess.get("conversation_phase"):
+                context_info += f"- Conversation Phase: {sess['conversation_phase']}\n"
+        
+        # Projects
+        if ctx.get("projects"):
+            proj = ctx["projects"]
+            if proj.get("last_shown"):
+                names = [p.get("name") for p in proj["last_shown"][:3]]
+                context_info += f"- Last Shown Projects: {', '.join(names)}\n"
+                context_info += "**CRITICAL:** Vague queries (e.g., 'price', 'location') refer to last shown project.\n"
+            if proj.get("selected"):
+                context_info += f"- Selected Project: {proj['selected']}\n"
+                context_info += "**CRITICAL:** All queries refer to this project unless user switches.\n"
+            if proj.get("interested"):
+                context_info += f"- Interested Projects: {', '.join(proj['interested'])}\n"
+        
+        # Requirements
+        if ctx.get("requirements"):
+            req = ctx["requirements"]
+            req_parts = []
+            if req.get("location"):
+                req_parts.append(f"location={req['location']}")
+            if req.get("budget_max"):
+                req_parts.append(f"budget≤{req['budget_max']}")
+            if req.get("configuration"):
+                req_parts.append(f"config={req['configuration']}")
+            if req_parts:
+                context_info += f"- User Requirements: {', '.join(req_parts)}\n"
+        
+        # Conversation history insights
+        if ctx.get("conversation"):
+            conv = ctx["conversation"]
+            if conv.get("mentioned_locations"):
+                context_info += f"- Locations Discussed: {', '.join(conv['mentioned_locations'][:3])}\n"
+            if conv.get("mentioned_budgets"):
+                context_info += f"- Budgets Mentioned: {', '.join(conv['mentioned_budgets'][:3])}\n"
+        
+        # Intent hints
+        if ctx.get("inferred_intent_hints"):
+            hints = ctx["inferred_intent_hints"]
+            context_info += f"- Intent Hints: {', '.join(hints)}\n"
+    
+    # Use context summary if available (fallback)
+    elif context_summary:
         context_info = f"\n\n**Conversation Context:**\n{context_summary}"
     
-    # Add detailed session state
-    if session_state:
+    # Add detailed session state (fallback if comprehensive context not available)
+    elif session_state:
         if session_state.get("selected_project_name"):
             context_info += f"\n**Current Project:** {session_state['selected_project_name']}"
         
@@ -150,9 +206,15 @@ def classify_intent_gpt_first(
 
 
 def _build_system_prompt() -> str:
-    """Build the system prompt for GPT intent classification."""
+    """Build the system prompt for GPT intent classification using production Sales Agent GPT principles."""
 
-    return """You are an intent classifier for a real estate chatbot. Analyze the user's query and return a JSON object.
+    return f"""{SALES_AGENT_SYSTEM_PROMPT}
+
+⸻
+
+YOUR SPECIFIC TASK: INTENT CLASSIFICATION
+
+You are analyzing queries during live sales calls to classify intent and route to appropriate data source.
 
 **CRITICAL: GPT-FIRST UNDERSTANDING (Like ChatGPT - Never Lose Context)**
 
@@ -161,12 +223,40 @@ You have access to:
 2. **Session Context**: Last shown projects, interested projects, conversation history
 3. **Natural Language Understanding**: You can understand incomplete questions, partial names, vague queries
 
-**YOUR JOB:**
+**UNIVERSAL QUERY UNDERSTANDING (CRITICAL)**
+
+You must understand ANY query format, regardless of how it's written:
+- **Typos**: "distnce", "form" (instead of "from"), "avalon" (instead of "Avalon"), "brigade avalon" (missing capitalization)
+- **Incomplete queries**: "price", "more", "details", "nearby", "what else"
+- **Vague references**: "it", "these", "those", "that one", "the first one", "this project"
+- **Single words**: "yes", "no", "more", "ok", "sure", "thanks"
+- **Mixed languages**: "2 bhk chahiye", "avalon ka price", "citrine ki location"
+- **Slang/abbreviations**: "2bhk", "3bhk", "rtm", "rera", "emi", "orr"
+- **No question marks**: "show me 2bhk", "avalon price", "tell me about citrine"
+- **Multiple intents**: "show 2bhk and compare with citrine", "price and amenities"
+- **Incomplete sentences**: "lets pitch", "more about", "nearby to"
+- **Follow-ups without context**: "more", "what else", "anything else", "continue"
+
+**DO NOT rely on keywords or patterns. Understand intent from:**
+1. **Query semantics** (meaning, not words)
+2. **Conversation context** (what was discussed before)
+3. **Session state** (last shown projects, filters, interested projects)
+4. **Natural language patterns** (how humans actually speak)
+
+If query is ambiguous, use context to infer most likely intent. Never ask for clarification - infer from available context.
+
+**YOUR JOB - UNDERSTAND ALL QUERIES:**
 - Match ANY query to projects in database, even if:
   * Project name is partial ("Green Vista" → match to "Green Vista in Bellandur")
   * Query is vague ("price" → use last_shown_projects to find project)
   * Question is incomplete ("lets pitch" → extract project name from context)
   * Query doesn't mention project explicitly (use session context)
+  * Query is a single word ("more", "nearby", "details") → infer from context
+  * Query is incomplete sentence → auto-complete using conversation history
+  * Query uses pronouns ("these", "those", "it") → resolve from context
+  * Query is a follow-up ("what else", "anything else") → continue from last search
+  * Query has typos → understand despite spelling errors
+  * Query is in mixed language → understand multilingual queries
 
 **PROJECT NAME MATCHING:**
 - If query mentions ANY part of a project name, match it to available_projects
@@ -198,32 +288,48 @@ You have access to:
   * Database contains: name, developer, location, price, RERA, configuration, possession date, status, amenities, highlights, usp
 - data_source: "database"
 
-**PATH 2: GPT SALES CONSULTANT** (If NOT projects → Get directly from GPT)
+**PATH 2: GPT SALES CONSULTANT** (If NOT in database → Get directly from GPT)
 - Questions about things NOT in database:
-  * Distance/Location: "how far is airport from X", "distance to office", "nearby schools"
+  * **Distance/Connectivity** (PRIORITY - even if project mentioned): "how far is airport from X", "distance of airport from X", "distance to office", "nearby schools", "metro distance", "how far is X from Y"
   * Advice: "investment potential", "why buy in Whitefield", "pros and cons"
 - Generic questions: "How to stretch budget?", "What is EMI?", "loan eligibility"
 - Follow-ups: "more", "tell me more", "continue", "give more points"
 - Objections: "too expensive", "location too far"
 - Greetings: "hi", "hello"
+- **CRITICAL ROUTING RULE**: If query asks about distance/connectivity (understand semantic meaning, not keywords) → ALWAYS route to GPT, even if project_name is extracted. Extract project_name for context but use GPT for answer. Examples: "how far", "distance", "nearby", "metro", "airport", "school", "office" - but understand variations like "airport se kitna dur", "metro distance", "nearby places".
 - data_source: "gpt_generation"
 
-**INTENT CLASSIFICATION:**
+**INTENT CLASSIFICATION - HANDLE ALL QUERY TYPES:**
 
 1. **PROPERTY_SEARCH** (→ database):
    - User wants to find/search properties
    - Has filters: BHK, location, budget
+   - Includes: "show me", "find", "search", "looking for", "need", "want"
+   - Includes: "minimum budget", "starting price", "cheapest" (calculate min from results)
+   - Includes: "nearby", "more nearby", "what else" (continue from last search)
    - data_source: "database"
 
 2. **PROJECT_FACTS** (→ database):
    - User asks about a SPECIFIC PROJECT (matched from available_projects or session context)
-   - ANY query about a project: "lets pitch X", "tell me about X", "price", "location", "amenities"
+   - Factual questions about project data IN database: "price", "rera", "possession", "amenities", "configuration", "status"
+   - Vague queries with project context: "price", "rera", "amenities", "details", "more" (when asking about DB fields)
    - If project_name is extracted (from query or session), classify as project_facts
+   - **EXCEPTION**: Distance/connectivity questions → route to GPT even if project mentioned
    - data_source: "database"
 
-3. **SALES_CONVERSATION** (→ GPT):
+3. **NEARBY_PROPERTIES** (→ database):
+   - User asks for nearby properties: "show nearby", "what else nearby", "more nearby"
+   - Uses location from context (last mentioned location or last shown project location)
+   - data_source: "database"
+
+4. **SALES_CONVERSATION** (→ GPT):
    - Generic advice, objections, FAQs
    - Questions NOT about specific projects
+   - **Distance/Connectivity questions** (even if project mentioned): "distance of airport from X", "how far is X from airport", "distance to office", "nearby schools", "metro distance"
+   - Location comparisons: "why whitefield", "whitefield vs sarjapur"
+   - Investment advice: "investment potential", "ROI", "appreciation"
+   - Process questions: "how to buy", "registration process", "EMI calculation"
+   - **CRITICAL**: If query asks about distance/connectivity, route to GPT but extract project_name for context
    - data_source: "gpt_generation"
 
 **Entity Extraction:**
@@ -335,9 +441,20 @@ Query: "How far is airport from Avalon?"
 {
   "intent": "sales_conversation",
   "data_source": "gpt_generation",
-  "confidence": 0.92,
-  "reasoning": "Distance calculation not in database",
-  "extraction": {"project_name": "Brigade Avalon", "topic": "location_benefits"}
+  "confidence": 0.95,
+  "reasoning": "Distance question - not in database, route to GPT. Project name extracted for context.",
+  "extraction": {"project_name": "Brigade Avalon", "topic": "connectivity", "fact_type": "distance"}
+}
+```
+
+Query: "distance of airport form brigade avalon"
+```json
+{
+  "intent": "sales_conversation",
+  "data_source": "gpt_generation",
+  "confidence": 0.95,
+  "reasoning": "Distance question with typo - not in database, route to GPT. Project name extracted for context.",
+  "extraction": {"project_name": "Brigade Avalon", "topic": "connectivity", "fact_type": "distance"}
 }
 ```
 

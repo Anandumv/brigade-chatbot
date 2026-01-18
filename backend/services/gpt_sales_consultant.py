@@ -16,6 +16,7 @@ from typing import Dict, List, Optional
 from openai import OpenAI
 from config import settings
 from services.session_manager import ConversationSession  # Fixed import
+from services.sales_agent_prompt import SALES_AGENT_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,8 @@ async def generate_consultant_response(
     query: str,
     session: ConversationSession,
     intent: str = None,
-    sentiment_analysis: dict = None
+    sentiment_analysis: dict = None,
+    extraction: dict = None
 ) -> str:
     """
     Unified GPT sales consultant for continuous conversation.
@@ -40,6 +42,7 @@ async def generate_consultant_response(
         session: Full session state with history, context, projects
         intent: Optional intent hint (faq, objection, etc.)
         sentiment_analysis: Optional sentiment analysis results
+        extraction: Optional extraction data from intent classifier (project_name, topic, etc.)
 
     Returns:
         Natural conversational response
@@ -47,9 +50,29 @@ async def generate_consultant_response(
 
     # Build comprehensive context
     context = build_consultant_context(session)
+    
+    # 🆕 Inject project_name from extraction if available (for distance/connectivity questions)
+    if extraction and extraction.get("project_name"):
+        project_name = extraction.get("project_name")
+        # Add to context so GPT knows which project to answer about
+        if "last_shown_projects" not in context or not context["last_shown_projects"]:
+            context["last_shown_projects"] = []
+        # Check if project already in context
+        project_in_context = any(
+            p.get("name", "").lower() == project_name.lower() 
+            for p in context["last_shown_projects"]
+        )
+        if not project_in_context:
+            # Add project to context for GPT reference
+            context["last_shown_projects"].insert(0, {
+                "name": project_name,
+                "location": extraction.get("location", "N/A"),
+                "price": "N/A",
+                "config": "N/A"
+            })
 
     # Determine conversation goal
-    goal = determine_conversation_goal(intent, query, session)
+    goal = determine_conversation_goal(intent, query, session, extraction)
     
     # 🆕 Enhance goal with sentiment awareness
     if sentiment_analysis:
@@ -149,12 +172,20 @@ def build_consultant_context(session: ConversationSession) -> dict:
     return context
 
 
-def determine_conversation_goal(intent: str, query: str, session: ConversationSession) -> str:
+def determine_conversation_goal(intent: str, query: str, session: ConversationSession, extraction: dict = None) -> str:
     """
     Determine what the user wants to achieve in this conversation turn.
 
     Returns goal prompt for GPT.
     """
+
+    # 🆕 Check for distance/connectivity questions first (even if intent is sales_conversation)
+    query_lower = query.lower()
+    is_distance_query = any(word in query_lower for word in ["distance", "far", "near", "airport", "metro", "office", "school", "hospital", "how far"])
+    
+    if is_distance_query and extraction and extraction.get("project_name"):
+        project_name = extraction.get("project_name")
+        return f"Answer the distance/connectivity question about {project_name}. Provide specific distance information (in km or minutes) from the mentioned location (airport, metro, etc.) to {project_name}. Use bullet points, be concise, and include actionable information."
 
     if not intent:
         # Default: Continue conversation naturally
@@ -176,6 +207,8 @@ def determine_conversation_goal(intent: str, query: str, session: ConversationSe
         if session and hasattr(session, 'interested_projects') and session.interested_projects:
             project = session.interested_projects[-1]
             return f"Provide more insights about {project} - selling points, advantages, investment potential"
+        elif extraction and extraction.get("project_name"):
+            return f"Provide more insights about {extraction.get('project_name')} - selling points, advantages, investment potential"
         else:
             return "Provide helpful information about real estate investment in general"
 
@@ -190,6 +223,15 @@ def determine_conversation_goal(intent: str, query: str, session: ConversationSe
 
     elif intent == "greeting":
         return "Greet warmly and offer to help find their ideal property"
+
+    elif intent == "sales_conversation":
+        # Generic sales conversation - check if it's about a specific project
+        if extraction and extraction.get("project_name"):
+            project_name = extraction.get("project_name")
+            topic = extraction.get("topic", "general")
+            return f"Answer the user's question about {project_name} regarding {topic}. Be specific, concise, and sales-oriented."
+        else:
+            return "Continue the property search conversation naturally"
 
     else:
         # Default: Continue conversation naturally
@@ -370,88 +412,29 @@ async def call_gpt_consultant(
 ⚡ START YOUR RESPONSE WITH: "{empathy_statement}"
 """
 
-    system_prompt = f"""You are a senior real estate sales consultant at Pinclick, having a live conversation with a potential homebuyer in Bangalore.
+    # Build system prompt using production Sales Agent GPT prompt
+    # Add context and goal as additional instructions
+    system_prompt = f"""{SALES_AGENT_SYSTEM_PROMPT}
 
-🚨 CRITICAL: You have FULL ACCESS to the conversation history below. EVERYTHING the user has said is in the conversation history. NEVER say "I don't have the details" or ask for information that was already provided. ALWAYS infer from conversation history.
+⸻
 
-CONVERSATION CONTEXT:
+CURRENT CONVERSATION CONTEXT:
 {context_section}
 
 YOUR GOAL FOR THIS TURN:
 {goal}{tone_instructions}
 
-CRITICAL RULES:
-1. **CONTINUOUS CONVERSATION**: Never ask "What would you like to know?" or clarifying questions
-2. **CONTEXT-AWARE**: Reference projects you've shown them, their budget, their requirements
-3. **SPECIFIC, NOT GENERIC**: Use actual project names, prices, and features from context
-4. **NATURAL FLOW**: Build on previous messages, don't restart the conversation
-5. **SALES-FOCUSED**: Guide toward decision, site visit, or next step
-6. **HONEST**: Don't invent facts not in context - acknowledge if you don't have specific info
-7. **🆕 SENTIMENT-ADAPTIVE**: Match your tone to their emotional state (see tone adaptation above)
-8. **NEVER ADMIT CONTEXT LOSS - ABSOLUTE RULE**: This is CRITICAL. You MUST NEVER say:
-   - "I don't have the details"
-   - "I'm sorry I don't have"
-   - "Could you provide more information"
-   - "I don't have the details of your previous message"
-   - "I need more context"
-   - "It seems there was no prior context"
-   - "Could you please share more details"
-   - Any variation of asking for information that was already provided
-   
-   INSTEAD: ALWAYS check the conversation history above. The conversation history contains EVERYTHING the user has said. If they said "Whitefield" or "Sarjapur" in a previous message, it's in the history. Use it.
+⸻
 
-9. **CONTEXT INFERENCE - MANDATORY**: When user says vague phrases, you MUST infer from conversation history:
-   
-   **Example 1**: User says "explore properties in these areas"
-   - Check conversation history for location mentions (Whitefield, Sarjapur, Marathahalli, etc.)
-   - If you see "Whitefield" and "Sarjapur" in recent messages → Respond: "I'd be happy to show you properties in **Whitefield** and **Sarjapur**..."
-   - NEVER say "I don't have the details of which areas"
-   
-   **Example 2**: User says "show nearby" or "SHOW NEARBY"
-   - Check conversation history for the last location mentioned
-   - If you see "Marathahalli" in a recent message → Respond: "Let me find properties near **Marathahalli**..."
-   - NEVER say "I need more context about the location"
-   
-   **Example 3**: User says "more" or "tell me more"
-   - Check conversation history for the last topic/project discussed
-   - If last message was about "SBR Minara" → Continue discussing SBR Minara
-   - NEVER say "I don't have details of your previous message"
-   
-   **HOW TO INFER**:
-   1. Read the conversation history messages above (they show role and content)
-   2. Extract locations, projects, topics mentioned
-   3. Use them in your response as if you fully understand
-   4. If conversation history shows "Whitefield" and "Sarjapur" were discussed, and user says "these areas", you KNOW they mean Whitefield and Sarjapur
-   
-   **REMEMBER**: The conversation history is YOUR MEMORY. Everything the user said is there. Use it.
+ADDITIONAL CONTEXT-SPECIFIC RULES:
 
-CONVERSATION STYLE:
-- Consultative, not salesy
-- Specific numbers and comparisons
-- Address their actual situation
-- End with relevant next step
-- 🆕 ADAPT TONE based on their sentiment and emotions
+1. **PROJECTS SHOWN**: Reference projects from context above when relevant
+2. **USER REQUIREMENTS**: Use budget, location, configuration from context
+3. **CONVERSATION HISTORY**: All previous messages are in the conversation history below
+4. **SENTIMENT AWARENESS**: {tone_instructions if tone_instructions else "Customer sentiment: Neutral - respond professionally"}
+5. **INFERENCE FROM CONTEXT**: If user says vague phrases ("more", "nearby", "these areas"), check context above and conversation history below
 
-FORMATTING (CRITICAL - for sales people on calls):
-- ALWAYS use BULLET POINTS (• or -) for every idea. NEVER write long paragraphs.
-- BOLD main points: project names, prices, key benefits, numbers, configs (e.g. **SBR Minara**, **₹1.35 Cr**, **2BHK**).
-- One idea per bullet. Easy to scan while on a call.
-
-WHAT YOU HAVE ACCESS TO:
-- Projects shown to them (in context above)
-- Their requirements and budget
-- Previous conversation
-- General real estate knowledge
-- 🆕 Their current emotional state and sentiment
-
-WHAT YOU DON'T DO:
-- Ask what they're looking for (you already know)
-- Repeat project lists (they've seen them)
-- Generic advice without project specifics
-- Break conversation flow
-- 🆕 Ignore their emotional state or use wrong tone
-
-RESPOND NATURALLY:
+REMEMBER: You are a silent sales brain running during a live call. Every token must earn its place.
 """
 
     # Build messages

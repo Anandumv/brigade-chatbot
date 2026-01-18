@@ -14,6 +14,7 @@ import json
 import os
 from concurrent.futures import ThreadPoolExecutor
 from utils.geolocation_utils import get_coordinates, calculate_distance
+from typing import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -317,6 +318,49 @@ class HybridRetrievalService:
             logger.error(f"Error querying projects: {e}", exc_info=True)
             return []
 
+    def _add_better_value_configurations(
+        self,
+        all_projects: List[Dict[str, Any]],
+        requested_bedrooms: List[int],
+        max_budget_lakhs: Optional[float],
+        normalize_func
+    ) -> List[Dict[str, Any]]:
+        """
+        Add (N+1) BHK options if they fit within budget.
+        Sales logic: Show better value when available.
+        
+        Args:
+            all_projects: All projects that passed other filters
+            requested_bedrooms: List of requested BHK counts [2, 3]
+            max_budget_lakhs: Maximum budget in lakhs (None if no budget filter)
+            normalize_func: Function to normalize configuration strings
+            
+        Returns:
+            List of better-value projects (N+1 BHK within budget)
+        """
+        better_value = []
+        
+        for req_bhk in requested_bedrooms:
+            next_bhk = req_bhk + 1
+            
+            for project in all_projects:
+                # Check if project has (N+1) BHK configuration
+                conf = normalize_func(project.get('configuration', ''))
+                has_next_bhk = f"{next_bhk}" in conf
+                
+                if not has_next_bhk:
+                    continue
+                
+                # Check if it fits within budget
+                budget_min = project.get('budget_min', 0)
+                if budget_min and budget_min > 0:
+                    if max_budget_lakhs is None or budget_min <= max_budget_lakhs:
+                        # This is a better-value option
+                        better_value.append(project)
+        
+        logger.info(f"Found {len(better_value)} better-value configurations (N+1 BHK within budget)")
+        return better_value
+
     def _get_project_units(self, project_id: str, bhk_filter: List[int] = None) -> List[Dict[str, Any]]:
         """Get units for a specific project."""
         try:
@@ -442,6 +486,7 @@ class HybridRetrievalService:
                                    if r.get('possession_year') and str(r.get('possession_year')).strip().isdigit() and int(r.get('possession_year')) <= target_year]
 
             # Apply Bedroom Filter
+            matching_results = []
             if filters.bedrooms:
                 target_bhks = filters.bedrooms # List[int], e.g. [2, 3]
                 def check_bhk(r):
@@ -452,7 +497,26 @@ class HybridRetrievalService:
                             return True
                     return False
                 
-                filtered_results = [r for r in filtered_results if check_bhk(r)]
+                matching_results = [r for r in filtered_results if check_bhk(r)]
+                
+                # SALES LOGIC: Add better-value configurations (N+1 BHK if within budget)
+                better_value_results = self._add_better_value_configurations(
+                    all_projects=filtered_results,
+                    requested_bedrooms=target_bhks,
+                    max_budget_lakhs=filters.max_price_inr / 100000 if filters.max_price_inr else None,
+                    normalize_func=normalize
+                )
+                
+                # Combine matching and better-value, avoiding duplicates
+                seen_ids = {r.get('project_id') or r.get('name') for r in matching_results}
+                for bv in better_value_results:
+                    bv_id = bv.get('project_id') or bv.get('name')
+                    if bv_id not in seen_ids:
+                        bv['_better_value'] = True  # Mark as better value suggestion
+                        matching_results.append(bv)
+                        seen_ids.add(bv_id)
+                
+                filtered_results = matching_results
 
             # Apply Check Property Type
             if filters.property_type:

@@ -10,6 +10,7 @@ from typing import Dict, Optional
 from openai import OpenAI
 from config import settings
 from services.master_prompt import get_content_prompt, get_objection_prompt, get_meeting_prompt, get_general_prompt
+from services.sales_agent_prompt import SALES_AGENT_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -42,16 +43,34 @@ def generate_insights(
         Speakable, action-oriented content (no fluff, decision-focused)
     """
 
-    # Use master prompt library
+    # Use master prompt library but enhance with production Sales Agent GPT prompt
     if topic.startswith("objection_"):
         objection_type = topic.replace("objection_", "")
-        system_prompt = get_objection_prompt(objection_type, query)
+        base_prompt = get_objection_prompt(objection_type, query)
     elif topic == "meeting_scheduling":
-        system_prompt = get_meeting_prompt(query)
+        base_prompt = get_meeting_prompt(query)
     elif project_facts.get("name") in ["Pinclick Real Estate", "Meeting Request"]:
-        system_prompt = get_general_prompt(query)
+        base_prompt = get_general_prompt(query)
     else:
-        system_prompt = get_content_prompt(project_facts, topic, query, user_requirements)
+        base_prompt = get_content_prompt(project_facts, topic, query, user_requirements)
+    
+    # Enhance with production Sales Agent GPT prompt principles
+    system_prompt = f"""{SALES_AGENT_SYSTEM_PROMPT}
+
+⸻
+
+SPECIFIC TASK: {topic.upper()}
+
+{base_prompt}
+
+⸻
+
+REMEMBER: 
+- Bullet points only (• or -)
+- Each bullet ≤ 1 line, actionable, speakable
+- No long paragraphs, no marketing fluff
+- You are a silent sales brain during a live call
+"""
 
     try:
         response = client.chat.completions.create(

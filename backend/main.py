@@ -37,6 +37,8 @@ from config import settings
 from services.flow_engine import FlowEngine, flow_engine
 from services.retrieval import retrieval_service # Deferred import to prevent hang
 from services.intelligent_fallback import intelligent_fallback
+from services.project_enrichment import project_enrichment
+from services.context_understanding import context_understanding
 
 from services.confidence_scorer import confidence_scorer
 from services.refusal_handler import refusal_handler
@@ -51,7 +53,7 @@ from services.query_preprocessor import query_preprocessor
 from services.sales_conversation import sales_conversation, get_filter_options, SalesIntent
 from services.intelligent_sales import intelligent_sales, ConversationContext, SalesIntent as AISalesIntent
 from services.sales_intelligence import sales_intelligence
-from services.intent_classifier import intent_classifier  # Legacy fallback
+# from services.intent_classifier import intent_classifier  # DEPRECATED: Legacy keyword-based classifier - no longer used
 from services.gpt_intent_classifier import classify_intent_gpt_first  # GPT-first primary
 from services.gpt_content_generator import generate_insights, enhance_with_gpt
 from services.gpt_sales_consultant import generate_consultant_response  # Unified consultant handler
@@ -76,32 +78,19 @@ logger = logging.getLogger(__name__)
 def is_property_search_query(query: str, intent: str, filters: Optional[Dict] = None) -> bool:
     """
     Determine if query should route to PATH 1: Property Search.
-
-    Returns True if:
-    - Intent is "property_search"
-    - Has explicit filters (config/budget/location)
-    - Contains search phrases like "show me", "find", "search for"
+    Trust GPT intent classification - no keyword matching.
     """
     # Convert Pydantic model to dict if needed
     if filters and hasattr(filters, 'model_dump'):
         filters = filters.model_dump()
     
-    # Explicit property search intent
+    # Trust GPT intent classification
     if intent == "property_search":
         return True
 
-    # Has filters from UI or extraction
+    # Has filters from UI or extraction (GPT extracted these)
     if filters and isinstance(filters, dict) and any(filters.values()):
         return True
-
-    # Search phrases
-    search_phrases = ["show me", "find", "search for", "looking for", "need", "want"]
-    query_lower = query.lower()
-    if any(phrase in query_lower for phrase in search_phrases):
-        # Must also have property indicators (bhk, property, apartment, etc.)
-        property_indicators = ["bhk", "property", "properties", "apartment", "flat", "villa", "project"]
-        if any(indicator in query_lower for indicator in property_indicators):
-            return True
 
     return False
 
@@ -163,6 +152,90 @@ def _get_coaching_for_response(
     except Exception as e:
         logger.error(f"Coaching error: {e}")
         return None
+
+
+async def _generate_no_alternatives_message(
+    original_query: str,
+    filters: Any
+) -> str:
+    """
+    Generate a helpful, sales-friendly message when no alternatives are found.
+    Uses GPT to suggest budget/location/configuration adjustments.
+    """
+    try:
+        from openai import OpenAI
+        from config import settings
+        
+        client = OpenAI(
+            api_key=settings.openai_api_key,
+            base_url=settings.openai_base_url
+        )
+        
+        # Extract filter details for context
+        filter_details = []
+        if hasattr(filters, 'max_price_inr') and filters.max_price_inr:
+            budget_lakhs = filters.max_price_inr / 100000
+            filter_details.append(f"Budget: Up to ₹{budget_lakhs:.1f} Lakhs")
+        if hasattr(filters, 'locality') and filters.locality:
+            filter_details.append(f"Location: {filters.locality}")
+        if hasattr(filters, 'bedrooms') and filters.bedrooms:
+            filter_details.append(f"Configuration: {', '.join(map(str, filters.bedrooms))}BHK")
+        
+        context = f"Customer searched for: {original_query}"
+        if filter_details:
+            context += f"\nFilters: {', '.join(filter_details)}"
+        
+        prompt = f"""You are a professional real estate sales consultant. A customer searched for properties but we couldn't find any matches, even after expanding the search radius and budget range.
+
+{context}
+
+Generate a helpful, sales-friendly response that:
+1. Acknowledges their search criteria positively
+2. Suggests 2-3 specific adjustments (budget range, location, configuration)
+3. Offers to help them explore alternatives
+4. Maintains enthusiasm and doesn't feel like a dead end
+
+Format as bullet points (•) with **bold** main points. Be concise and actionable.
+
+Example structure:
+• I understand you're looking for [criteria]
+• Here are some suggestions to find great options:
+  - **Expand budget** to [suggested range] for more choices
+  - **Consider nearby areas** like [suggestions] with similar connectivity
+  - **Explore different configurations** that might offer better value
+• I'm here to help you find the perfect property. What would you like to adjust?"""
+
+        response = client.chat.completions.create(
+            model=settings.effective_gpt_model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are Pinclick Genie, an expert real estate sales consultant. Your goal is to help customers find properties by suggesting helpful adjustments when exact matches aren't available."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.7,
+            max_tokens=300
+        )
+        
+        return response.choices[0].message.content
+        
+    except Exception as e:
+        logger.error(f"Error generating no-alternatives message: {e}")
+        # Fallback to template message
+        suggestions = []
+        if hasattr(filters, 'max_price_inr') and filters.max_price_inr:
+            budget_lakhs = filters.max_price_inr / 100000
+            suggestions.append(f"• **Expand your budget** to ₹{budget_lakhs * 1.3:.1f} Lakhs for more options")
+        if hasattr(filters, 'locality') and filters.locality:
+            suggestions.append(f"• **Try nearby areas** with similar connectivity to {filters.locality}")
+        suggestions.append("• **Explore different configurations** that might offer better value")
+        suggestions.append("• I'm here to help you find the perfect property. What would you like to adjust?")
+        
+        return "\n".join(suggestions) if suggestions else "I couldn't find exact matches. Would you like to adjust your search criteria?"
 
 
 @asynccontextmanager
@@ -847,12 +920,33 @@ async def chat_query(request: ChatQueryRequest):
                 "available_projects": available_projects
             }
         
-        # GPT-first classification with data source selection and enhanced context
-        gpt_result = classify_intent_gpt_first(
+        # Build comprehensive context for understanding ALL queries
+        comprehensive_context = context_understanding.build_comprehensive_context(
             query=request.query,
+            session=session,
+            conversation_history=conversation_history
+        )
+        
+        # Enrich query with context if needed (auto-complete incomplete queries)
+        enriched_query = context_understanding.enrich_query_with_context(
+            query=request.query,
+            context=comprehensive_context
+        )
+        
+        if enriched_query != request.query:
+            logger.info(f"Query enriched: '{request.query}' → '{enriched_query}'")
+            # Use enriched query for classification
+            query_for_classification = enriched_query
+        else:
+            query_for_classification = request.query
+        
+        # GPT-first classification with data source selection and comprehensive context
+        gpt_result = classify_intent_gpt_first(
+            query=query_for_classification,
             conversation_history=conversation_history,
             session_state=session_state,
-            context_summary=context_summary_dict.get("summary")
+            context_summary=context_summary_dict.get("summary"),
+            comprehensive_context=comprehensive_context
         )
         
         intent = gpt_result.get("intent", "unsupported")
@@ -892,12 +986,30 @@ async def chat_query(request: ChatQueryRequest):
         
         logger.info(f"GPT Classification: intent={intent}, data_source={data_source}, confidence={gpt_confidence}")
         
-        # Fallback to keyword classifier if GPT confidence is too low AND no context
-        if gpt_confidence < 0.5 and not context_metadata.get("has_context"):
-            logger.warning(f"GPT confidence too low ({gpt_confidence}), falling back to keyword classifier")
-            intent = intent_classifier.classify_intent(request.query)
-            data_source = "database"  # Default to database for fallback
-            logger.info(f"Keyword fallback intent: {intent}")
+        # SALES LOGIC: Apply intelligent routing based on intent and context
+        # Handle special cases with sales logic
+        if comprehensive_context:
+            intent_hints = comprehensive_context.get("inferred_intent_hints", [])
+            
+            # If query asks for "minimum budget" or "starting price", ensure we calculate it
+            # GPT will classify this correctly, no keyword check needed
+            if "price_query" in intent_hints and intent == "property_search":
+                # Will be handled in property_search handler - ensure we calculate min
+                logger.info("💰 Minimum budget query detected - will calculate from results")
+            
+            # If query is a follow-up ("more", "what else"), ensure we continue from last search
+            if "follow_up_query" in intent_hints:
+                if intent == "property_search":
+                    # Use last search filters/context
+                    logger.info("🔄 Follow-up query detected - continuing from last search")
+                elif intent == "nearby_properties":
+                    # Use last location from context
+                    logger.info("📍 Follow-up nearby query - using location from context")
+        
+        # Trust GPT always - no keyword fallback
+        # If confidence is low, log warning but still use GPT result
+        if gpt_confidence < 0.5:
+            logger.warning(f"GPT confidence is low ({gpt_confidence}), but trusting GPT result. Intent: {intent}, Data source: {data_source}")
         
         # CRITICAL: Check if we should use GPT fallback instead of specific handlers
         # This prevents asking clarifying questions when context exists
@@ -938,50 +1050,18 @@ async def chat_query(request: ChatQueryRequest):
                 suggested_actions=["Schedule site visit", "Compare projects", "Get more details"]
             )
 
-        # Contextual Override for "Show More" / "Tell me more"
-        # If user asks to elaborate on a previous non-search topic, force it to 'more_info_request'
-        show_more_patterns = ["show more", "tell me more", "more details", "elaborate", "continue", "go on"]
-        is_show_more = any(p in request.query.lower() for p in show_more_patterns) and len(request.query.split()) < 5
-        
-        if is_show_more and request.session_id:
-             session = session_manager.get_or_create_session(request.session_id)
-             
-             # Check if this is a "more nearby" request
-             if session.last_intent == "property_search" and session.last_shown_projects:
-                 # Check if we have location context
-                 location_from_context = None
-                 if session.current_filters and session.current_filters.get('location'):
-                     location_from_context = session.current_filters.get('location')
-                 elif session.last_shown_projects and len(session.last_shown_projects) > 0:
-                     # Extract location from last shown project
-                     first_proj = session.last_shown_projects[0]
-                     if isinstance(first_proj, dict):
-                         location_from_context = first_proj.get('location')
-                         # Parse location string to extract main locality name
-                         if location_from_context:
-                             location_parts = location_from_context.split(',')
-                             location_from_context = location_parts[0].strip()
-                             location_from_context = location_from_context.replace(' Road', '').replace(' road', '')
-                             location_from_context = location_from_context.replace(' Phase 1', '').replace(' Phase 2', '')
-                             location_from_context = location_from_context.strip()
-                 
-                 if location_from_context:
-                     # Treat as "show more nearby" request
-                     logger.info(f"Detected 'more' after nearby search - treating as 'show more nearby {location_from_context}'")
-                     # This will be handled by the nearby_properties intent handler below
-                     # The handler will exclude all previously shown projects
-             elif session.last_intent in ["sales_faq", "sales_objection", "more_info_request", "faq_budget_stretch", "faq_pinclick_value"]:
-                 logger.info(f"Contextual Override: 'Show more' mapped to more_info_request (prev: {session.last_intent})")
-                 intent = "more_info_request"
-                 # Start specific logic for elaboration
-                 # We rely on intelligent sales handler or more_info_request handler to pick this up
+        # GPT will handle "show more" / "tell me more" queries through intent classification
+        # No pattern matching needed - GPT understands context and intent
 
-        # Step 1.5: FACTUAL QUERY INTERCEPTOR - Fetch real database facts BEFORE classification
+        # Step 1.5: FACTUAL QUERY INTERCEPTOR - Fetch real database facts AFTER GPT classification
+        # GPT classification will extract project_name and fact_type - use that instead of keyword matching
         # This prevents GPT from making up information about project facts
-        from services.project_fact_extractor import detect_project_fact_query, get_project_fact, format_fact_response
+        from services.project_fact_extractor import get_project_fact, format_fact_response
         
-        fact_query_detection = detect_project_fact_query(original_query)
-        if fact_query_detection and fact_query_detection.get("is_factual_query"):
+        # Check if GPT already classified this as project_facts with extraction
+        # We'll handle this after GPT classification, not before
+        fact_query_detection = None
+        if False:  # Disabled - will use GPT extraction instead
             logger.info(f"Detected factual query: {fact_query_detection}")
             
             # Fetch REAL data from database
@@ -1029,10 +1109,9 @@ async def chat_query(request: ChatQueryRequest):
                     )
         
         # Step 1.6: LOCATION COMPARISON INTERCEPTOR
-        # Prevent location comparison questions from triggering property searches
-        from services.context_injector import is_location_comparison_query
-        
-        if is_location_comparison_query(original_query):
+        # GPT intent classifier handles location comparison detection - no keyword matching needed
+        # Check if intent is sales_conversation with location comparison topic
+        if intent == "sales_conversation" and (extraction.get("topic") in ["location_comparison", "location_benefits"] or "location" in extraction.get("topic", "").lower()):
             logger.info(f"Detected location comparison query: {original_query}")
             
             # Generate generic comparison answer using GPT
@@ -1241,93 +1320,8 @@ async def chat_query(request: ChatQueryRequest):
             location_name = location_name.replace(' Phase 1', '').replace(' Phase 2', '')
             return location_name.strip()
         
-        def extract_question_topic(query_lower: str) -> Optional[str]:
-            """Extract topic from specific question."""
-            if 'school' in query_lower:
-                return "schools"
-            elif 'amenit' in query_lower:
-                return "amenities"
-            elif 'distance' in query_lower or 'far' in query_lower or 'near' in query_lower:
-                return "distance"
-            elif 'airport' in query_lower:
-                return "airport"
-            elif 'metro' in query_lower:
-                return "metro"
-            return None
-        
-        def understand_query_intent(query: str, conversation_context: dict) -> dict:
-            """
-            Understand what user is asking for ANY query type.
-            Returns intent information with context requirements.
-            """
-            query_lower = query.lower()
-            
-            # Nearby/More Options Intent
-            if any(re.search(pattern, query_lower) for pattern in [
-                r"(what|show|find|any|tell).*?(else|other|more).*?(nearby|around|close|near|available)",
-                r"(available|option|property).*?(nearby|around|close|near)",
-                r"similar.*?(location|area|place)"
-            ]):
-                return {
-                    "intent_type": "nearby_properties",
-                    "intent_subtype": None,
-                    "needs_context": True,
-                    "context_type": "location",
-                    "confidence": 0.8,
-                    "reasoning": "User wants nearby properties or more options"
-                }
-            
-            # More Details Intent
-            if any(re.search(pattern, query_lower) for pattern in [
-                r"(tell|give|show).*?(more|details|information)",
-                r"continue",
-                r"expand"
-            ]):
-                return {
-                    "intent_type": "more_details",
-                    "intent_subtype": None,
-                    "needs_context": True,
-                    "context_type": "project",
-                    "confidence": 0.8,
-                    "reasoning": "User wants more details about last shown project/topic"
-                }
-            
-            # Specific Question Intent
-            if any(word in query_lower for word in ["school", "amenit", "distance", "far", "near", "airport", "metro"]):
-                return {
-                    "intent_type": "specific_question",
-                    "intent_subtype": extract_question_topic(query_lower),
-                    "needs_context": True,
-                    "context_type": "project",
-                    "confidence": 0.7,
-                    "reasoning": f"User asking about specific aspect: {extract_question_topic(query_lower)}"
-                }
-            
-            # Similar/Comparison Intent
-            if any(re.search(pattern, query_lower) for pattern in [
-                r"similar",
-                r"alternative",
-                r"compare",
-                r"like.*?(this|that)"
-            ]):
-                return {
-                    "intent_type": "similar_properties",
-                    "intent_subtype": None,
-                    "needs_context": True,
-                    "context_type": "project",
-                    "confidence": 0.7,
-                    "reasoning": "User wants similar or alternative properties"
-                }
-            
-            # General query (fallback)
-            return {
-                "intent_type": "general_query",
-                "intent_subtype": None,
-                "needs_context": False,
-                "context_type": None,
-                "confidence": 0.5,
-                "reasoning": "General query, no specific intent detected"
-            }
+        # Removed extract_question_topic and understand_query_intent functions
+        # GPT intent classifier handles all query understanding - no pattern matching needed
         
         def extract_query_context(session, conversation_history, request, intent_result: dict) -> dict:
             """
@@ -1445,21 +1439,8 @@ async def chat_query(request: ChatQueryRequest):
                 # Extract location - use context first, then explicit mention
                 location_name = context_result.get("location")
                 
-                # Check for explicit location in query (takes priority)
-                query_lower = request.query.lower()
-                location_patterns = [
-                    r"(nearby|around|near|close to)\s+([\w\s]+?)(?:\s|$)",
-                    r"within 10km\s+of\s+([\w\s]+)",
-                    r"within 10 km\s+of\s+([\w\s]+)"
-                ]
-                for pattern in location_patterns:
-                    match = re.search(pattern, query_lower, re.IGNORECASE)
-                    if match:
-                        explicit_location = match.group(2 if len(match.groups()) > 1 else 1).strip()
-                        if explicit_location:
-                            location_name = parse_location_string(explicit_location)
-                            logger.info(f"Extracted explicit location from query: {location_name}")
-                            break
+                # GPT extraction already handles location extraction - no pattern matching needed
+                # Location should come from extraction dict or context
                 
                 # If location found, perform radius search
                 if location_name:
@@ -1714,6 +1695,93 @@ async def chat_query(request: ChatQueryRequest):
                         filters=filters
                     )
 
+                # Check if zero results - trigger intelligent fallback
+                if len(search_results["projects"]) == 0:
+                    logger.info("🔍 Zero results found, triggering intelligent fallback with aggressive mode...")
+                    
+                    # Try intelligent fallback with aggressive mode (expanded radius and budget)
+                    fallback_results = await intelligent_fallback.find_intelligent_alternatives(
+                        filters=filters,
+                        original_query=request.query,
+                        max_results=5,  # Show more alternatives
+                        aggressive_mode=True  # Expand radius to 20km and budget to 2x
+                    )
+                    
+                    if fallback_results.get("alternatives"):
+                        # Found alternatives - use fallback results
+                        logger.info(f"✅ Found {len(fallback_results['alternatives'])} fallback alternatives")
+                        answer_text = fallback_results["answer"]
+                        projects = fallback_results["projects"]
+                        confidence = "Medium"
+                        budget_alternatives_shown = True
+                        
+                        # Update session with fallback projects
+                        if session:
+                            session.last_shown_projects = projects
+                            session.last_intent = "property_search"
+                            if filters:
+                                if not hasattr(session, 'current_filters') or not session.current_filters:
+                                    session.current_filters = {}
+                                filters_dict = filters.model_dump(exclude_none=True) if hasattr(filters, 'model_dump') else (filters if isinstance(filters, dict) else {})
+                                session.current_filters.update(filters_dict)
+                            session_manager.save_session(session)
+                            logger.info(f"✅ Context preserved: Updated last_shown_projects with {len(projects)} fallback projects")
+                    else:
+                        # No alternatives found even with aggressive search - generate helpful message
+                        logger.info("⚠️ No alternatives found even with aggressive search")
+                        answer_text = await _generate_no_alternatives_message(request.query, filters)
+                        projects = []
+                        confidence = "Medium"
+                        budget_alternatives_shown = False
+                        
+                        # Still update session context
+                        if session:
+                            session.last_intent = "property_search"
+                            if filters:
+                                if not hasattr(session, 'current_filters') or not session.current_filters:
+                                    session.current_filters = {}
+                                filters_dict = filters.model_dump(exclude_none=True) if hasattr(filters, 'model_dump') else (filters if isinstance(filters, dict) else {})
+                                session.current_filters.update(filters_dict)
+                            session_manager.save_session(session)
+                    
+                    response_time_ms = int((time.time() - start_time) * 1000)
+                    
+                    # Log the interaction
+                    if request.user_id:
+                        await pixeltable_client.log_query(
+                            user_id=request.user_id,
+                            query=request.query,
+                            intent="property_search",
+                            answered=True,
+                            confidence_score=confidence,
+                            response_time_ms=response_time_ms,
+                            project_id=request.project_id
+                        )
+                    
+                    # Update session with messages
+                    if session and request.session_id:
+                        session_manager.add_message(request.session_id, "user", original_query)
+                        session_manager.add_message(request.session_id, "assistant", answer_text[:500])
+                        session.last_intent = "property_search"
+                        session_manager.save_session(session)
+                    
+                    coaching_prompt = _get_coaching_for_response(
+                        session, request.session_id, request.query, "property_search",
+                        search_performed=True, data_source="database", budget_alternatives_shown=budget_alternatives_shown
+                    )
+                    return ChatQueryResponse(
+                        answer=answer_text,
+                        projects=projects,
+                        sources=fallback_results.get("sources", []) if fallback_results.get("alternatives") else [],
+                        confidence=confidence,
+                        intent="property_search",
+                        refusal_reason=None,
+                        response_time_ms=response_time_ms,
+                        suggested_actions=[],
+                        coaching_prompt=coaching_prompt
+                    )
+                
+                # Normal flow: results found
                 # CRITICAL: Always update session context when projects are shown
                 if session:
                     # ALWAYS update last_shown_projects (never lose this context)
@@ -1742,7 +1810,56 @@ async def chat_query(request: ChatQueryRequest):
                         project_id=request.project_id
                     )
 
-                answer_text = f"I found {len(search_results['projects'])} projects matching your criteria. Here are the details:"
+                # Enrich projects with missing data (amenities, nearby places, etc.)
+                projects_list = search_results["projects"]
+                enriched_projects = []
+                for project in projects_list:
+                    enrichment_types = []
+                    
+                    # Check what needs enrichment
+                    if not project.get('amenities') or len(str(project.get('amenities', ''))) < 30:
+                        enrichment_types.append("amenities")
+                    if not project.get('nearby_places'):
+                        enrichment_types.append("nearby_places")
+                    if not project.get('connectivity'):
+                        enrichment_types.append("connectivity")
+                    
+                    # Enrich if needed
+                    if enrichment_types:
+                        try:
+                            enriched = await project_enrichment.enrich_project(
+                                project=project,
+                                enrichment_types=enrichment_types,
+                                query=request.query
+                            )
+                            enriched_projects.append(enriched)
+                        except Exception as e:
+                            logger.error(f"Error enriching project {project.get('name')}: {e}")
+                            enriched_projects.append(project)  # Use original if enrichment fails
+                    else:
+                        enriched_projects.append(project)
+                
+                # Update projects list with enriched data
+                projects_list = enriched_projects
+                
+                # Check for better-value configurations and format response
+                better_value_count = sum(1 for p in projects_list if p.get("_better_value", False))
+                regular_count = len(projects_list) - better_value_count
+                
+                # Build answer text with sales logic
+                if min_budget_answer:
+                    # Direct answer for minimum budget queries
+                    answer_text = min_budget_answer
+                    answer_text += f"• Found {len(projects_list)} project{'s' if len(projects_list) != 1 else ''} matching your criteria\n"
+                    answer_text += "• Here are all options:"
+                elif better_value_count > 0:
+                    # Sales pitch: Highlight better-value options
+                    answer_text = f"• Found {regular_count} project{'s' if regular_count != 1 else ''} matching your criteria\n"
+                    answer_text += f"• **Great news!** Also found {better_value_count} better-value option{'s' if better_value_count != 1 else ''} (higher BHK in same budget)\n"
+                    answer_text += "• Here are all options:"
+                else:
+                    answer_text = f"• Found {len(projects_list)} project{'s' if len(projects_list) != 1 else ''} matching your criteria\n"
+                    answer_text += "• Here are the details:"
                 
                 # Update session with messages
                 if session and request.session_id:
@@ -1757,7 +1874,7 @@ async def chat_query(request: ChatQueryRequest):
                 )
                 return ChatQueryResponse(
                     answer=answer_text,
-                    projects=search_results["projects"],
+                    projects=projects_list,  # Use enriched projects
                     sources=[],
                     confidence="High",
                     intent="property_search",
@@ -1773,11 +1890,8 @@ async def chat_query(request: ChatQueryRequest):
                 project_name = context_metadata.get("extraction", {}).get("project_name")
 
                 if not project_name:
-                    # Try to extract from query directly
-                    from services.project_fact_extractor import detect_project_fact_query
-                    fact_detection = detect_project_fact_query(request.query)
-                    if fact_detection:
-                        project_name = fact_detection.get("project_name")
+                    # GPT extraction should have project_name - if not, log warning
+                    logger.warning(f"GPT classified as project_facts but didn't extract project_name. Query: {request.query}")
 
                 if project_name:
                     logger.info(f"Fetching project details for: {project_name}")
@@ -1923,11 +2037,14 @@ async def chat_query(request: ChatQueryRequest):
                 # Continue without sentiment analysis
 
         # Generate conversational response using unified consultant with sentiment
+        # 🆕 Pass extraction data (project_name, topic, etc.) to consultant for context
+        extraction_data = context_metadata.get("extraction", {}) if context_metadata else {}
         response_text = await generate_consultant_response(
             query=request.query,
             session=session,
             intent=intent,
-            sentiment_analysis=sentiment_analysis
+            sentiment_analysis=sentiment_analysis,
+            extraction=extraction_data
         )
         
         # 🆕 Add welcome back message for returning users (prepend to response)
@@ -2116,20 +2233,13 @@ async def chat_query(request: ChatQueryRequest):
                 # Detect if user wants to schedule visit/callback
                 # ========================================
                 try:
-                    # Check if user expressed interest in scheduling
-                    scheduling_keywords = {
-                        'visit': ['visit', 'see', 'tour', 'inspect', 'viewing'],
-                        'callback': ['call', 'callback', 'call back', 'speak', 'talk', 'discuss', 'contact']
-                    }
+                    # GPT intent classifier handles scheduling intent detection - no keyword matching needed
+                    # Check extraction for scheduling intent hints
+                    wants_visit = extraction.get("topic") in ["site_visit", "visit", "scheduling"] or intent == "site_visit"
+                    wants_callback = extraction.get("topic") in ["callback", "contact"] or intent == "meeting_request"
                     
-                    query_lower = request.query.lower()
-                    
-                    # Check for scheduling intent
-                    wants_visit = any(keyword in query_lower for keyword in scheduling_keywords['visit'])
-                    wants_callback = any(keyword in query_lower for keyword in scheduling_keywords['callback'])
-                    
-                    # Check for confirmation words
-                    is_confirmation = any(word in query_lower for word in ['yes', 'sure', 'ok', 'okay', 'great', 'perfect', 'definitely', 'absolutely'])
+                    # GPT will understand confirmation from context
+                    is_confirmation = False  # Will be determined by GPT from conversation context
                     
                     # If user just confirmed and there's a recent nudge about scheduling
                     if is_confirmation and session and hasattr(session, 'nudges_shown'):
@@ -2384,42 +2494,16 @@ How can I assist you today?"""
                 )
 
         # Step 1.8: Handle more_info_request with GPT content generation
-        # Also catch "more pointers" / "tell me more" queries even if data_source isn't explicitly gpt_generation
-        more_info_keywords = ["more pointers", "tell me more", "more about", "more details", "elaborate", "explain more"]
-        is_more_info_query = any(kw in request.query.lower() for kw in more_info_keywords)
-        
-        if (intent == "more_info_request" and data_source in ["gpt_generation", "hybrid"]) or is_more_info_query:
+        # GPT intent classifier handles "more info" queries - no keyword matching needed
+        if intent == "more_info_request" and data_source in ["gpt_generation", "hybrid"]:
             logger.info(f"Routing more_info_request to GPT content generator (data_source={data_source}, is_more_info_query={is_more_info_query})")
             
             # Get project from extraction, query text, or session
             project_name = extraction.get("project_name")
             topic = extraction.get("topic", "general_selling_points")
             
-            # Try to extract project name from query if not in extraction
-            if not project_name:
-                query_lower = request.query.lower()
-                # Common project keywords to match
-                # Common project keywords to match
-                # Common project keywords to match
-                project_keywords = ["avalon", "citrine", "neopolis", "brigade", "sobha", "prestige", "godrej", "birla", "evara", "ojasvi", "woods", "calista", "7 gardens", "panache", "folium", "sumadhura", "eden", "serene"]
-                for keyword in project_keywords:
-                    if keyword in query_lower:
-                        project_name = keyword.title()  # e.g., "avalon" -> "Avalon"
-                        if keyword == "avalon":
-                            project_name = "Brigade Avalon"
-                        elif keyword == "citrine":
-                            project_name = "Brigade Citrine"
-                        elif keyword == "evara":
-                            project_name = "Birla Evara"
-                        elif keyword == "folium" or keyword == "sumadhura":
-                            project_name = "Sumadhura Folium"
-                        elif keyword == "eden":
-                            project_name = "Godrej Eden"
-                        elif keyword == "serene":
-                            project_name = "Godrej Serene"
-                        elif keyword == "woods":
-                            project_name = "Godrej Woods"
-                        break
+            # GPT extraction already handles project name matching - no keyword matching needed
+            # Project name should come from extraction dict or session context
             
             if not project_name and request.session_id:
                 session = session_manager.get_or_create_session(request.session_id)
