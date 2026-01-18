@@ -1011,12 +1011,21 @@ async def chat_query(request: ChatQueryRequest):
         if gpt_confidence < 0.5:
             logger.warning(f"GPT confidence is low ({gpt_confidence}), but trusting GPT result. Intent: {intent}, Data source: {data_source}")
         
-        # CRITICAL: Check if we should use GPT fallback instead of specific handlers
-        # This prevents asking clarifying questions when context exists
+        # CRITICAL: Only use GPT fallback for unsupported intents
+        # If GPT has classified with a specific intent (property_search, project_facts, etc.), 
+        # trust it and use the proper handlers - DO NOT route to fallback
         use_gpt_fallback = False
-        if session and should_use_gpt_fallback(original_query, session, gpt_confidence):
-            use_gpt_fallback = True
-            logger.info("Routing to GPT fallback to maintain conversation flow")
+        valid_intents = ["property_search", "project_facts", "nearby_properties", "sales_conversation", "greeting"]
+        
+        if intent not in valid_intents:
+            # Intent is unsupported or unknown - check if we should use GPT fallback
+            if session and should_use_gpt_fallback(original_query, session, gpt_confidence):
+                use_gpt_fallback = True
+                logger.info(f"Routing unsupported intent '{intent}' to GPT fallback (confidence={gpt_confidence})")
+        else:
+            # GPT has classified with a valid intent - ALWAYS use proper handlers, never fallback
+            use_gpt_fallback = False
+            logger.info(f"✅ GPT classified as '{intent}' (confidence={gpt_confidence}) - using proper handler, NOT fallback")
         
         # If we're using GPT fallback, generate response directly
         if use_gpt_fallback:
