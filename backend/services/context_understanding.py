@@ -75,6 +75,9 @@ class ContextUnderstandingService:
         if hasattr(session, 'interested_projects') and session.interested_projects:
             context["projects"]["interested"] = session.interested_projects[-3:]  # Last 3 interested
             context["projects"]["selected"] = session.interested_projects[-1] if session.interested_projects else None
+        else:
+            # Ensure "selected" key exists even if no interested projects
+            context["projects"]["selected"] = None
         
         # 3. REQUIREMENTS CONTEXT
         context["requirements"] = {}
@@ -208,9 +211,9 @@ class ContextUnderstandingService:
         # Check for vague queries that need context
         vague_patterns = ["more", "tell me more", "details", "about it", "what about", "how about"]
         if any(pattern in query_lower for pattern in vague_patterns):
-            if context["projects"]["last_shown"]:
+            if context.get("projects", {}).get("last_shown"):
                 hints.append("likely_about_last_shown_project")
-            if context["projects"]["selected"]:
+            if context.get("projects", {}).get("selected"):
                 hints.append("likely_about_selected_project")
         
         # Check for follow-up questions
