@@ -383,6 +383,12 @@ class HealthResponse(BaseModel):
 
 # === API Endpoints ===
 
+@app.get("/api/debug")
+async def debug_route():
+    """Simple debug route to verify deployment."""
+    return {"message": "Deployment verified", "timestamp": time.time()}
+
+
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint."""
