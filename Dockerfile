@@ -18,7 +18,7 @@ WORKDIR /app
 
 # Copy requirements first for caching
 COPY backend/requirements.txt .
-RUN pip install --upgrade pip && pip install -r requirements.txt && pip install --no-deps pixeltable==0.2.30
+RUN pip install --upgrade pip && pip install -r requirements.txt && pip install pixeltable==0.2.30
 
 # Copy application code
 COPY backend/ .
