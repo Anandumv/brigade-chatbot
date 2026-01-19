@@ -73,6 +73,8 @@ def initialize_pixeltable():
     # Initialize tables
     _create_projects_table()
     _create_query_logs_table()  # Query logging
+    _create_documents_table()   # Vector store
+    _create_faq_table()         # FAQ response trainer
     
     logger.info("Pixeltable initialization complete")
 
