@@ -155,3 +155,41 @@ export interface ConversationState {
     selectedPersona: PersonaInfo | null;
     error: string | null;
 }
+
+// === Copilot Spec-Compliant Types ===
+
+export interface QuickFilters {
+    price_range?: [number, number];  // [min, max] in INR
+    bhk?: string[];  // ["2BHK", "3BHK"]
+    status?: string[];  // ["Ready-to-move", "Under Construction"]
+    amenities?: string[];  // ["Pool", "Clubhouse", "Gym"]
+    radius_km?: number;
+    possession_window?: number;  // Year, e.g., 2027
+}
+
+export interface AssistRequest {
+    call_id: string;
+    query: string;
+    filters?: QuickFilters;
+}
+
+export interface CopilotProjectInfo {
+    name: string;
+    location: string;
+    price_range: string;  // "70L - 1.3Cr"
+    bhk: string;  // "2BHK, 3BHK"
+    amenities: string[];
+    status: string;  // "Ready-to-move" / "Under Construction"
+}
+
+export interface CopilotResponse {
+    projects: CopilotProjectInfo[];
+    answer: string[];  // 3-5 bullet points
+    pitch_help: string;  // Single call-ready sentence
+    next_suggestion: string;  // One-line action
+    // Extended fields for budget relaxation
+    relaxation_applied?: boolean;
+    relaxation_step?: number;
+    original_budget?: number;
+    relaxed_budget?: number;
+}

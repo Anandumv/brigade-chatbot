@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     pixeltable_data_dir: Optional[str] = None  # Custom data directory
     pixeltable_mode: str = "exclusive"  # "exclusive" or "hybrid"
 
+    # Redis Configuration (for session persistence)
+    redis_url: str = "redis://localhost:6379/0"  # Railway will override
+    redis_ttl_seconds: int = 5400  # 90 minutes (spec requirement)
+
     class Config:
         env_file = ".env"
         case_sensitive = False

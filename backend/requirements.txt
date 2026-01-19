@@ -70,3 +70,7 @@ mypy==1.8.0
 # Code Quality
 black==24.1.0
 ruff==0.1.13
+
+# Redis (for session persistence)
+redis>=5.0.0
+hiredis>=2.3.0

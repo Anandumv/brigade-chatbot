@@ -289,7 +289,21 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
         logger.warning("⚠️ Falling back to in-memory storage")
-    
+
+    # Initialize Redis Context Manager
+    try:
+        from services.redis_context import init_redis_context_manager
+        redis_manager = init_redis_context_manager(
+            redis_url=settings.redis_url,
+            ttl_seconds=settings.redis_ttl_seconds
+        )
+        logger.info("✅ Redis context manager initialized")
+        health = redis_manager.health_check()
+        logger.info(f"Redis status: {health['status']}")
+    except Exception as e:
+        logger.error(f"Redis initialization failed: {e}")
+        logger.warning("⚠️ Context will use in-memory fallback")
+
     yield
     logger.info("Shutting down API...")
 
@@ -310,6 +324,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Register /assist router (spec-compliant copilot endpoint)
+from routes.assist import router as assist_router
+app.include_router(assist_router, prefix="/api/assist", tags=["copilot"])
 
 
 # === Request/Response Models ===

@@ -6,6 +6,9 @@ import {
     PersonaInfo,
     QueryAnalytics,
     CompareProjectsRequest,
+    AssistRequest,
+    CopilotResponse,
+    QuickFilters,
 } from '@/types';
 import { FilterOptions, SelectedFilters } from '@/types/filters';
 
@@ -35,6 +38,12 @@ class ApiService {
 
     async compareProjects(request: CompareProjectsRequest): Promise<ChatQueryResponse> {
         const response = await this.client.post<ChatQueryResponse>('/api/chat/compare', request);
+        return response.data;
+    }
+
+    // Copilot /assist endpoint (spec-compliant)
+    async sendAssistQuery(request: AssistRequest): Promise<CopilotResponse> {
+        const response = await this.client.post<CopilotResponse>('/api/assist', request);
         return response.data;
     }
 
