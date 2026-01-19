@@ -1,0 +1,17 @@
+.git
+.claude
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+venv
+env
+*.pdf
+*.zip
+*.xlsx
+*.png
+*.jpg
+*.jpeg
+frontend/node_modules
+backend/vendor/pixeltable

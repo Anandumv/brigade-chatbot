@@ -65,3 +65,11 @@ temp/
 
 # Docker
 docker-compose.override.yml
+
+# Large binary files
+*.pdf
+*.zip
+*.xlsx
+*.png
+*.jpg
+*.jpeg
