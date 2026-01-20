@@ -54,10 +54,10 @@ async def assist(request: AssistRequest):
             query=request.query,
             comprehensive_context={"session": ctx}  # Wrap in expected format
         )
-        logger.info(f"🎯 Intent: {intent_result.intent} (confidence: {intent_result.confidence})")
+        logger.info(f"🎯 Intent: {intent_result.get('intent')} (confidence: {intent_result.get('confidence')})")
 
         # 3. Extract entities from intent result
-        extraction = intent_result.extraction if hasattr(intent_result, 'extraction') else {}
+        extraction = intent_result.get('extraction', {})
 
         project = extraction.get("project_name") or ctx.get("active_project")
         budget = extraction.get("budget") or ctx.get("last_budget")
@@ -105,7 +105,7 @@ async def assist(request: AssistRequest):
             relaxed_projects=relaxed_projects,
             applied_step=relaxation_step,
             filters=merged_filters_dict,
-            intent=intent_result.intent
+            intent=intent_result.get('intent', 'unknown')
         )
 
         logger.info(f"✅ Formatted response with {len(response.projects)} projects, {len(response.answer)} bullets")
@@ -120,7 +120,7 @@ async def assist(request: AssistRequest):
             # Update signals based on intent and behavior
             "signals": {
                 "price_sensitive": relaxation_step is not None or ctx.get("signals", {}).get("price_sensitive", False),
-                "upgrade_intent": intent_result.intent == "comparison" or ctx.get("signals", {}).get("upgrade_intent", False)
+                "upgrade_intent": intent_result.get('intent') == "comparison" or ctx.get("signals", {}).get("upgrade_intent", False)
             }
         })
 
