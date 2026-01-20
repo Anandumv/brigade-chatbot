@@ -783,7 +783,7 @@ async def admin_refresh_projects(x_admin_key: str = Header(None)):
         except Exception as e:
             logger.warning(f"Could not drop table: {e}")
         
-        # Create fresh table with schema
+        # Create fresh table with schema (matches pixeltable_setup.py schema)
         schema = {
             'project_id': pxt.String,
             'name': pxt.String,
@@ -803,6 +803,8 @@ async def admin_refresh_projects(x_admin_key: str = Header(None)):
             'rm_details': pxt.Json,
             'brochure_url': pxt.String,
             'registration_process': pxt.String,
+            'latitude': pxt.Float,           # Geolocation for distance filtering
+            'longitude': pxt.Float,          # Geolocation for distance filtering
         }
         
         projects = pxt.create_table('brigade.projects', schema)
