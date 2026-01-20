@@ -49,7 +49,11 @@ async def assist(request: AssistRequest):
         logger.info(f"📥 Loaded context for call_id={request.call_id}")
 
         # 2. Classify intent with GPT
-        intent_result = classify_intent_gpt_first(request.query, ctx)
+        # Pass ctx as comprehensive_context (not conversation_history which expects List[Dict])
+        intent_result = classify_intent_gpt_first(
+            query=request.query,
+            comprehensive_context={"session": ctx}  # Wrap in expected format
+        )
         logger.info(f"🎯 Intent: {intent_result.intent} (confidence: {intent_result.confidence})")
 
         # 3. Extract entities from intent result
@@ -159,11 +163,12 @@ def _convert_to_property_filters(
     # Price range handling
     if "price_range" in filters_dict and filters_dict["price_range"]:
         price_range = filters_dict["price_range"]
-        if isinstance(price_range, list) and len(price_range) == 2:
-            property_filters.min_price_inr = price_range[0]
-            property_filters.max_price_inr = price_range[1]
+        # Ensure it's a list, not a slice object
+        if isinstance(price_range, (list, tuple)) and len(price_range) >= 2:
+            property_filters.min_price_inr = int(price_range[0]) if price_range[0] is not None else None
+            property_filters.max_price_inr = int(price_range[1]) if price_range[1] is not None else None
     elif budget:
-        property_filters.max_price_inr = budget
+        property_filters.max_price_inr = int(budget) if budget is not None else None
 
     # BHK handling: Convert "2BHK" to bedroom count
     if "bhk" in filters_dict and filters_dict["bhk"]:
