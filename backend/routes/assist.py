@@ -60,10 +60,11 @@ async def assist(request: AssistRequest):
         extraction = intent_result.get('extraction', {})
 
         project = extraction.get("project_name") or ctx.get("active_project")
-        budget = extraction.get("budget") or ctx.get("last_budget")
+        budget = extraction.get("budget_max") or extraction.get("budget") or ctx.get("last_budget")
         location = extraction.get("location") or ctx.get("last_location")
+        configuration = extraction.get("configuration") or ctx.get("last_configuration")
 
-        logger.info(f"🔍 Entities: project={project}, budget={budget}, location={location}")
+        logger.info(f"🔍 Entities: project={project}, budget={budget}, location={location}, bhk={configuration}")
 
         # 4. Merge filters (request overrides context)
         context_filters = ctx.get("last_filters", {})
@@ -71,7 +72,7 @@ async def assist(request: AssistRequest):
         merged_filters_dict = {**context_filters, **request_filters}
 
         # Convert to PropertyFilters object
-        merged_filters = _convert_to_property_filters(merged_filters_dict, budget, location)
+        merged_filters = _convert_to_property_filters(merged_filters_dict, budget, location, configuration)
 
         logger.info(f"🎛️ Merged filters: {merged_filters.model_dump(exclude_none=True)}")
 
@@ -115,6 +116,7 @@ async def assist(request: AssistRequest):
             "active_project": project or ctx.get("active_project"),
             "last_budget": budget or ctx.get("last_budget"),
             "last_location": location or ctx.get("last_location"),
+            "last_configuration": configuration or ctx.get("last_configuration"),
             "last_results": relaxed_projects or db_projects,
             "last_filters": merged_filters_dict,
             # Update signals based on intent and behavior
@@ -137,7 +139,8 @@ async def assist(request: AssistRequest):
 def _convert_to_property_filters(
     filters_dict: dict,
     budget: Optional[int],
-    location: Optional[str]
+    location: Optional[str],
+    configuration: Optional[str] = None
 ) -> PropertyFilters:
     """
     Convert merged filters dict to PropertyFilters object.
@@ -146,6 +149,7 @@ def _convert_to_property_filters(
     Maps:
     - price_range [min, max] → min_price_inr, max_price_inr
     - bhk ["2BHK", "3BHK"] → bedrooms [2, 3]
+    - configuration "2BHK" → bedrooms [2]  # NEW: from entity extraction
     - status → status
     - amenities → required_amenities
     - possession_window → possession_year
@@ -154,6 +158,7 @@ def _convert_to_property_filters(
         filters_dict: Merged filters dictionary
         budget: Budget from entity extraction
         location: Location from entity extraction
+        configuration: Configuration (BHK) from entity extraction
 
     Returns:
         PropertyFilters object
@@ -171,6 +176,7 @@ def _convert_to_property_filters(
         property_filters.max_price_inr = int(budget) if budget is not None else None
 
     # BHK handling: Convert "2BHK" to bedroom count
+    # Priority: request filters > entity extraction > context
     if "bhk" in filters_dict and filters_dict["bhk"]:
         bedrooms = []
         for bhk_str in filters_dict["bhk"]:
@@ -182,6 +188,13 @@ def _convert_to_property_filters(
                     bedrooms.append(int(match.group(1)))
         if bedrooms:
             property_filters.bedrooms = bedrooms
+    elif configuration:  # NEW: Use extracted configuration if no filter provided
+        # Extract number from "2BHK", "3BHK", etc.
+        import re
+        match = re.search(r'(\d+)', configuration)
+        if match:
+            property_filters.bedrooms = [int(match.group(1))]
+            logger.info(f"🏠 Extracted BHK from configuration: {configuration} → bedrooms={property_filters.bedrooms}")
 
     # Status handling
     if "status" in filters_dict and filters_dict["status"]:

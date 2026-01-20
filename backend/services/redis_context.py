@@ -175,6 +175,7 @@ class RedisContextManager:
             "active_project": None,
             "last_budget": None,
             "last_location": None,
+            "last_configuration": None,
             "last_results": [],
             "last_filters": {},
             "signals": {
