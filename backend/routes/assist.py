@@ -173,7 +173,9 @@ def _convert_to_property_filters(
             property_filters.min_price_inr = int(price_range[0]) if price_range[0] is not None else None
             property_filters.max_price_inr = int(price_range[1]) if price_range[1] is not None else None
     elif budget:
-        property_filters.max_price_inr = int(budget) if budget is not None else None
+        # Budget comes from GPT in lakhs, convert to INR (1 lakh = 100,000)
+        property_filters.max_price_inr = int(budget * 100000) if budget is not None else None
+        logger.info(f"💰 Converted budget from {budget}L to {property_filters.max_price_inr} INR")
 
     # BHK handling: Convert "2BHK" to bedroom count
     # Priority: request filters > entity extraction > context
