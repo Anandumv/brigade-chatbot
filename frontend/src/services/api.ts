@@ -43,7 +43,7 @@ class ApiService {
 
     // Copilot /assist endpoint (spec-compliant)
     async sendAssistQuery(request: AssistRequest): Promise<CopilotResponse> {
-        const response = await this.client.post<CopilotResponse>('/api/assist', request);
+        const response = await this.client.post<CopilotResponse>('/api/assist/', request);
         return response.data;
     }
 

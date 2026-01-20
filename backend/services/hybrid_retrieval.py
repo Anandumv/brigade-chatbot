@@ -154,9 +154,25 @@ class HybridRetrievalService:
             # Get all projects first, then filter in Python (more reliable)
             all_results = projects.collect()
             logger.info(f"Total projects fetched: {len(all_results)}")
-            
-            # Filter in Python
-            filtered_results = list(all_results)  # Start with all
+
+            # Convert Pixeltable Row objects to dictionaries to avoid slice errors
+            filtered_results = []
+            for row in all_results:
+                try:
+                    # Convert Row to dict using to_dict() if available, otherwise dict()
+                    if hasattr(row, 'to_dict'):
+                        filtered_results.append(row.to_dict())
+                    else:
+                        # Fallback: create dict from row attributes
+                        row_dict = {}
+                        for key in row.keys():
+                            row_dict[key] = row[key]
+                        filtered_results.append(row_dict)
+                except Exception as conv_err:
+                    logger.error(f"Error converting row to dict: {conv_err}")
+                    continue
+
+            logger.info(f"Converted {len(filtered_results)} rows to dictionaries")
             
             # Apply city filter
             # Logic: All projects are in Bangalore. 
