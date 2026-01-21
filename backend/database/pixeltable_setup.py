@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 # Initialize OpenAI client
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
-@pxt.udf(return_type=pxt.String)
+@pxt.udf
 def generate_faq_response(question: str) -> str:
     """Generate FAQ response using OpenAI (UDF)."""
     try:
