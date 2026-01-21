@@ -17,6 +17,9 @@ import { ScheduleVisitModal } from './scheduling';
 import { WelcomeBackBanner, ProactiveNudgeCard, UrgencySignals, SentimentIndicator } from './enhanced-ux';
 // Phase 3: Sales Coaching components
 import { CoachingPanel } from './CoachingPanel';
+// Phase 2/3: Response Enhancement components
+import { CoachingPointCard } from './CoachingPointCard';
+import { MatchingUnitsCard } from './MatchingUnitsCard';
 
 interface ChatInterfaceProps {
     projects: ProjectInfo[];
@@ -457,6 +460,13 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                                                 </div>
                                             )}
 
+                                            {/* Phase 2/3: Coaching Point Card (from copilot response) */}
+                                            {message.coaching_point && (
+                                                <div className="mt-4">
+                                                    <CoachingPointCard coaching_point={message.coaching_point} />
+                                                </div>
+                                            )}
+
                                             {message.projects && message.projects.length > 0 && (
                                                 <div className="mt-4 flex flex-col gap-4 w-full">
                                                     {message.projects.map((project, idx) => {
@@ -519,10 +529,18 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                                                         const adaptedProject = adaptProjectData(project);
 
                                                         return (
-                                                            <div key={idx} className="relative w-full">
+                                                            <div key={idx} className="relative w-full space-y-3">
                                                                 <ProjectCard
                                                                     project={adaptedProject}
                                                                 />
+
+                                                                {/* Phase 2/3: Matching Units Card */}
+                                                                {project.matching_units && project.matching_units.length > 0 && (
+                                                                    <MatchingUnitsCard
+                                                                        matching_units={project.matching_units}
+                                                                        projectName={project.name || project.project_name || 'this project'}
+                                                                    />
+                                                                )}
                                                             </div>
                                                         );
                                                     })}
