@@ -21,10 +21,14 @@ services:
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
       - GPT_MODEL=${GPT_MODEL:-gpt-4-turbo-preview}
       - TEMPERATURE=${TEMPERATURE:-0.1}
+      - REDIS_URL=redis://redis:6379/0
     volumes:
       - ./backend:/app
       - ./Brigade Citrine E_Brochure 01-1.pdf:/data/Brigade Citrine E_Brochure 01-1.pdf:ro
       - ./E Brochure - Avalon.pdf:/data/E Brochure - Avalon.pdf:ro
+      - pixeltable_data:/root/.pixeltable
+    depends_on:
+      - redis
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -32,6 +36,24 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  redis:
+    image: redis:alpine
+    container_name: chatbot-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  pixeltable_data:
+  redis_data:
 
   # Future: Add frontend service in Phase 2
   # frontend:

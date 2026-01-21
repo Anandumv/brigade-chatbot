@@ -311,6 +311,13 @@ If query is ambiguous, use context to infer most likely intent. Never ask for cl
   * Query has typos → understand despite spelling errors
   * Query is in mixed language → understand multilingual queries
 
+**BARE NUMBER HANDLING (CRITICAL):**
+- If the query is just a bare number (e.g., "1.5", "1.7", "2.2", "0.8"), interpret it as **Budget in Crores**.
+- INTENT: property_search
+- EXTRACTION: { "budget_max": <number * 100> } (Convert Cr to Lakhs)
+- Reasoning: "Bare number interpreted as budget in Crores"
+- Example: "1.7" → intent: property_search, extraction: { "budget_max": 170 }
+
 **PROJECT NAME MATCHING (CRITICAL - HANDLE TYPOS):**
 - If query mentions ANY part of a project name (even with typos), match it to available_projects
 - **TYPO HANDLING EXAMPLES:**
