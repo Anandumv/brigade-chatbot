@@ -6,12 +6,66 @@ Updated for Pixeltable v0.3+ API.
 
 import pixeltable as pxt
 from pixeltable.iterators import DocumentSplitter
-import openai
-from typing import Optional
+from openai import OpenAI
+from typing import Optional, List
 import logging
 import os
 
 logger = logging.getLogger(__name__)
+
+# Initialize OpenAI client
+client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+
+@pxt.udf(return_type=pxt.String)
+def generate_faq_response(question: str) -> str:
+    """Generate FAQ response using OpenAI (UDF)."""
+    try:
+        response = client.chat.completions.create(
+            messages=[
+                {
+                    "role": "system",
+                    "content": \"\"\"You are Pinclick Genie, an expert real estate sales consultant.
+                    
+Your role is to handle customer objections and FAQs with empathy and persuasive responses.
+
+Guidelines:
+1. For BUDGET objections: Explain EMI options, value appreciation potential, hidden costs of renting
+2. For LOCATION objections: Highlight connectivity improvements, upcoming infrastructure, lifestyle benefits
+3. For UNDER-CONSTRUCTION objections: Explain price advantage (10-15% less), customization options, payment flexibility
+4. For MEETING requests: Emphasize personalized service, site visits, detailed walkthroughs
+5. For PINCLICK value: Highlight end-to-end support, verified projects, negotiation assistance
+
+ALWAYS end with a soft call-to-action suggesting a meeting or site visit.
+Keep responses concise but persuasive (100-150 words max).
+Use friendly emojis where appropriate.\"\"\"
+                },
+                {
+                    "role": "user",
+                    "content": question
+                }
+            ],
+            model='gpt-4o-mini'
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        logger.error(f"Error generating FAQ response: {e}")
+        return "I apologize, I couldn't generate a specific response at the moment."
+
+def openai_embedding_wrapper(text: str) -> List[float]:
+    """Wrapper for OpenAI embeddings compatible with Pixeltable."""
+    try:
+        if not text:
+            return [0.0] * 1536 # Return zero vector for empty text
+            
+        text = text.replace("\\n", " ")
+        response = client.embeddings.create(
+            input=[text],
+            model="text-embedding-3-small"
+        )
+        return response.data[0].embedding
+    except Exception as e:
+        logger.error(f"Error generating embedding: {e}")
+        return []
 
 
 def _dir_exists(name: str) -> bool:
@@ -154,7 +208,7 @@ def _create_documents_table():
         # Add embedding index for similarity search
         chunks.add_embedding_index(
             'text',
-            string_embed=openai.Embedding.create,
+            string_embed=openai_embedding_wrapper,
             model_name='text-embedding-3-small'
         )
         
@@ -179,32 +233,7 @@ def _create_faq_table():
     
     # Add computed column for LLM response
     faq.add_computed_column(
-        response=openai.chat_completions(
-            messages=[
-                {
-                    "role": "system",
-                    "content": """You are Pinclick Genie, an expert real estate sales consultant.
-                    
-Your role is to handle customer objections and FAQs with empathy and persuasive responses.
-
-Guidelines:
-1. For BUDGET objections: Explain EMI options, value appreciation potential, hidden costs of renting
-2. For LOCATION objections: Highlight connectivity improvements, upcoming infrastructure, lifestyle benefits
-3. For UNDER-CONSTRUCTION objections: Explain price advantage (10-15% less), customization options, payment flexibility
-4. For MEETING requests: Emphasize personalized service, site visits, detailed walkthroughs
-5. For PINCLICK value: Highlight end-to-end support, verified projects, negotiation assistance
-
-ALWAYS end with a soft call-to-action suggesting a meeting or site visit.
-Keep responses concise but persuasive (100-150 words max).
-Use friendly emojis where appropriate."""
-                },
-                {
-                    "role": "user",
-                    "content": faq.question
-                }
-            ],
-            model='gpt-4o-mini'
-        ).choices[0].message.content
+        response=generate_faq_response(faq.question)
     )
     
     logger.info("Created brigade.faq table with computed response column")
