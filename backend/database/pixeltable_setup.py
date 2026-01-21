@@ -5,6 +5,8 @@ Updated for Pixeltable v0.3+ API.
 """
 
 import pixeltable as pxt
+from pixeltable.iterators import DocumentSplitter
+import openai
 from typing import Optional
 import logging
 import os
