@@ -13,18 +13,32 @@ import asyncio
 import json
 import os
 import re
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from utils.geolocation_utils import get_coordinates, calculate_distance
 from typing import Callable
+from functools import lru_cache
+import hashlib
 
 logger = logging.getLogger(__name__)
 
 # Thread pool for Pixeltable queries (avoids uvloop conflict)
 _executor = ThreadPoolExecutor(max_workers=4)
 
+# Query timeout configuration (in seconds)
+QUERY_TIMEOUT = 10  # Maximum time for a single database query
+TOTAL_TIMEOUT = 15  # Maximum total time for entire search operation
+
 MOCK_DATA_PATH = os.path.join(os.path.dirname(__file__), '../data/seed_projects.json')
 
+# Simple in-memory cache for all projects (refreshed periodically)
+_all_projects_cache = {
+    "data": None,
+    "timestamp": 0,
+    "ttl": 300  # 5 minutes cache
+}
 
+
+@lru_cache(maxsize=1000)
 def parse_configuration_pricing(config_str: str) -> List[Dict[str, Any]]:
     """
     Parse configuration string to extract BHK and pricing per unit type.
@@ -149,7 +163,7 @@ class HybridRetrievalService:
     ) -> Dict[str, Any]:
         """
         Search projects using extracted filters from natural language query.
-        Returns real data from Pixeltable.
+        Returns real data from Pixeltable with timeout protection.
         """
         logger.info(f"Searching for: {query}")
 
@@ -168,56 +182,97 @@ class HybridRetrievalService:
         # Extract filters from query
         if filters is None:
             filters = filter_extractor.extract_filters(query)
-        
+
         logger.info(f"Extracted filters: {filters.model_dump(exclude_none=True)}")
 
-        # Query Pixeltable or Mock Data
-        if self.projects_table:
-            loop = asyncio.get_event_loop()
-            results = await loop.run_in_executor(
-                _executor,
-                self._query_projects_sync,
-                filters,
-                query
-            )
-            search_method = "pixeltable"
-        else:
-            # Synchronous mock query (fast enough)
-            results = self._query_mock_projects_sync(filters, query)
-            search_method = "mock_data"
-        
+        # Query Pixeltable or Mock Data with timeout protection
+        try:
+            if self.projects_table:
+                loop = asyncio.get_event_loop()
+                # Add timeout wrapper to prevent hanging queries
+                results = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        _executor,
+                        self._query_projects_sync,
+                        filters,
+                        query
+                    ),
+                    timeout=TOTAL_TIMEOUT
+                )
+                search_method = "pixeltable"
+            else:
+                # Synchronous mock query (fast enough, no timeout needed)
+                results = self._query_mock_projects_sync(filters, query)
+                search_method = "mock_data"
+
+        except asyncio.TimeoutError:
+            logger.error(f"Query timeout after {TOTAL_TIMEOUT}s for query: {query}")
+            # Fallback to mock data if available
+            if self.mock_projects:
+                logger.info("Falling back to mock data after timeout")
+                results = self._query_mock_projects_sync(filters, query)
+                search_method = "mock_data_fallback"
+            else:
+                return {
+                    "projects": [],
+                    "total_matching_projects": 0,
+                    "filters_used": filters.model_dump(exclude_none=True),
+                    "search_method": "timeout_error",
+                    "error": f"Query timeout after {TOTAL_TIMEOUT}s - please try a simpler search"
+                }
+        except Exception as e:
+            logger.error(f"Error in search_with_filters: {e}", exc_info=True)
+            return {
+                "projects": [],
+                "total_matching_projects": 0,
+                "filters_used": filters.model_dump(exclude_none=True),
+                "search_method": "error",
+                "error": str(e)
+            }
+
         return {
             "projects": results,
             "total_matching_projects": len(results),
             "filters_used": filters.model_dump(exclude_none=True),
-            "search_method": "pixeltable"
+            "search_method": search_method
         }
 
     def _query_projects_sync(self, filters: PropertyFilters, query: str) -> List[Dict[str, Any]]:
-        """Query Pixeltable projects table with filters (runs in thread)."""
+        """Query Pixeltable projects table with filters (runs in thread with caching)."""
         try:
             projects = self.projects_table
             if projects is None:
                 logger.error("Projects table is None - cannot query")
                 return []
-            
-            # First, try to get ALL projects to verify table access
-            try:
-                all_count = len(projects.collect())
-                logger.info(f"Total projects in table: {all_count}")
-            except Exception as count_err:
-                logger.error(f"Cannot access projects table: {count_err}")
-                return []
-            
-            # Start with all projects - simplified query
-            q = projects.select()
-            
-            # Check if query mentions a specific project or developer
-            query_lower = query.lower()
-            
-            # Get all projects first, then filter in Python (more reliable)
-            all_results = projects.collect()
-            logger.info(f"Total projects fetched: {len(all_results)}")
+
+            # Use cached all_projects if available and fresh
+            import time as time_module
+            current_time = time_module.time()
+
+            all_results = None
+            if (_all_projects_cache["data"] is not None and
+                current_time - _all_projects_cache["timestamp"] < _all_projects_cache["ttl"]):
+                all_results = _all_projects_cache["data"]
+                logger.info(f"Using cached projects ({len(all_results)} projects)")
+            else:
+                # Fetch all projects with timeout protection
+                try:
+                    # Get all projects - this is the slow operation
+                    all_results = projects.collect()
+                    logger.info(f"Total projects fetched: {len(all_results)}")
+
+                    # Cache the results
+                    _all_projects_cache["data"] = all_results
+                    _all_projects_cache["timestamp"] = current_time
+
+                except Exception as fetch_err:
+                    logger.error(f"Error fetching projects: {fetch_err}")
+                    # If we have stale cache, use it
+                    if _all_projects_cache["data"] is not None:
+                        logger.warning("Using stale cache due to fetch error")
+                        all_results = _all_projects_cache["data"]
+                    else:
+                        return []
 
             # Convert Pixeltable Row objects to dictionaries to avoid slice errors
             filtered_results = []

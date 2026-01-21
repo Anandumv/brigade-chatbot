@@ -262,12 +262,33 @@ You must understand ANY query format, regardless of how it's written:
 - **Incomplete queries**: "price", "more", "details", "nearby", "what else"
 - **Vague references**: "it", "these", "those", "that one", "the first one", "this project"
 - **Single words**: "yes", "no", "more", "ok", "sure", "thanks"
-- **Mixed languages**: "2 bhk chahiye", "avalon ka price", "citrine ki location"
+- **Mixed languages (Hindi-English/Hinglish)**: "2 bhk chahiye", "avalon ka price", "citrine ki location", "kitna price hai", "kahan pe hai"
 - **Slang/abbreviations**: "2bhk", "3bhk", "rtm", "rera", "emi", "orr"
 - **No question marks**: "show me 2bhk", "avalon price", "tell me about citrine"
 - **Multiple intents**: "show 2bhk and compare with citrine", "price and amenities"
 - **Incomplete sentences**: "lets pitch", "more about", "nearby to"
 - **Follow-ups without context**: "more", "what else", "anything else", "continue"
+
+**MIXED LANGUAGE (HINGLISH) UNDERSTANDING:**
+Common Hindi words in real estate queries and their English meanings:
+- **chahiye** = need/want → "2 bhk chahiye" = "I need 2BHK" (property_search)
+- **ka/ki/ke** = of/the → "avalon ka price" = "price of avalon" (project_facts)
+- **mein/me** = in → "whitefield mein projects" = "projects in whitefield" (property_search)
+- **kahan/kaha** = where → "kahan pe hai" = "where is it" (project_facts if project mentioned, else sales_conversation)
+- **kitna** = how much → "kitna price hai" = "what is the price" (project_facts if project mentioned)
+- **kyun/kyu** = why → "kyun invest kare" = "why should I invest" (sales_conversation)
+- **dikhao/dikhaao** = show → "projects dikhao" = "show projects" (property_search)
+- **batao** = tell → "price batao" = "tell the price" (project_facts)
+- **kaunsa** = which → "kaunsa better hai" = "which is better" (sales_conversation)
+
+**CRITICAL HINGLISH INTENT CLASSIFICATION:**
+- "2 bhk chahiye" → intent: property_search (user wants 2BHK), extraction: {configuration: "2BHK"}
+- "3 bhk chahiye budget 2 crore" → intent: property_search, extraction: {configuration: "3BHK", budget_max: 200}
+- "avalon ka price" → intent: project_facts (asking about Avalon price), extraction: {project_name: "Brigade Avalon", fact_type: "price"}
+- "citrine ki location kahan hai" → intent: project_facts (asking where Citrine is), extraction: {project_name: "Brigade Citrine", fact_type: "location"}
+- "whitefield mein projects" → intent: property_search (searching in Whitefield), extraction: {location: "Whitefield"}
+- "sarjapur mein 2bhk dikhao" → intent: property_search, extraction: {location: "Sarjapur", configuration: "2BHK"}
+- "price kitna hai" (with context) → intent: project_facts (vague query about price), use session context for project_name
 
 **DO NOT rely on keywords or patterns. Understand intent from:**
 1. **Query semantics** (meaning, not words)
@@ -580,7 +601,62 @@ Query: "Too expensive for me"
 }
 ```
 
-Now classify the user's query following these rules. Use GPT understanding to match partial project names, use session context for vague queries, and never lose context. Return ONLY valid JSON, no other text.
+Query: "2 bhk chahiye" (Hindi-English mixed)
+```json
+{
+  "intent": "property_search",
+  "data_source": "database",
+  "confidence": 0.95,
+  "reasoning": "Hindi word 'chahiye' means 'need/want' - user wants to search for 2BHK properties",
+  "extraction": {"configuration": "2BHK"}
+}
+```
+
+Query: "avalon ka price" (Hindi-English mixed)
+```json
+{
+  "intent": "project_facts",
+  "data_source": "database",
+  "confidence": 0.95,
+  "reasoning": "Hindi word 'ka' means 'of' - user asking for price of Avalon project",
+  "extraction": {"project_name": "Brigade Avalon", "fact_type": "price"}
+}
+```
+
+Query: "citrine ki location kahan hai" (Hindi-English mixed)
+```json
+{
+  "intent": "project_facts",
+  "data_source": "database",
+  "confidence": 0.95,
+  "reasoning": "Hindi words 'ki' (of), 'kahan hai' (where is) - user asking where Citrine is located",
+  "extraction": {"project_name": "Brigade Citrine", "fact_type": "location"}
+}
+```
+
+Query: "whitefield mein projects dikhao" (Hindi-English mixed)
+```json
+{
+  "intent": "property_search",
+  "data_source": "database",
+  "confidence": 0.95,
+  "reasoning": "Hindi words 'mein' (in), 'dikhao' (show) - user wants to search for projects in Whitefield",
+  "extraction": {"location": "Whitefield"}
+}
+```
+
+Query: "3 bhk budget 2 crore mein chahiye" (Hindi-English mixed)
+```json
+{
+  "intent": "property_search",
+  "data_source": "database",
+  "confidence": 0.95,
+  "reasoning": "Mixed language search query - 'chahiye' (need), 'mein' (in) - user needs 3BHK under 2 crores",
+  "extraction": {"configuration": "3BHK", "budget_max": 200}
+}
+```
+
+Now classify the user's query following these rules. Use GPT understanding to match partial project names, use session context for vague queries, handle Hindi-English (Hinglish) queries naturally, and never lose context. Return ONLY valid JSON, no other text.
 
 **CRITICAL EXTRACTION REQUIREMENT:**
 If you classify as "project_facts", you MUST include "project_name" in the extraction field. This is MANDATORY, not optional.
