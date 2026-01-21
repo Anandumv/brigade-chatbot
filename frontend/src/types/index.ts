@@ -173,6 +173,13 @@ export interface AssistRequest {
     filters?: QuickFilters;
 }
 
+export interface MatchingUnit {
+    bhk: number;
+    price_cr: number;
+    price_lakhs: number;
+    sqft_range?: string;
+}
+
 export interface CopilotProjectInfo {
     name: string;
     location: string;
@@ -180,6 +187,19 @@ export interface CopilotProjectInfo {
     bhk: string;  // "2BHK, 3BHK"
     amenities: string[];
     status: string;  // "Ready-to-move" / "Under Construction"
+
+    // NEW: Critical missing fields from backend
+    brochure_url?: string;
+    rm_details?: RMDetails;  // {name, contact}
+    registration_process?: string;  // Markdown formatted
+    zone?: string;  // "East Bangalore", "North Bangalore"
+    rera_number?: string;
+    developer?: string;
+    possession_year?: number;
+    possession_quarter?: string;  // "Q1", "Q2", "Q3", "Q4"
+
+    // NEW: Configuration-level filtering transparency
+    matching_units?: MatchingUnit[];  // Which configs match search
 }
 
 export interface CopilotResponse {
@@ -187,6 +207,8 @@ export interface CopilotResponse {
     answer: string[];  // 3-5 bullet points
     pitch_help: string;  // Single call-ready sentence
     next_suggestion: string;  // One-line action
+    coaching_point: string;  // NEW: Real-time sales coaching (mandatory)
+
     // Extended fields for budget relaxation
     relaxation_applied?: boolean;
     relaxation_step?: number;
