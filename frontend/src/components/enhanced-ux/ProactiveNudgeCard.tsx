@@ -94,24 +94,22 @@ export function ProactiveNudgeCard({ nudge, onAction, onDismiss, className = '' 
                 <div className={`${colors.icon} rounded-full p-2 flex-shrink-0`}>
                     {getIcon()}
                 </div>
-                
+
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${colors.badge}`}>
-                            {nudge.priority.toUpperCase()} PRIORITY
-                        </span>
+
                         <span className="text-xs text-gray-500">
                             Smart Suggestion
                         </span>
                     </div>
-                    
+
                     <p className="text-sm text-gray-900 font-medium mb-1">
                         {nudge.message}
                     </p>
-                    
+
                     {getActionButton()}
                 </div>
-                
+
                 {onDismiss && (
                     <button
                         onClick={onDismiss}
