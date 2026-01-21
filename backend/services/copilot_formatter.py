@@ -41,6 +41,9 @@ class CopilotFormatter:
     ) -> CopilotResponse:
         """
         Generate copilot response in strict JSON format.
+        
+        CRITICAL FIX: Always include actual database projects in response.
+        GPT is only used for generating coaching content, NOT for returning projects.
 
         Args:
             query: User query string
@@ -54,7 +57,16 @@ class CopilotFormatter:
         Returns:
             CopilotResponse object (validated Pydantic model)
         """
-        # Prepare payload for GPT
+        # FIX: Always include database projects in response
+        # Choose which projects to return (relaxed takes precedence if available)
+        projects_to_return = relaxed_projects if relaxed_projects else db_projects
+        
+        # Convert database projects to ProjectInfo models FIRST
+        project_infos = self._convert_to_project_infos(projects_to_return or [])
+        
+        logger.info(f"📦 Converting {len(projects_to_return or [])} database projects to response format")
+        
+        # Prepare payload for GPT (for coaching content only)
         payload = {
             "query": query,
             "context": context,
@@ -90,6 +102,11 @@ class CopilotFormatter:
                 f"GPT-4 tokens: {usage.total_tokens} "
                 f"(prompt: {usage.prompt_tokens}, completion: {usage.completion_tokens})"
             )
+            
+            # CRITICAL FIX: Override GPT's projects with actual database projects
+            # GPT should only provide coaching content, not project data
+            json_response['projects'] = project_infos
+            logger.info(f"✅ Injected {len(project_infos)} real database projects into response")
 
             # If budget relaxation was applied, return extended model
             if applied_step and applied_step > 1.0:
@@ -106,12 +123,49 @@ class CopilotFormatter:
 
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse GPT response as JSON: {e}")
-            # Return fallback response
-            return self._fallback_response(query, db_projects or relaxed_projects)
+            # Return fallback response with actual projects
+            return self._fallback_response(query, projects_to_return or [])
 
         except Exception as e:
             logger.error(f"Copilot formatter error: {e}", exc_info=True)
-            return self._fallback_response(query, db_projects or relaxed_projects)
+            return self._fallback_response(query, projects_to_return or [])
+    
+    def _convert_to_project_infos(self, projects: List[Dict[str, Any]]) -> List[ProjectInfo]:
+        """
+        Convert database project dicts to ProjectInfo Pydantic models.
+        
+        Args:
+            projects: List of project dicts from database
+            
+        Returns:
+            List of ProjectInfo models
+        """
+        project_infos = []
+        
+        for proj in projects:
+            try:
+                # Extract amenities - handle different formats
+                amenities = proj.get("amenities", [])
+                if isinstance(amenities, str):
+                    # Split string amenities by comma or newline
+                    amenities = [a.strip() for a in amenities.replace('\n', ',').split(',') if a.strip()]
+                elif not isinstance(amenities, list):
+                    amenities = []
+                
+                project_infos.append(ProjectInfo(
+                    name=proj.get("name") or proj.get("project_name") or "Unknown Project",
+                    location=proj.get("location") or proj.get("locality") or "Location not available",
+                    price_range=self._format_price_range(proj.get("budget_min"), proj.get("budget_max")),
+                    bhk=proj.get("configuration") or proj.get("config_summary") or "Configuration not available",
+                    amenities=amenities[:5],  # Limit to top 5 amenities
+                    status=proj.get("status") or "Status not available"
+                ))
+            except Exception as e:
+                logger.error(f"Failed to convert project to ProjectInfo: {e}")
+                # Continue with other projects
+                continue
+        
+        return project_infos
 
     def _fallback_response(self, query: str, projects: List[Dict[str, Any]]) -> CopilotResponse:
         """
