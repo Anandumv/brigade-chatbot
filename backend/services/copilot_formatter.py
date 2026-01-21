@@ -79,6 +79,11 @@ class CopilotFormatter:
 
             json_response = json.loads(response.choices[0].message.content)
 
+            # Validate coaching_point is present
+            if 'coaching_point' not in json_response or not json_response['coaching_point']:
+                logger.warning("GPT response missing coaching_point, adding default")
+                json_response['coaching_point'] = "Listen actively and address customer's specific needs with relevant project details"
+
             # Log token usage
             usage = response.usage
             logger.info(
@@ -138,7 +143,8 @@ class CopilotFormatter:
                 "Let me know if you need more information"
             ],
             pitch_help="These projects offer competitive pricing and good amenities for the location",
-            next_suggestion="Ask about specific project details or schedule a site visit"
+            next_suggestion="Ask about specific project details or schedule a site visit",
+            coaching_point="Present these options confidently and ask which features matter most to the customer"
         )
 
     def _format_price_range(self, min_price: Optional[int], max_price: Optional[int]) -> str:

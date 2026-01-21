@@ -12,6 +12,7 @@ import logging
 import asyncio
 import json
 import os
+import re
 from concurrent.futures import ThreadPoolExecutor
 from utils.geolocation_utils import get_coordinates, calculate_distance
 from typing import Callable
@@ -22,6 +23,69 @@ logger = logging.getLogger(__name__)
 _executor = ThreadPoolExecutor(max_workers=4)
 
 MOCK_DATA_PATH = os.path.join(os.path.dirname(__file__), '../data/seed_projects.json')
+
+
+def parse_configuration_pricing(config_str: str) -> List[Dict[str, Any]]:
+    """
+    Parse configuration string to extract BHK and pricing per unit type.
+
+    Example input:
+    "{2BHK, 1249 - 1310, 1.35 Cr* }, {3 BHK + 2 T, 1539 - 1590, 1.65 Cr* }"
+
+    Returns:
+    [
+        {"bhk": 2, "price_cr": 1.35, "sqft_range": "1249-1310"},
+        {"bhk": 3, "price_cr": 1.65, "sqft_range": "1539-1590"}
+    ]
+    """
+    if not config_str or not isinstance(config_str, str):
+        return []
+
+    units = []
+
+    # Split by }, { to get individual configurations
+    # Handle both {}, and }, { as separators
+    configs = re.split(r'\},\s*\{', config_str.strip('{}'))
+
+    for config in configs:
+        try:
+            # Extract BHK: look for "2BHK" or "3 BHK" etc.
+            bhk_match = re.search(r'(\d+)\s*BHK', config, re.IGNORECASE)
+            if not bhk_match:
+                continue
+            bhk = int(bhk_match.group(1))
+
+            # Extract price: look for "1.35 Cr" or "1.35Cr" or "135 L"
+            price_cr = None
+            price_match_cr = re.search(r'(\d+\.?\d*)\s*Cr', config, re.IGNORECASE)
+            price_match_l = re.search(r'(\d+\.?\d*)\s*L', config, re.IGNORECASE)
+
+            if price_match_cr:
+                price_cr = float(price_match_cr.group(1))
+            elif price_match_l:
+                # Convert lakhs to crores
+                lakhs = float(price_match_l.group(1))
+                price_cr = lakhs / 100.0
+
+            if price_cr is None:
+                continue
+
+            # Extract sqft range (optional)
+            sqft_match = re.search(r'(\d+\s*-\s*\d+|\d+)', config)
+            sqft_range = sqft_match.group(1).strip() if sqft_match else None
+
+            units.append({
+                "bhk": bhk,
+                "price_cr": price_cr,
+                "price_lakhs": price_cr * 100,  # Also provide in lakhs for easier comparison
+                "sqft_range": sqft_range
+            })
+
+        except (ValueError, AttributeError) as e:
+            logger.warning(f"Failed to parse configuration segment '{config}': {e}")
+            continue
+
+    return units
 
 class HybridRetrievalService:
     """
@@ -259,6 +323,67 @@ class HybridRetrievalService:
                 filtered_results = [r for r in filtered_results 
                                    if r.get('possession_year') and str(r.get('possession_year')).isdigit() and int(r.get('possession_year')) <= target_year]
                 logger.info(f"After possession filter <= {target_year}: {len(filtered_results)} results")
+
+            # Apply Bedroom Filter with Configuration-Level Budget Check
+            matching_results = []
+            if filters.bedrooms:
+                target_bhks = filters.bedrooms # List[int], e.g. [2, 3]
+
+                # If budget is also specified, do configuration-level filtering
+                if filters.max_price_inr:
+                    max_cr = filters.max_price_inr / 10000000  # Convert INR to Cr
+
+                    for r in filtered_results:
+                        # Parse configuration to get unit-level pricing
+                        config_str = r.get('configuration', '')
+                        units = parse_configuration_pricing(config_str)
+
+                        # Check if project has ANY unit matching BOTH BHK and budget
+                        matching_units = [
+                            u for u in units
+                            if u['bhk'] in target_bhks and u['price_cr'] <= max_cr
+                        ]
+
+                        if matching_units:
+                            # Annotate project with matching configurations for transparency
+                            r['matching_units'] = matching_units
+                            r['_all_units'] = units  # For debugging/transparency
+                            matching_results.append(r)
+
+                    logger.info(f"After configuration-level BHK {target_bhks} + budget {max_cr}Cr filter: {len(matching_results)} projects with matching units")
+                else:
+                    # BHK filter only (no budget) - use existing simple logic
+                    def check_bhk(r):
+                        # Project config usually string: "2, 3 BHK" or "2BHK"
+                        conf = str(r.get('configuration', '')).lower().strip()
+                        for bhk in target_bhks:
+                            if f"{bhk}" in conf: # Simple substring check: "2" in "2, 3 BHK"
+                                return True
+                        return False
+
+                    matching_results = [r for r in filtered_results if check_bhk(r)]
+                    logger.info(f"After bedroom filter {target_bhks}: {len(matching_results)} strict matches")
+                
+                # SALES LOGIC: Add better-value configurations (N+1 BHK if within budget)
+                # We reuse the helper method _add_better_value_configurations
+                better_value_results = self._add_better_value_configurations(
+                    all_projects=filtered_results,
+                    requested_bedrooms=target_bhks,
+                    max_budget_lakhs=filters.max_price_inr / 100000 if filters.max_price_inr else None,
+                    normalize_func=lambda s: str(s).lower().strip()
+                )
+                
+                # Combine matching and better-value, avoiding duplicates
+                seen_ids = {r.get('project_id') or r.get('name') for r in matching_results}
+                for bv in better_value_results:
+                    bv_id = bv.get('project_id') or bv.get('name')
+                    if bv_id not in seen_ids:
+                        bv['_better_value'] = True  # Mark as better value suggestion
+                        matching_results.append(bv)
+                        seen_ids.add(bv_id)
+                
+                filtered_results = matching_results
+                logger.info(f"After adding better value options: {len(filtered_results)} total results")
 
             # Apply Area (Sqft) filter
             if filters.min_area_sqft:

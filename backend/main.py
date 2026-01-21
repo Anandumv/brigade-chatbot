@@ -1006,7 +1006,19 @@ async def chat_query(request: ChatQueryRequest):
                 logger.warning(f"Could not save project to last_shown_projects: {e}")
         
         logger.info(f"GPT Classification: intent={intent}, data_source={data_source}, confidence={gpt_confidence}")
-        
+
+        # VALIDATION: Fix overly aggressive project name extraction
+        # If intent is project_facts but query has search keywords, override to property_search
+        if intent == "project_facts" and project_name:
+            search_keywords = ["show", "find", "list", "options", "all", "available", "projects", "good", "best", "what are"]
+            query_lower = query.lower()
+            if any(kw in query_lower for kw in search_keywords):
+                logger.info(f"🔧 Overriding project_facts → property_search (search keywords detected in '{query}')")
+                logger.info(f"   Detected project_name '{project_name}' but query suggests area search, not project-specific query")
+                intent = "property_search"
+                project_name = None  # Clear incorrect extraction
+                extraction['project_name'] = None  # Clear from extraction as well
+
         # SALES LOGIC: Apply intelligent routing based on intent and context
         # Handle special cases with sales logic
         if comprehensive_context:

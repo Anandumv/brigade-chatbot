@@ -4,7 +4,7 @@ Strict JSON-only response format with bullets for reasoning.
 """
 
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 
 class ProjectInfo(BaseModel):
@@ -18,6 +18,19 @@ class ProjectInfo(BaseModel):
     bhk: str = Field(..., description="BHK types as comma-separated string: '2BHK, 3BHK'")
     amenities: List[str] = Field(default_factory=list, description="List of amenities from database")
     status: str = Field(..., description="'Ready-to-move' or 'Under Construction'")
+
+    # NEW: Critical missing fields from database
+    brochure_url: Optional[str] = Field(None, description="PDF brochure download link")
+    rm_details: Optional[Dict[str, str]] = Field(None, description="Relationship manager: {name, contact}")
+    registration_process: Optional[str] = Field(None, description="Registration steps (markdown formatted)")
+    zone: Optional[str] = Field(None, description="Zone: 'East Bangalore', 'North Bangalore', etc.")
+    rera_number: Optional[str] = Field(None, description="RERA registration number")
+    developer: Optional[str] = Field(None, description="Developer/builder name")
+    possession_year: Optional[int] = Field(None, description="Expected possession year")
+    possession_quarter: Optional[str] = Field(None, description="Possession quarter: 'Q1', 'Q2', 'Q3', 'Q4'")
+
+    # Optional: Configuration-level details (for budget filtering transparency)
+    matching_units: Optional[List[Dict[str, Any]]] = Field(None, description="Which configurations match the search criteria")
 
     class Config:
         json_schema_extra = {
@@ -65,6 +78,11 @@ class CopilotResponse(BaseModel):
         description="One-line action suggestion (e.g., 'Ask about possession timeline')"
     )
 
+    coaching_point: str = Field(
+        ...,
+        description="Real-time coaching for sales rep (1-2 sentences, actionable guidance)"
+    )
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -84,7 +102,8 @@ class CopilotResponse(BaseModel):
                     "This location is popular for IT professionals working in nearby tech parks"
                 ],
                 "pitch_help": "Sarjapur offers excellent connectivity to major IT hubs with ongoing metro expansion plans",
-                "next_suggestion": "Ask if proximity to tech parks or schools is more important"
+                "next_suggestion": "Ask if proximity to tech parks or schools is more important",
+                "coaching_point": "Acknowledge the commute concern, then pivot to connectivity improvements and lifestyle benefits nearby"
             }
         }
 

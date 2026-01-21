@@ -145,14 +145,19 @@ def classify_intent_gpt_first(
             if projects_list:
                 context_info += f"\n**Available Projects (sample):** {', '.join(projects_list[:30])}"  # Show first 30 in context
                 context_info += f"\n**Total Available Projects:** {len(session_state['available_projects'])}"
-                context_info += "\n**CRITICAL TYPO HANDLING - READ CAREFULLY:**"
-                context_info += "\n- Match project names from query (even with typos) to the EXACT names in the list above"
-                context_info += "\n- Examples: Query 'avalon prise' → Match 'avalon' to 'Brigade Avalon' from list, 'prise' → 'price'"
-                context_info += "\n- Examples: Query 'citrine ammenities' → Match 'citrine' to 'Brigade Citrine' from list, 'ammenities' → 'amenities'"
-                context_info += "\n- Examples: Query 'brigade avlon' → Match 'avlon' to 'Brigade Avalon' from list (typo handling)"
+                context_info += "\n**PROJECT NAME EXTRACTION RULES - READ CAREFULLY:**"
+                context_info += "\n- Extract project_name ONLY if the project is EXPLICITLY mentioned by name in the query"
+                context_info += "\n- DO NOT extract project_name if query only mentions a location/area that happens to match a project's location"
+                context_info += "\n- Examples of CORRECT extraction:"
+                context_info += "\n  * 'tell me about Brigade Citrine' → Extract 'Brigade Citrine' ✓"
+                context_info += "\n  * 'avalon price' → Extract 'Brigade Avalon' (partial name match) ✓"
+                context_info += "\n  * 'brigade avlon rera' → Extract 'Brigade Avalon' (typo handling) ✓"
+                context_info += "\n- Examples of INCORRECT extraction (area searches, NOT project-specific):"
+                context_info += "\n  * 'show me projects in Sarjapur' → NO project_name extraction ✗ (area search)"
+                context_info += "\n  * 'find flats in Whitefield' → NO project_name extraction ✗ (area search)"
+                context_info += "\n  * 'what are good projects in ORR' → NO project_name extraction ✗ (area search)"
                 context_info += "\n- FACT TYPE TYPOS: 'prise' → 'price', 'ammenities' → 'amenities', 'rera numbr' → 'rera_number'"
-                context_info += "\n- **MANDATORY**: If query contains ANY word that matches (even partially) a project name in the list above, you MUST extract project_name in the extraction field"
-                context_info += "\n- **MANDATORY**: Use EXACT project name from the list above (e.g., 'Brigade Avalon', not 'avalon' or 'Avalon')"
+                context_info += "\n- Use EXACT project name from the list above (e.g., 'Brigade Avalon', not 'avalon' or 'Avalon')"
             else:
                 logger.warning("available_projects list is empty or has no names")
         
@@ -346,10 +351,16 @@ If query is ambiguous, use context to infer most likely intent. Never ask for cl
    - data_source: "database"
 
 2. **PROJECT_FACTS** (→ database):
-   - User asks about a SPECIFIC PROJECT (matched from available_projects or session context)
+   - User asks about a SPECIFIC PROJECT by name (explicitly mentioned in query or from session context)
    - Factual questions about project data IN database: "price", "rera", "possession", "amenities", "configuration", "status"
    - Vague queries with project context: "price", "rera", "amenities", "details", "more" (when asking about DB fields)
-   - If project_name is extracted (from query or session), classify as project_facts
+   - **CRITICAL**: Only classify as project_facts if user explicitly names the project OR refers to a project from conversation history
+   - **DO NOT classify as project_facts** if query is a general area search like "show me projects in Sarjapur"
+   - Examples:
+     * ✓ "Tell me about Brigade Citrine" → project_facts (explicit project mention)
+     * ✓ "What's the price?" (after discussing Brigade Citrine) → project_facts (context)
+     * ✗ "Show me projects in Sarjapur" → property_search (area search, NOT project_facts)
+     * ✗ "Find 2BHK in Whitefield" → property_search (area search, NOT project_facts)
    - **EXCEPTION**: Distance/connectivity questions → route to GPT even if project mentioned
    - data_source: "database"
 
