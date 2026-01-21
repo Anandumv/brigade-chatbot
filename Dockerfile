@@ -1,4 +1,4 @@
-FROM python:3.9-slim
+FROM python:3.11-slim
 
 # Install FFmpeg and build dependencies
 RUN apt-get update && apt-get install -y \
@@ -18,9 +18,18 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy requirements first for caching
+# Upgrade pip first (separate layer)
+RUN pip install --no-cache-dir --upgrade pip
+
+# Install heavy dependencies first with prefer-binary (caches spacy/numpy builds)
+# Explicitly install spacy to use binary wheels if available
+RUN pip install --no-cache-dir --prefer-binary spacy>=3.0.0 numpy==1.26.3
+
+# Copy requirements file
 COPY backend/requirements.txt .
-RUN pip install --upgrade pip && pip install -r requirements.txt && pip install pixeltable==0.2.30
+
+# Install remaining requirements
+RUN pip install --no-cache-dir --prefer-binary -r requirements.txt && pip install --no-cache-dir pixeltable==0.2.30
 
 # Copy application code
 COPY backend/ .
