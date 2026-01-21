@@ -130,6 +130,7 @@ export interface Message {
     user_profile?: import('./enhanced-ux').UserProfileData;
     // Phase 3: Sales Coaching
     coaching_prompt?: CoachingPrompt;
+    coaching_point?: string;
 }
 
 export interface QueryAnalytics {
