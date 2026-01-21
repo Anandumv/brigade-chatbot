@@ -816,6 +816,17 @@ async def admin_refresh_projects(x_admin_key: str = Header(None)):
             with open(seed_file, 'r') as f:
                 seed_data = json.load(f)
             projects.insert(seed_data)
+
+            # CRITICAL: Clear hybrid_retrieval cache after refresh
+            # This ensures fresh queries will fetch the new data
+            try:
+                from services.hybrid_retrieval import _all_projects_cache
+                _all_projects_cache["data"] = None
+                _all_projects_cache["timestamp"] = 0
+                logger.info("✅ Cache cleared after admin refresh")
+            except Exception as cache_err:
+                logger.warning(f"Could not clear cache: {cache_err}")
+
             return {"status": "success", "message": f"Loaded {len(seed_data)} projects"}
         else:
             return {"status": "error", "message": f"Seed file not found: {seed_file}"}
