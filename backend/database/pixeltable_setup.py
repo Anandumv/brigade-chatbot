@@ -10,6 +10,7 @@ from openai import OpenAI
 from typing import Optional, List
 import logging
 import os
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -104,16 +105,14 @@ def _table_exists(name: str) -> bool:
 def initialize_pixeltable():
     """Initialize Pixeltable with required tables and indexes."""
     
-    # Check for external DB configuration (Render/Production)
-    db_url = os.getenv("PIXELTABLE_DB_URL")
+    # Check for external DB configuration (Render/Production/Railway)
+    # Railway provides DATABASE_URL, Pixeltable uses PIXELTABLE_DB_URL
+    db_url = os.getenv("PIXELTABLE_DB_URL") or os.getenv("DATABASE_URL")
     if db_url:
+        os.environ["PIXELTABLE_DB_URL"] = db_url
         logger.info(f"Initializing Pixeltable with external DB: {db_url}")
-        # Note: If Pixeltable officially supports this via env var, it might happen automatically.
-        # But explicit init is safer if the library allows it. 
-        # Assuming standard pxt configuration or init pattern.
-        # If pxt.init() isn't standard, we rely on the env var being picked up by the library
-        # or we set it in os.environ before import if needed.
-        pass 
+    else:
+        logger.info("Initializing Pixeltable with local DB (default)") 
     
     # Enable logging
     logging.getLogger('pixeltable').setLevel(logging.INFO)
@@ -299,83 +298,23 @@ def _seed_projects_data(projects_table):
         logger.info(f"Projects table already has {count} entries, skipping seed.")
         return
 
-    seed_projects = [
-        {
-            "project_id": "brigade-citrine",
-            "name": "Brigade Citrine",
-            "developer": "Brigade Group",
-            "location": "Budigere Cross",
-            "configuration": "2BHK, 3BHK, 4BHK",
-            "budget_min": 120,
-            "budget_max": 250,
-            "possession_year": 2027,
-            "possession_quarter": "Q4",
-            "status": "Under Construction",
-            "rera_number": "PRM/KA/RERA/1251/446/PR/230522/006437",
-            "description": "Luxury apartments in Budigere Cross with forest views.",
-            "amenities": "['Clubhouse', 'Swimming Pool', 'Gym', 'Forest Trail']",
-            "usp": "Forest themed luxury living",
-            "latitude": 13.0560,
-            "longitude": 77.7470
-        },
-        {
-            "project_id": "brigade-avalon",
-            "name": "Brigade Avalon",
-            "developer": "Brigade Group",
-            "location": "Devanahalli",
-            "configuration": "1BHK, 2BHK, 3BHK",
-            "budget_min": 65,
-            "budget_max": 150,
-            "possession_year": 2026,
-            "possession_quarter": "Q2",
-            "status": "Under Construction",
-            "rera_number": "PRM/KA/RERA/1250/303/PR/200618/003456",
-            "description": "Apartments within Brigade Orchards integrated township.",
-            "amenities": "['Sports Arena', 'School', 'Hospital', 'Retail']",
-            "usp": "Integrated township living near Airport",
-            "latitude": 13.2484,
-            "longitude": 77.7137
-        },
-        {
-            "project_id": "brigade-oasis",
-            "name": "Brigade Oasis",
-            "developer": "Brigade Group",
-            "location": "Devenahalli",
-            "configuration": "Plots",
-            "budget_min": 80,
-            "budget_max": 200,
-            "possession_year": 2024,
-            "possession_quarter": "Ready",
-            "status": "Ready to Move",
-            "rera_number": "PRM/KA/RERA/1250/303/PR/220928/005280",
-            "description": "Premium plotted development near Airport.",
-            "amenities": "['Landscaped Gardens', 'Underground Utilities', 'Clubhouse']",
-            "usp": "Premium plots with great appreciation potential",
-            "latitude": 13.2500,
-            "longitude": 77.7150
-        },
-        {
-            "project_id": "brigade-calista",
-            "name": "Brigade Calista",
-            "developer": "Brigade Group",
-            "location": "Budigere Cross",
-            "configuration": "1.5BHK, 2BHK, 3BHK",
-            "budget_min": 75,
-            "budget_max": 140,
-            "possession_year": 2027,
-            "possession_quarter": "Q1",
-            "status": "Under Construction",
-            "rera_number": "PRM/KA/RERA/1251/446/PR/230302/005763",
-            "description": "Vibrant community living with focus on green spaces.",
-            "amenities": "['Grand Central Courtyard', 'Eco-friendly features', 'Sports']",
-            "usp": "Green living with central courtyard",
-            "latitude": 13.0580,
-            "longitude": 77.7490
-        }
-    ]
-    
-    projects_table.insert(seed_projects)
-    logger.info(f"Seeded {len(seed_projects)} projects into brigade.projects table")
+    # Load from JSON file instead of hardcoded list
+    try:
+        # Path to backend/data/seed_projects.json
+        # This file is in backend/database/pixeltable_setup.py -> ../../data/seed_projects.json
+        json_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'seed_projects.json')
+        
+        if os.path.exists(json_path):
+            with open(json_path, 'r') as f:
+                seed_projects = json.load(f)
+            
+            projects_table.insert(seed_projects)
+            logger.info(f"Seeded {len(seed_projects)} projects from {json_path}")
+        else:
+            logger.warning(f"Seed file not found at {json_path}, skipping seed.")
+            
+    except Exception as e:
+        logger.error(f"Failed to seed projects from JSON: {e}")
 
 
 def get_projects_table():
