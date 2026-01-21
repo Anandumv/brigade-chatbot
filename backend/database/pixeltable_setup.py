@@ -24,7 +24,7 @@ def generate_faq_response(question: str) -> str:
             messages=[
                 {
                     "role": "system",
-                    "content": \"\"\"You are Pinclick Genie, an expert real estate sales consultant.
+                    "content": """You are Pinclick Genie, an expert real estate sales consultant.
                     
 Your role is to handle customer objections and FAQs with empathy and persuasive responses.
 
@@ -37,7 +37,7 @@ Guidelines:
 
 ALWAYS end with a soft call-to-action suggesting a meeting or site visit.
 Keep responses concise but persuasive (100-150 words max).
-Use friendly emojis where appropriate.\"\"\"
+Use friendly emojis where appropriate."""
                 },
                 {
                     "role": "user",
