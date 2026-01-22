@@ -21,32 +21,81 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+
+
+# Adapter for Redis Dict -> ConversationSession object
+class SessionAdapter:
+    def __init__(self, ctx: dict):
+        self.session_id = ctx.get("call_id", "unknown")
+        self.messages = ctx.get("messages", [])
+        self.last_shown_projects = ctx.get("last_results", [])
+        self.current_filters = ctx.get("last_filters", {})
+        self.interested_projects = ctx.get("interested_projects", [])
+        self.objections_raised = ctx.get("objections_raised", [])
+        self.last_topic = ctx.get("last_topic")
+        self.conversation_phase = ctx.get("conversation_phase")
+
+# 🆕 Inject Sales Conversation Logic
+async def _handle_sales_intervention(query: str, ctx: dict) -> Optional[CopilotResponse]:
+    """Check if query needs Sales Coach intervention and return response if so."""
+    from services.sales_conversation import sales_conversation
+    from services.gpt_sales_consultant import generate_consultant_response
+    
+    if not sales_conversation.should_handle(query):
+        return None
+        
+    response_text, intent, fallback, actions = sales_conversation.handle_sales_query(query)
+    
+    if fallback:
+        # Route to GPT Consultant (Sales Coach)
+        logger.info(f"🚀 Routing to Sales Coach (Intent: {intent})")
+        session_obj = SessionAdapter(ctx)
+        coach_response = await generate_consultant_response(
+            query=query,
+            session=session_obj,
+            intent=intent
+        )
+        
+        # Convert text block to bullets (heuristic split)
+        bullets = [line.strip().lstrip('-•').strip() for line in coach_response.split('\n') if line.strip() and (line.strip().startswith('-') or line.strip().startswith('•') or line[0].isdigit())]
+        if not bullets:
+            bullets = [coach_response] # Fallback if no bullets found
+            
+        return CopilotResponse(
+            projects=[], # No specific project focus for general advice
+            answer=bullets[:5], # output max 5 bullets
+            pitch_help="Read the script above to the client.",
+            next_suggestion="Ask: 'Does that make sense for your investment goals?'",
+            coaching_point="Use the 'Cost of Waiting' to create urgency." if "budget" in str(intent) else "Focus on value over price."
+        )
+        
+    elif response_text:
+         # Static response (e.g. scheduling)
+         return CopilotResponse(
+            projects=[],
+            answer=[line.strip() for line in response_text.split('\n') if line.strip()],
+            pitch_help="Coordinate the meeting time.",
+            next_suggestion="Confirm the slot.",
+            coaching_point="Lock in the meeting immediately."
+         )
+         
+    return None
+
 @router.post("/", response_model=CopilotResponse)
 async def assist(request: AssistRequest):
     """
     Main /assist endpoint for Sales Copilot.
-
-    Workflow:
-    1. Load context from Redis (call_id)
-    2. Classify intent with GPT
-    3. Extract entities (project, budget, location)
-    4. Merge filters (request overrides context)
-    5. Query database with filters
-    6. Apply budget relaxation if no results
-    7. Format response with GPT (strict JSON + bullets)
-    8. Update context in Redis
-
-    Args:
-        request: AssistRequest (call_id, query, filters)
-
-    Returns:
-        CopilotResponse (projects, answer bullets, pitch_help, next_suggestion)
     """
     try:
         # 1. Load context from Redis
         redis_manager = get_redis_context_manager()
         ctx = redis_manager.load_context(request.call_id)
         logger.info(f"📥 Loaded context for call_id={request.call_id}")
+
+        # 🆕 CHECK SALES INTERVENTION FIRST
+        intervention = await _handle_sales_intervention(request.query, ctx)
+        if intervention:
+            return intervention
 
         # 2. Classify intent with GPT
         # Pass ctx as comprehensive_context (not conversation_history which expects List[Dict])
