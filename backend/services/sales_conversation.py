@@ -400,14 +400,16 @@ class SalesConversationHandler:
                 "very costly", "high price", "beyond budget", "over my budget",
                 "budget is less", "can't pay", "cannot pay", "not in budget",
                 "price is high", "expensive", "costly", "unaffordable",
-                "out of budget", "exceeds budget", "beyond my budget", "price too high"
+                "out of budget", "exceeds budget", "beyond my budget", "price too high",
+                "budget is too high", "reduce price", "lower price", "best price",
+                "discount", "negotiate"
             ],
             SalesIntent.OBJECTION_LOCATION: [
                 "don't like this area", "prefer other area", "wrong location",
                 "too far", "not convenient", "location issue", "far away",
                 "want different location", "area is not good", "location is bad",
                 "far from office", "far from work", "commute issue", "long commute",
-                "distance is too much", "too far from"
+                "distance is too much", "too far from", "location problem"
             ],
             SalesIntent.OBJECTION_POSSESSION: [
                 "need immediate", "can't wait", "cannot wait", "want now",
@@ -415,14 +417,15 @@ class SalesConversationHandler:
                 "2027 is too far", "2028 is too far", "possession too late", 
                 "need sooner", "can't wait till", "cannot wait till", 
                 "immediate need", "need immediately", "urgently need",
-                "possession is too late", "too long to wait"
+                "possession is too late", "too long to wait", "move in date"
             ],
             SalesIntent.OBJECTION_UNDER_CONSTRUCTION: [
                 "don't trust construction", "scared of delays", "fear of delay",
                 "what if delayed", "construction risk", "not comfortable with construction",
                 "want ready made", "ready only", "want only ready",
                 "no under construction", "completed only", "only completed",
-                "risks of under construction", "worry about delays", "concerned about delays"
+                "risks of under construction", "worry about delays", "concerned about delays",
+                "construction delay"
             ]
         }
     
@@ -498,13 +501,15 @@ class SalesConversationHandler:
         
         actions = SUGGESTED_ACTIONS.get(intent, [])
         
-        # Handle FAQ intents
+        # Handle FAQ intents - NOW ROUTED TO GPT FOR ADVISORY
         if intent in FAQ_RESPONSES:
-            return FAQ_RESPONSES[intent], intent, False, actions
+            # return FAQ_RESPONSES[intent], intent, False, actions  <-- OLD STATIC WAY
+            return "", intent, True, actions # Fallback to GPT Consultant
         
-        # Handle objection intents
+        # Handle objection intents - NOW ROUTED TO GPT FOR ADVISORY
         if intent in OBJECTION_RESPONSES:
-            return OBJECTION_RESPONSES[intent], intent, False, actions
+            # return OBJECTION_RESPONSES[intent], intent, False, actions <-- OLD STATIC WAY
+            return "", intent, True, actions # Fallback to GPT Consultant
         
         # Handle meeting/visit requests
         if intent == SalesIntent.REQUEST_MEETING:

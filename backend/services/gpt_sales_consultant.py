@@ -196,12 +196,28 @@ def determine_conversation_goal(intent: str, query: str, session: ConversationSe
             return "Continue the property search conversation naturally"
 
     # Intent-based goals
-    if intent == "sales_faq":
-        return "Answer the user's question about the home buying process, financing, or services"
+    if intent == "sales_faq" or intent.startswith("faq_"):
+        if intent == "faq_budget_stretch":
+            return "Act as a Sales Manager. Give the agent 4-5 killer bullet points to convince the client to stretch their budget. Focus on ROI, lifestyle upgrade, and 'cost of waiting'. Format as a script."
+        elif intent == "faq_other_location":
+            return "Act as a Sales Manager. Give the agent 3 arguments to convince the client to consider this alternate location (growth corridor, better appreciation, infrastructure). Format as a script."
+        elif intent == "faq_under_construction":
+             return "Act as a Sales Manager. Provide a script explaining why 'Under Construction' is a better investment (lower entry price, appreciation during build). Address risk anxiety."
+        else:
+            return "Answer the user's question about the home buying process, financing, or services with expert authority."
 
-    elif intent == "sales_objection":
-        objection_type = detect_objection_type(query)  # budget, location, possession, trust
-        return f"Handle the user's {objection_type} concern persuasively without being pushy"
+    elif intent == "sales_objection" or intent.startswith("objection_"):
+        objection_type = detect_objection_type(query) 
+        if intent == "objection_budget" or objection_type == "budget":
+            return "Handle the 'Price too high' objection. Script a response focusing on Value vs Price, EMI breakdown, or future appreciation. Be firm but empathetic."
+        elif intent == "objection_location" or objection_type == "location":
+             return "Handle the 'Location is far' objection. Script a response framing the distance as 'peaceful vs congested' or highlighting upcoming connectivity (Metro/Roads)."
+        elif intent == "objection_possession" or objection_type == "possession":
+             return "Handle the 'Possession too late' objection. Script a response about how buying early saves money and ensures better inventory selection."
+        elif intent == "objection_trust" or objection_type == "trust":
+             return "Handle the 'Trust/RERA' objection. Script a response highlighting the Developer's track record and RERA compliance."
+        else:
+            return f"Handle the user's {objection_type} concern persuasively. Provide a call-ready script."
 
     elif intent == "more_info_request":
         # Check if about specific project or general
