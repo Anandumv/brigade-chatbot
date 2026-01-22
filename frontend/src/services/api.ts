@@ -130,9 +130,11 @@ class ApiService {
     }
 
     // Project endpoints
-    async getProjects(): Promise<ProjectInfo[]> {
+    async getProjects(userId: string = 'guest'): Promise<ProjectInfo[]> {
         try {
-            const response = await this.client.get<ProjectInfo[]>('/api/projects');
+            const response = await this.client.get<ProjectInfo[]>('/api/projects', {
+                params: { user_id: userId }
+            });
             return response.data;
         } catch (error) {
             // Return mock projects if API fails

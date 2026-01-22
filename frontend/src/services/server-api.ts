@@ -5,7 +5,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export async function getProjectsServer(): Promise<ProjectInfo[]> {
     try {
-        const res = await fetch(`${API_BASE}/api/projects`, {
+        const res = await fetch(`${API_BASE}/api/projects?user_id=server_admin`, {
             next: { revalidate: 3600 }, // Cache for 1 hour
             headers: {
                 'Content-Type': 'application/json',

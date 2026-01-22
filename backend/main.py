@@ -2718,7 +2718,7 @@ How can I assist you today?"""
 
 
 @app.get("/api/projects", response_model=List[ProjectInfo])
-async def get_projects(user_id: str):
+async def get_projects(user_id: str = "guest"):
     """
     Get list of projects accessible by user.
 
