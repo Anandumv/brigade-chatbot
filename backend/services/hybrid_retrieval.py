@@ -329,11 +329,15 @@ class HybridRetrievalService:
                     filtered_results = strict_matches
                     logger.info(f"After strict locality filter '{filters.locality}': {len(filtered_results)} results (location/address matches only)")
                 else:
-                    # Only if no strict matches found, include description matches as fallback
-                    # This handles cases like "near Jakkur" where location might not be exact
-                    filtered_results = [r for r in filtered_results 
-                                       if locality_lower in str(r.get('description', '')).lower()]
-                    logger.info(f"After broad locality filter '{filters.locality}': {len(filtered_results)} results (description matches only - no strict matches found)")
+                    # If no strict locality matches, check if we have zone filtering
+                    # If zone is set (auto-inferred or explicit), rely on that instead of returning empty
+                    if filters.area:
+                        logger.info(f"No strict locality matches for '{filters.locality}', but zone '{filters.area}' is set - relying on zone filtering")
+                        # Don't filter by locality, zone filter already applied above
+                    else:
+                        # No zone either - return empty to avoid false positives
+                        filtered_results = []
+                        logger.info(f"After strict locality filter '{filters.locality}': 0 results (no zone fallback available)")
             
             # Apply developer filter - search in name and builder
             if filters.developer_name and filters.developer_name.strip():

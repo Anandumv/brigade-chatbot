@@ -193,23 +193,118 @@ class FilterExtractor:
             'calcutta': 'Kolkata'
         }
 
-        # Known localities (exact match from flowchart)
-        self.localities = {
-            # East Bangalore (From flowchart)
-            'whitefield', 'budigere cross', 'varthur', 'gunjur', 
-            'sarjapur road', 'panathur road', 'kadugodi',
+        # Intelligent Locality → Zone Mapping
+        # Maps each locality to its zone for automatic zone inference
+        self.locality_to_zone = {
+            # ========== EAST BANGALORE ==========
+            'whitefield': 'East Bangalore',
+            'budigere': 'East Bangalore',
+            'budigere cross': 'East Bangalore',
+            'varthur': 'East Bangalore',
+            'gunjur': 'East Bangalore',
+            'sarjapur': 'East Bangalore',
+            'sarjapur road': 'East Bangalore',
+            'panathur': 'East Bangalore',
+            'panathur road': 'East Bangalore',
+            'kadugodi': 'East Bangalore',
+            'marathahalli': 'East Bangalore',
+            'bellandur': 'East Bangalore',
+            'brookefield': 'East Bangalore',
+            'kundanhalli': 'East Bangalore',
+            'mahadevpura': 'East Bangalore',
+            'kr puram': 'East Bangalore',
+            'krishnarajapuram': 'East Bangalore',
+            'harlur': 'East Bangalore',
+            'harlur road': 'East Bangalore',
+            'kodathi': 'East Bangalore',
+            'carmelaram': 'East Bangalore',
+            'dommasandra': 'East Bangalore',
+            'old madras road': 'East Bangalore',
+            'hoodi': 'East Bangalore',
+            'itpl': 'East Bangalore',
             
-            # North Bangalore (From flowchart)
-            'thanisandra', 'jakkur', 'baglur', 'yelahanka', 'devanahalli',
-            'airport', 'kempegowda international airport', 'bial',
+            # ========== NORTH BANGALORE ==========
+            'thanisandra': 'North Bangalore',
+            'jakkur': 'North Bangalore',
+            'baglur': 'North Bangalore',
+            'bagalur': 'North Bangalore',
+            'yelahanka': 'North Bangalore',
+            'devanahalli': 'North Bangalore',
+            'devanhalli': 'North Bangalore',  # Common misspelling
+            'airport': 'North Bangalore',
+            'kempegowda international airport': 'North Bangalore',
+            'kia': 'North Bangalore',
+            'bial': 'North Bangalore',
+            'hebbal': 'North Bangalore',
+            'hennur': 'North Bangalore',
+            'hennur road': 'North Bangalore',
+            'kothanur': 'North Bangalore',
+            'sahakara nagar': 'North Bangalore',
+            'nagawara': 'North Bangalore',
+            'kasturi nagar': 'North Bangalore',
+            'rachenahalli': 'North Bangalore',
+            'kogilu': 'North Bangalore',
             
-            # Other common areas
-            'koramangala', 'indiranagar', 'hsr layout', 'electronic city',
-            'marathahalli', 'jp nagar', 'btm layout', 'jayanagar', 
-            'rajajinagar', 'yeshwanthpur', 'hebbal', 'old madras road',
-            'bannerghatta road', 'kr puram', 'mahadevpura', 'bellandur',
-            'hennur', 'kundanhalli', 'brookefield',
+            # ========== SOUTH BANGALORE ==========
+            'koramangala': 'South Bangalore',
+            'hsr layout': 'South Bangalore',
+            'hsr': 'South Bangalore',
+            'btm layout': 'South Bangalore',
+            'btm': 'South Bangalore',
+            'jp nagar': 'South Bangalore',
+            'jayanagar': 'South Bangalore',
+            'bannerghatta': 'South Bangalore',
+            'bannerghatta road': 'South Bangalore',
+            'electronic city': 'South Bangalore',
+            'e-city': 'South Bangalore',
+            'ecity': 'South Bangalore',
+            'bommanahalli': 'South Bangalore',
+            'begur': 'South Bangalore',
+            'begur road': 'South Bangalore',
+            'kanakapura': 'South Bangalore',
+            'kanakapura road': 'South Bangalore',
+            'basavanagudi': 'South Bangalore',
+            'bilekahalli': 'South Bangalore',
+            'arekere': 'South Bangalore',
+            'hebbegodi': 'South Bangalore',
+            'chandapura': 'South Bangalore',
+            'hosur road': 'South Bangalore',
+            'kudlu gate': 'South Bangalore',
+            'hulimavu': 'South Bangalore',
+            
+            # ========== WEST BANGALORE ==========
+            'rajajinagar': 'West Bangalore',
+            'yeshwanthpur': 'West Bangalore',
+            'malleshwaram': 'West Bangalore',
+            'vijayanagar': 'West Bangalore',
+            'nagarbhavi': 'West Bangalore',
+            'magadi': 'West Bangalore',
+            'magadi road': 'West Bangalore',
+            'tumkur road': 'West Bangalore',
+            'peenya': 'West Bangalore',
+            'jalahalli': 'West Bangalore',
+            'dasarahalli': 'West Bangalore',
+            'bangalore university': 'West Bangalore',
+            'kengeri': 'West Bangalore',
+            'mysore road': 'West Bangalore',
+            'rajarajeshwari nagar': 'West Bangalore',
+            'rr nagar': 'West Bangalore',
+            
+            # ========== CENTRAL BANGALORE ==========
+            'indiranagar': 'Central Bangalore',
+            'mg road': 'Central Bangalore',
+            'brigade road': 'Central Bangalore',
+            'ulsoor': 'Central Bangalore',
+            'richmond road': 'Central Bangalore',
+            'lavelle road': 'Central Bangalore',
+            'vasanth nagar': 'Central Bangalore',
+            'shivajinagar': 'Central Bangalore',
+            'cubbon park': 'Central Bangalore',
+            'richmond town': 'Central Bangalore',
         }
+        
+        # Set of all known localities (for quick lookup)
+        self.localities = set(self.locality_to_zone.keys())
 
         # Status keywords
         self.status_keywords = {
@@ -261,7 +356,8 @@ class FilterExtractor:
         filters.min_area_sqft, filters.max_area_sqft = self._extract_size(query_lower)
 
         # Extract zone (North/South/East/West Bangalore)
-        filters.area = self._extract_zone(query_lower)
+        # Pass locality for intelligent zone inference if no explicit zone mentioned
+        filters.area = self._extract_zone(query_lower, filters.locality)
 
         # Extract status
         filters.status = self._extract_status(query_lower)
@@ -364,11 +460,37 @@ class FilterExtractor:
         return None
 
     def _extract_locality(self, query: str) -> Optional[str]:
-        """Extract locality: 'whitefield' → 'Whitefield'"""
-        for locality in self.localities:
-            if locality in query:
-                return locality.title()  # Capitalize: 'whitefield' → 'Whitefield'
+        """
+        Extract locality with intelligent fuzzy matching.
+        Prioritizes longer matches (e.g., 'sarjapur road' over 'sarjapur').
+        Returns: 'Whitefield', 'Sarjapur', etc.
+        """
+        # Sort localities by length (longest first) to prioritize specific matches
+        # e.g., 'sarjapur road' should match before 'sarjapur'
+        sorted_localities = sorted(self.localities, key=len, reverse=True)
+        
+        for locality in sorted_localities:
+            # Use word boundary for single words, substring for multi-word
+            if ' ' in locality:
+                # Multi-word: exact substring match
+                if locality in query:
+                    return locality.title()
+            else:
+                # Single word: word boundary match to avoid false positives
+                # e.g., 'hsr' shouldn't match inside 'thsr'
+                if re.search(r'\b' + re.escape(locality) + r'\b', query):
+                    return locality.title()
         return None
+    
+    def get_zone_for_locality(self, locality: str) -> Optional[str]:
+        """
+        Get the zone for a given locality.
+        Example: 'Sarjapur' → 'East Bangalore'
+        """
+        if not locality:
+            return None
+        locality_lower = locality.lower().strip()
+        return self.locality_to_zone.get(locality_lower)
 
     def _extract_possession_year(self, query: str) -> Optional[int]:
         """Extract possession year: 'possession 2027' → 2027"""
@@ -388,31 +510,49 @@ class FilterExtractor:
 
         return None
 
-    def _extract_zone(self, query: str) -> Optional[str]:
-        """Extract zone: 'North Bangalore', 'South Bangalore'"""
+    def _extract_zone(self, query: str, locality: Optional[str] = None) -> Optional[str]:
+        """
+        Extract zone with intelligent inference.
+        1. First check for explicit zone mentions ('North Bangalore', 'East', etc.)
+        2. If no explicit zone, infer from locality using locality_to_zone mapping
+        
+        Example: 'sarjapur' → no explicit zone → infer 'East Bangalore' from locality
+        """
         zones = {
             'north bangalore': 'North Bangalore',
             'north bmr': 'North Bangalore',
-            'north': 'North Bangalore',
             'south bangalore': 'South Bangalore',
-            'south': 'South Bangalore',
             'east bangalore': 'East Bangalore',
-            'east': 'East Bangalore',
             'west bangalore': 'West Bangalore',
-            'west': 'West Bangalore',
             'central bangalore': 'Central Bangalore',
+        }
+        
+        # Check for explicit zone mentions (prioritize full zone name)
+        for key, value in zones.items():
+            if re.search(r'\b' + re.escape(key) + r'\b', query):
+                return value
+        
+        # Check for standalone direction words (less reliable but useful)
+        direction_zones = {
+            'north': 'North Bangalore',
+            'south': 'South Bangalore',
+            'east': 'East Bangalore',
+            'west': 'West Bangalore',
             'central': 'Central Bangalore'
         }
         
-        # Check for explicit zone mentions
-        # We need to be careful not to match 'North' in 'Northern Lights' project name if possible, 
-        # but for now, simple keyword match if followed by Bangalore or just pure direction in context works.
-        # Flowchart specific zones are key.
+        for direction, zone in direction_zones.items():
+            # Match 'north' but not in words like 'northstar' or 'northern'
+            if re.search(r'\b' + re.escape(direction) + r'\b(?!ern|star)', query):
+                return zone
         
-        for key, value in zones.items():
-            # word boundary check
-            if re.search(r'\b' + re.escape(key) + r'\b', query):
-                return value
+        # INTELLIGENT INFERENCE: If no explicit zone, infer from locality
+        if locality:
+            inferred_zone = self.get_zone_for_locality(locality)
+            if inferred_zone:
+                logger.info(f"🗺️ Auto-inferred zone '{inferred_zone}' from locality '{locality}'")
+                return inferred_zone
+        
         return None
 
     def _extract_size(self, query: str) -> tuple[Optional[int], Optional[int]]:
