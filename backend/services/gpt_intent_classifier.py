@@ -400,7 +400,18 @@ If query is ambiguous, use context to infer most likely intent. Never ask for cl
    - **IMPORTANT**: If query contains "nearby" in any form, route to nearby_properties, NOT property_search
    - data_source: "database"
 
-4. **SALES_CONVERSATION** (→ GPT):
+4. **SHOW_MORE_PROJECTS** (→ database):
+   - User wants to see MORE projects from current search
+   - Includes: "more", "show more", "more options", "what else", "other projects", "any more", "see more"
+   - Includes: "anything else", "other options", "remaining projects"
+   - **DOES NOT include**: "more about X" or "tell me more" (those are project_facts/sales_conversation)
+   - Uses last search context (location, budget) for smart cascade:
+     1. More in same area + budget
+     2. Over-budget options in same area
+     3. Nearby (10km radius) options
+   - data_source: "database"
+
+5. **SALES_CONVERSATION** (→ GPT):
    - Generic advice, objections, FAQs
    - Questions NOT about specific projects
    - **Distance/Connectivity questions** (even if project mentioned): "distance of airport from X", "how far is X from airport", "distance to office", "nearby schools", "metro distance"

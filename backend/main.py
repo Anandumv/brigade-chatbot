@@ -1050,7 +1050,7 @@ async def chat_query(request: ChatQueryRequest):
         # If GPT has classified with a specific intent (property_search, project_facts, etc.), 
         # trust it and use the proper handlers - DO NOT route to fallback
         use_gpt_fallback = False
-        valid_intents = ["property_search", "project_facts", "nearby_properties", "sales_conversation", "greeting"]
+        valid_intents = ["property_search", "project_facts", "nearby_properties", "show_more_projects", "sales_conversation", "greeting"]
         
         if intent not in valid_intents:
             # Intent is unsupported or unknown - check if we should use GPT fallback
@@ -1772,8 +1772,186 @@ async def chat_query(request: ChatQueryRequest):
                         logger.warning(f"Could not get coordinates for location: {target_location}")
                         # Fall through to GPT
 
+            elif intent == "show_more_projects":
+                logger.info("🔹 PATH 1: Database - Show More Projects (Smart Cascade)")
+                
+                from database.pixeltable_setup import get_projects_table
+                from utils.geolocation_utils import get_coordinates, calculate_distance
+                
+                # Get context from session
+                last_location = None
+                last_budget_max = None
+                shown_project_ids = set()
+                
+                if session:
+                    # Get last search context
+                    if hasattr(session, 'current_filters') and session.current_filters:
+                        last_location = session.current_filters.get('locality') or session.current_filters.get('location')
+                        last_budget_max = session.current_filters.get('budget_max')
+                    
+                    # Track already shown projects
+                    if hasattr(session, 'last_shown_projects') and session.last_shown_projects:
+                        for p in session.last_shown_projects:
+                            if isinstance(p, dict):
+                                shown_project_ids.add(p.get('name', '').lower())
+                
+                logger.info(f"📍 Smart cascade context: location={last_location}, budget_max={last_budget_max}, shown={len(shown_project_ids)}")
+                
+                projects_table = get_projects_table()
+                cascade_results = []
+                cascade_type = None
+                
+                if projects_table and last_location:
+                    try:
+                        # STEP 1: More in same area + budget
+                        all_projects = projects_table.select(
+                            projects_table.project_id, projects_table.name, projects_table.location,
+                            projects_table.budget_min, projects_table.budget_max,
+                            projects_table.configuration, projects_table.status,
+                            projects_table.possession_year, projects_table.possession_quarter,
+                            projects_table.usp, projects_table.latitude, projects_table.longitude
+                        ).collect()
+                        
+                        location_lower = last_location.lower()
+                        
+                        # Filter: same area + budget
+                        same_area_budget = []
+                        same_area_over_budget = []
+                        
+                        for proj in all_projects:
+                            proj_loc = proj.get('location', '').lower()
+                            proj_name = proj.get('name', '').lower()
+                            
+                            if proj_name in shown_project_ids:
+                                continue  # Skip already shown
+                            
+                            if location_lower in proj_loc or proj_loc in location_lower:
+                                if last_budget_max and proj.get('budget_min'):
+                                    if proj['budget_min'] <= last_budget_max * 1.1:  # +10% tolerance
+                                        same_area_budget.append(dict(proj))
+                                    else:
+                                        same_area_over_budget.append(dict(proj))
+                                else:
+                                    same_area_budget.append(dict(proj))
+                        
+                        if same_area_budget:
+                            cascade_results = same_area_budget[:5]
+                            cascade_type = "same_area_budget"
+                            logger.info(f"✅ Cascade Step 1: Found {len(same_area_budget)} more in {last_location}")
+                        
+                        elif same_area_over_budget:
+                            cascade_results = same_area_over_budget[:5]
+                            cascade_type = "over_budget"
+                            logger.info(f"✅ Cascade Step 2: Found {len(same_area_over_budget)} over-budget in {last_location}")
+                        
+                        else:
+                            # STEP 3: Nearby 10km radius
+                            center_coords = get_coordinates(last_location)
+                            if center_coords:
+                                center_lat, center_lon = center_coords
+                                nearby = []
+                                
+                                for proj in all_projects:
+                                    proj_name = proj.get('name', '').lower()
+                                    if proj_name in shown_project_ids:
+                                        continue
+                                    
+                                    p_lat = proj.get('latitude')
+                                    p_lon = proj.get('longitude')
+                                    
+                                    if p_lat and p_lon:
+                                        try:
+                                            dist = calculate_distance(center_lat, center_lon, float(p_lat), float(p_lon))
+                                            if dist <= 10.0:
+                                                proj_copy = dict(proj)
+                                                proj_copy['_distance_km'] = round(dist, 1)
+                                                nearby.append(proj_copy)
+                                        except (ValueError, TypeError):
+                                            pass
+                                
+                                nearby.sort(key=lambda x: x.get('_distance_km', 999))
+                                cascade_results = nearby[:5]
+                                cascade_type = "nearby"
+                                logger.info(f"✅ Cascade Step 3: Found {len(nearby)} nearby projects")
+                    
+                    except Exception as e:
+                        logger.error(f"Error in smart cascade: {e}")
+                
+                if cascade_results:
+                    # Build response based on cascade type
+                    if cascade_type == "same_area_budget":
+                        response_parts = [f"📍 Here are **more projects** in **{last_location.title()}**:\n"]
+                    elif cascade_type == "over_budget":
+                        response_parts = [f"💰 Here are some **slightly over budget** options in **{last_location.title()}**:\n"]
+                        response_parts.append("_(These are premium options that might be worth stretching for!)_\n")
+                    else:  # nearby
+                        response_parts = [f"🗺️ No more in {last_location.title()}, but here are **nearby options** within 10km:\n"]
+                    
+                    for i, proj in enumerate(cascade_results, 1):
+                        dist_str = f" ({proj['_distance_km']} km away)" if proj.get('_distance_km') else ""
+                        response_parts.append(f"\n**{i}. {proj['name']}** ({proj.get('status', 'N/A')}){dist_str}")
+                        response_parts.append(f"\n   📍 {proj['location']}")
+                        response_parts.append(f"\n   💰 ₹{proj['budget_min']/100:.2f} - ₹{proj['budget_max']/100:.2f} Cr")
+                        response_parts.append(f"\n   🏠 {proj.get('configuration', 'N/A')}")
+                    
+                    response_parts.append("\n\n🎯 **Want details on any of these?** Just say the project name!")
+                    
+                    answer_text = "".join(response_parts)
+                    response_time_ms = int((time.time() - start_time) * 1000)
+                    
+                    # Update session
+                    if session:
+                        # Add to shown projects
+                        if not hasattr(session, 'last_shown_projects') or not session.last_shown_projects:
+                            session.last_shown_projects = []
+                        session.last_shown_projects.extend(cascade_results)
+                        session.last_intent = "show_more_projects"
+                        session_manager.add_message(request.session_id, "user", original_query)
+                        session_manager.add_message(request.session_id, "assistant", answer_text[:500])
+                        session_manager.save_session(session)
+                    
+                    coaching_prompt = _get_coaching_for_response(
+                        session, request.session_id, request.query, "show_more_projects",
+                        search_performed=True, data_source="database", budget_alternatives_shown=(cascade_type == "over_budget")
+                    )
+                    return ChatQueryResponse(
+                        answer=answer_text,
+                        projects=cascade_results,
+                        sources=[],
+                        confidence="High",
+                        intent="show_more_projects",
+                        refusal_reason=None,
+                        response_time_ms=response_time_ms,
+                        suggested_actions=["View project details", "Compare options", "Schedule site visit"],
+                        coaching_prompt=coaching_prompt
+                    )
+                else:
+                    # No more projects found
+                    no_more_msg = f"That's all I have for **{last_location.title() if last_location else 'this area'}**! 🏁\n\n"
+                    no_more_msg += "• Want to **expand your budget** a bit?\n"
+                    no_more_msg += "• Or try a **different location**?\n"
+                    no_more_msg += "• I can also show you **ready-to-move** or **under-construction** options specifically."
+                    
+                    response_time_ms = int((time.time() - start_time) * 1000)
+                    
+                    coaching_prompt = _get_coaching_for_response(
+                        session, request.session_id, request.query, "show_more_projects",
+                        search_performed=True, data_source="database", budget_alternatives_shown=False
+                    )
+                    return ChatQueryResponse(
+                        answer=no_more_msg,
+                        projects=[],
+                        sources=[],
+                        confidence="High",
+                        intent="show_more_projects",
+                        refusal_reason=None,
+                        response_time_ms=response_time_ms,
+                        suggested_actions=["Expand budget", "Try different location", "Filter by status"],
+                        coaching_prompt=coaching_prompt
+                    )
+
         # PATH 2: GPT Sales Consultant (DEFAULT for everything else)
-        # Handles: amenities, distances, advice, FAQs, objections, "more", greetings, all conversational queries
+        # Handles: amenities, distances, advice, FAQs, objections, greetings, all conversational queries
         logger.info(f"🔹 PATH 2: GPT Sales Consultant - intent={intent}")
 
         # ========================================
