@@ -1598,6 +1598,64 @@ async def chat_query(request: ChatQueryRequest):
                             if project_dict.get('brochure_url'):
                                 response_parts.append(f"\n📄 [View Brochure]({project_dict['brochure_url']})")
 
+                            # 🆕 GPT ENRICHMENT: Add sales pitch, investment potential, nearby amenities
+                            try:
+                                from openai import OpenAI
+                                from config import settings
+                                
+                                enrichment_client = OpenAI(
+                                    api_key=settings.openai_api_key,
+                                    base_url=settings.openai_base_url,
+                                    timeout=15.0
+                                )
+                                
+                                enrichment_prompt = f"""You are a real estate sales coach. Generate a SALES PITCH for this project that a salesperson can USE ON A LIVE CALL.
+
+PROJECT: {project_dict.get('name')}
+LOCATION: {project_dict.get('location')}
+PRICE: ₹{project_dict.get('budget_min', 0)/100:.1f} - ₹{project_dict.get('budget_max', 0)/100:.1f} Cr
+CONFIG: {project_dict.get('configuration')}
+POSSESSION: {project_dict.get('possession_year', 'N/A')}
+
+Generate EXACTLY this format (bullet points only):
+
+🎯 **WHY BUY THIS PROJECT:**
+• [Strong selling point 1]
+• [Strong selling point 2]
+• [Strong selling point 3]
+
+📍 **NEARBY AMENITIES:**
+• [Schools/colleges within 5km]
+• [Hospitals within 5km]
+• [Metro/transport connectivity]
+• [Shopping malls/tech parks]
+
+💰 **INVESTMENT ANGLE:**
+• [Appreciation potential]
+• [ROI argument]
+• [Urgency hook]
+
+🎤 **CLOSING LINE:**
+[One sentence to push for site visit]
+
+Be specific to {project_dict.get('location')} area. Make it persuasive and speakable."""
+
+                                enrichment_response = enrichment_client.chat.completions.create(
+                                    model=settings.effective_gpt_model,
+                                    messages=[{"role": "user", "content": enrichment_prompt}],
+                                    temperature=0.7,
+                                    max_tokens=600
+                                )
+                                
+                                enrichment_text = enrichment_response.choices[0].message.content.strip()
+                                response_parts.append(f"\n\n---\n\n{enrichment_text}")
+                                logger.info(f"✅ Added GPT enrichment for project: {project_dict.get('name')}")
+                                
+                            except Exception as enrich_err:
+                                logger.warning(f"GPT enrichment failed (non-critical): {enrich_err}")
+                                # Add default sales closing even without enrichment
+                                response_parts.append(f"\n\n🎯 *Shall we schedule a site visit to see this property?*")
+
                             response_text = "\n\n".join(response_parts)
                             response_time_ms = int((time.time() - start_time) * 1000)
 
