@@ -1018,17 +1018,8 @@ async def chat_query(request: ChatQueryRequest):
         
         logger.info(f"GPT Classification: intent={intent}, data_source={data_source}, confidence={gpt_confidence}")
 
-        # VALIDATION: Fix overly aggressive project name extraction
-        # If intent is project_facts but query has search keywords, override to property_search
-        if intent == "project_facts" and project_name:
-            search_keywords = ["show", "find", "list", "options", "all", "available", "projects", "good", "best", "what are"]
-            query_lower = query.lower()
-            if any(kw in query_lower for kw in search_keywords):
-                logger.info(f"🔧 Overriding project_facts → property_search (search keywords detected in '{query}')")
-                logger.info(f"   Detected project_name '{project_name}' but query suggests area search, not project-specific query")
-                intent = "property_search"
-                project_name = None  # Clear incorrect extraction
-                extraction['project_name'] = None  # Clear from extraction as well
+        # TRUST GPT: GPT is intelligent enough to understand queries from context
+        # No keyword-based overrides needed - GPT handles all query understanding
 
         # SALES LOGIC: Apply intelligent routing based on intent and context
         # Handle special cases with sales logic
@@ -1650,6 +1641,136 @@ async def chat_query(request: ChatQueryRequest):
 
                 # If no project found, fall through to GPT
                 logger.info("Project not found in database, falling back to GPT consultant")
+
+            elif intent == "nearby_properties":
+                logger.info("🔹 PATH 1: Database - Nearby Properties (10km radius)")
+                
+                # Get location context from session or extraction
+                from utils.geolocation_utils import get_coordinates, calculate_distance
+                from database.pixeltable_setup import get_projects_table
+                
+                target_location = None
+                
+                # Priority 1: Check GPT extraction for location
+                if extraction and extraction.get("location"):
+                    target_location = extraction.get("location")
+                    logger.info(f"📍 Using location from GPT extraction: {target_location}")
+                
+                # Priority 2: Check session current_filters
+                if not target_location and session:
+                    if hasattr(session, 'current_filters') and session.current_filters:
+                        target_location = session.current_filters.get('locality') or session.current_filters.get('location')
+                        if target_location:
+                            logger.info(f"📍 Using location from session filters: {target_location}")
+                
+                # Priority 3: Check last shown projects
+                if not target_location and session:
+                    if hasattr(session, 'last_shown_projects') and session.last_shown_projects:
+                        first_project = session.last_shown_projects[0]
+                        if isinstance(first_project, dict):
+                            target_location = first_project.get('location')
+                            if target_location:
+                                logger.info(f"📍 Using location from last shown project: {target_location}")
+                
+                if not target_location:
+                    logger.warning("No location context found for nearby search")
+                    # Fall through to GPT for a helpful response
+                else:
+                    # Get coordinates for target location
+                    center_coords = get_coordinates(target_location)
+                    
+                    if center_coords:
+                        center_lat, center_lon = center_coords
+                        logger.info(f"📍 Searching within 10km of {target_location} ({center_lat}, {center_lon})")
+                        
+                        # Fetch all projects with coordinates
+                        projects_table = get_projects_table()
+                        nearby_projects = []
+                        
+                        if projects_table:
+                            try:
+                                all_projects = projects_table.select(
+                                    projects_table.project_id, projects_table.name, projects_table.location,
+                                    projects_table.budget_min, projects_table.budget_max,
+                                    projects_table.configuration, projects_table.status,
+                                    projects_table.possession_year, projects_table.possession_quarter,
+                                    projects_table.usp, projects_table.amenities, projects_table.rera_number,
+                                    projects_table.latitude, projects_table.longitude
+                                ).collect()
+                                
+                                for proj in all_projects:
+                                    p_lat = proj.get('latitude')
+                                    p_lon = proj.get('longitude')
+                                    
+                                    if p_lat and p_lon:
+                                        try:
+                                            dist = calculate_distance(center_lat, center_lon, float(p_lat), float(p_lon))
+                                            if dist <= 10.0:  # 10km radius
+                                                proj_copy = dict(proj)
+                                                proj_copy['_distance_km'] = round(dist, 1)
+                                                nearby_projects.append(proj_copy)
+                                        except (ValueError, TypeError) as e:
+                                            logger.warning(f"Invalid coordinates for project {proj.get('name')}: {e}")
+                                
+                                # Sort by distance (nearest first)
+                                nearby_projects.sort(key=lambda x: x.get('_distance_km', 999))
+                                
+                            except Exception as e:
+                                logger.error(f"Error fetching projects for nearby search: {e}")
+                        
+                        if nearby_projects:
+                            logger.info(f"✅ Found {len(nearby_projects)} projects within 10km of {target_location}")
+                            
+                            # Build response with distance info
+                            response_parts = [f"🗺️ Found **{len(nearby_projects)} projects** within 10km of **{target_location.title()}**:\n"]
+                            
+                            for i, proj in enumerate(nearby_projects[:5], 1):  # Show top 5
+                                dist_str = f"{proj['_distance_km']} km away"
+                                response_parts.append(f"\n**{i}. {proj['name']}** ({proj.get('status', 'N/A')})")
+                                response_parts.append(f"   📍 {proj['location']} (*{dist_str}*)")
+                                response_parts.append(f"   💰 ₹{proj['budget_min']/100:.2f} - ₹{proj['budget_max']/100:.2f} Cr")
+                                response_parts.append(f"   🏠 {proj.get('configuration', 'N/A')}")
+                                if proj.get('usp'):
+                                    usp_text = proj['usp'][:80] + "..." if len(proj.get('usp', '')) > 80 else proj.get('usp', '')
+                                    response_parts.append(f"   ✨ {usp_text}")
+                            
+                            if len(nearby_projects) > 5:
+                                response_parts.append(f"\n\n📋 Plus **{len(nearby_projects) - 5} more options** nearby!")
+                            
+                            response_parts.append("\n\nWould you like more details about any of these projects? 🏡")
+                            
+                            answer_text = "\n".join(response_parts)
+                            response_time_ms = int((time.time() - start_time) * 1000)
+                            
+                            # Update session
+                            if session:
+                                session.last_shown_projects = nearby_projects[:10]
+                                session.last_intent = "nearby_properties"
+                                session_manager.add_message(request.session_id, "user", original_query)
+                                session_manager.add_message(request.session_id, "assistant", answer_text[:500])
+                                session_manager.save_session(session)
+                            
+                            coaching_prompt = _get_coaching_for_response(
+                                session, request.session_id, request.query, "nearby_properties",
+                                search_performed=True, data_source="database", budget_alternatives_shown=False
+                            )
+                            return ChatQueryResponse(
+                                answer=answer_text,
+                                projects=nearby_projects[:5],
+                                sources=[],
+                                confidence="High",
+                                intent="nearby_properties",
+                                refusal_reason=None,
+                                response_time_ms=response_time_ms,
+                                suggested_actions=["Compare projects", "Schedule site visit", "View more options"],
+                                coaching_prompt=coaching_prompt
+                            )
+                        else:
+                            logger.info(f"No projects found within 10km of {target_location}")
+                            # Fall through to GPT
+                    else:
+                        logger.warning(f"Could not get coordinates for location: {target_location}")
+                        # Fall through to GPT
 
         # PATH 2: GPT Sales Consultant (DEFAULT for everything else)
         # Handles: amenities, distances, advice, FAQs, objections, "more", greetings, all conversational queries

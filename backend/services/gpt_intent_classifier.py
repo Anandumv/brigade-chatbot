@@ -375,7 +375,7 @@ If query is ambiguous, use context to infer most likely intent. Never ask for cl
    - Has filters: BHK, location, budget
    - Includes: "show me", "find", "search", "looking for", "need", "want"
    - Includes: "minimum budget", "starting price", "cheapest" (calculate min from results)
-   - Includes: "nearby", "more nearby", "what else" (continue from last search)
+   - **DOES NOT INCLUDE**: "nearby" queries (those go to nearby_properties intent)
    - data_source: "database"
 
 2. **PROJECT_FACTS** (→ database):
@@ -393,8 +393,11 @@ If query is ambiguous, use context to infer most likely intent. Never ask for cl
    - data_source: "database"
 
 3. **NEARBY_PROPERTIES** (→ database):
-   - User asks for nearby properties: "show nearby", "what else nearby", "more nearby"
-   - Uses location from context (last mentioned location or last shown project location)
+   - User asks for nearby properties or projects within 10km radius
+   - Includes: "nearby", "nearby projects", "show nearby", "what's nearby", "more nearby", "nearby options"
+   - Includes: "projects around here", "other options close by", "within 10km"
+   - Uses location from context (last mentioned location, session filters, or last shown project location)
+   - **IMPORTANT**: If query contains "nearby" in any form, route to nearby_properties, NOT property_search
    - data_source: "database"
 
 4. **SALES_CONVERSATION** (→ GPT):
