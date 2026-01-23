@@ -195,16 +195,49 @@ def determine_conversation_goal(intent: str, query: str, session: ConversationSe
         else:
             return "Continue the property search conversation naturally"
 
-    # Intent-based goals
+    # Intent-based goals - AGGRESSIVE SALES MODE
     if intent == "sales_faq" or intent.startswith("faq_"):
         if intent == "faq_budget_stretch":
-            return "Act as a Sales Manager. Give the agent 4-5 killer bullet points to convince the client to stretch their budget. Focus on ROI, lifestyle upgrade, and 'cost of waiting'. Format as a script."
+            return """🔥 AGGRESSIVE SALES MODE - BUDGET STRETCH SCRIPT 🔥
+
+Act as a TOP CLOSER real estate sales manager. Generate a CONVINCING talk track with:
+
+1. 💰 **ROI ARGUMENT**: Show how stretching budget = better appreciation
+2. ⚡ **URGENCY**: Prices rise 10-15% yearly, waiting costs MORE
+3. 🏠 **LIFESTYLE UPGRADE**: What extra budget gets them (better location, amenities, view)
+4. 📊 **EMI REALITY**: Extra 10L = only ~7K more EMI/month
+5. 🚀 **FOMO HOOK**: Premium units go first, cheaper ones left last
+
+FORMAT: Exact words the agent should SAY on call. No generic advice.
+END WITH: Strong closing line pushing for site visit."""
         elif intent == "faq_other_location":
-            return "Act as a Sales Manager. Give the agent 3 arguments to convince the client to consider this alternate location (growth corridor, better appreciation, infrastructure). Format as a script."
+            return """🔥 AGGRESSIVE SALES MODE - LOCATION PITCH 🔥
+
+Generate talk track to CONVINCE client to consider this alternate location:
+
+1. 💰 **VALUE**: Same budget = bigger unit, better amenities
+2. 📈 **APPRECIATION**: Emerging locations = 15-20% appreciation potential
+3. 🛣️ **INFRASTRUCTURE**: Upcoming metro/roads will boost connectivity
+4. 🏢 **GROWTH CORRIDOR**: Major IT companies expanding here
+
+FORMAT: Exact words the agent should SAY. No generic advice.
+END WITH: 'Shall I arrange a site visit so you can see the actual location?'"""
         elif intent == "faq_under_construction":
-             return "Act as a Sales Manager. Provide a script explaining why 'Under Construction' is a better investment (lower entry price, appreciation during build). Address risk anxiety."
+             return """🔥 AGGRESSIVE SALES MODE - UNDER CONSTRUCTION PITCH 🔥
+
+Generate talk track to CONVINCE client why Under Construction is BETTER:
+
+1. 💰 **PRICE ADVANTAGE**: 15-20% lower than ready properties
+2. 📈 **APPRECIATION**: Property appreciates during construction
+3. 💳 **PAYMENT PLAN**: Easy construction-linked payments
+4. 🏠 **CUSTOMIZATION**: Choose floor, facing, configuration early
+5. ⚡ **SCARCITY**: Best units get booked first
+
+FORMAT: Exact words to SAY. Address their risk anxiety with RERA protection.
+END WITH: Push for booking to lock current price."""
         else:
-            return "Answer the user's question about the home buying process, financing, or services with expert authority."
+            return """Answer the user's question with EXPERT AUTHORITY and SALES FOCUS. 
+Turn every answer into a selling opportunity. End with a clear call-to-action."""
 
     elif intent == "sales_objection" or intent.startswith("objection_"):
         objection_type = detect_objection_type(query) 
