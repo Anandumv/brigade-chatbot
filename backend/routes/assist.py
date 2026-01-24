@@ -63,7 +63,7 @@ async def _handle_sales_intervention(query: str, ctx: dict) -> Optional[CopilotR
             
         return CopilotResponse(
             projects=[], # No specific project focus for general advice
-            answer=bullets[:5], # output max 5 bullets
+            answer=bullets, 
             pitch_help="Read the script above to the client.",
             next_suggestion="Ask: 'Does that make sense for your investment goals?'",
             coaching_point="Use the 'Cost of Waiting' to create urgency." if "budget" in str(intent) else "Focus on value over price."

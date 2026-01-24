@@ -207,8 +207,7 @@ def _create_documents_table():
         # Add embedding index for similarity search
         chunks.add_embedding_index(
             'text',
-            string_embed=openai_embedding_wrapper,
-            model_name='text-embedding-3-small'
+            string_embed=openai_embedding_wrapper
         )
         
         logger.info("Created brigade.doc_chunks view with embedding index")
