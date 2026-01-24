@@ -63,9 +63,9 @@ class CopilotResponse(BaseModel):
 
     answer: List[str] = Field(
         ...,
-        min_length=3,
-        max_length=5,
-        description="3-5 bullet points (reasoning, NOT facts). Facts go in projects[]"
+        min_length=1,
+        max_length=15,
+        description="Bullet points (reasoning, NOT facts). Facts go in projects[]"
     )
 
     pitch_help: str = Field(
