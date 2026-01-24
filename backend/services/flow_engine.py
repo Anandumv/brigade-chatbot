@@ -12,7 +12,7 @@ from services.web_search import web_search_service
 from services.web_search import web_search_service
 from services.sales_agent_prompt import SALES_AGENT_SYSTEM_PROMPT
 from services.web_search import web_search_service
-from services.sales_agent_prompt import SALES_AGENT_SYSTEM_PROMPT
+from services.sales_agent_prompt import SALES_AGENT_SYSTEM_PROMPT, LIGHT_INTENT_SYSTEM_PROMPT
 from services.sales_formatter import sales_formatter
 from services.sales_conversation import sales_conversation
 from utils.geolocation_utils import get_coordinates, calculate_distance
@@ -179,7 +179,7 @@ def classify_user_intent(user_input: str, context: str, chat_history: List[Dict[
             messages=[
                 {
                     "role": "system",
-                    "content": SALES_AGENT_SYSTEM_PROMPT + """
+                    "content": LIGHT_INTENT_SYSTEM_PROMPT + """
 
 ⸻
 
