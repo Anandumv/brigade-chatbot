@@ -306,6 +306,12 @@ class FilterExtractor:
         # Set of all known localities (for quick lookup)
         self.localities = set(self.locality_to_zone.keys())
 
+        # Dynamic Project Names (will be populated from DB or config)
+        self.project_names = {
+            "birla evara", "brigade citrine", "brigade avalon", "brigade el dorado",
+            "godrej woodscapes", "prestige rains", "sobha neopolis"
+        }
+
         # Status keywords
         self.status_keywords = {
             'ready': ['completed'],
@@ -367,6 +373,9 @@ class FilterExtractor:
         
         # Extract property type
         filters.property_type = self._extract_property_type(query_lower)
+
+        # Extract project name (Dynamic/Regex)
+        filters.project_name = self._extract_project_name(query_lower)
 
         logger.info(f"Extracted filters: {filters.model_dump(exclude_none=True)}")
 
@@ -579,6 +588,24 @@ class FilterExtractor:
         for keyword, statuses in self.status_keywords.items():
             if keyword in query:
                 return statuses
+        return None
+
+    def _extract_project_name(self, query: str) -> Optional[str]:
+        """
+        Extract specific project name using dynamic list.
+        Example: "tell me about birla evara" → "Birla Evara"
+        """
+        # Sort by length (descending) to match "prestige park grove" before "prestige park"
+        sorted_projects = sorted(self.project_names, key=len, reverse=True)
+        
+        for p_name in sorted_projects:
+            # Check for word boundary or direct inclusion if it's multi-word
+            if ' ' in p_name:
+                if p_name in query:
+                    return p_name.title()
+            else:
+                if re.search(r'\b' + re.escape(p_name) + r'\b', query):
+                    return p_name.title()
         return None
 
     def _extract_developer(self, query: str) -> Optional[str]:

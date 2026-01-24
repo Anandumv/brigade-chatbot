@@ -1,0 +1,628 @@
+/Users/anandumv/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+Starting Comprehensive Corner Case Testing
+Testing against: https://brigade-chatbot-production.up.railway.app
+Session ID: test_session_1768730836
+
+
+################################################################################
+# TESTING CATEGORY: Typo Handling
+################################################################################
+
+================================================================================
+Testing: Typo Handling
+Query: 'distnce of airport form brigade avalon'
+Description: Distance and from typos
+✅ Status: PASS
+   Intent: sales_conversation (expected: sales_conversation)
+   Confidence: High
+   Answer preview: I understand.
+
+- Distance from Brigade Avalon to Bangalore International Airport: approximately 44 km.
+- Travel time by car: about 1 hour, depending o...
+
+================================================================================
+Testing: Typo Handling
+Query: 'avalon prise'
+Description: Price typo
+✅ Status: PASS
+   Intent: project_facts (expected: project_facts)
+   Confidence: High
+   Answer preview: # Brigade Avalon
+
+**Developer**: Brigade
+
+**Location**: Whitefield, Bangalore, East Bangalore
+
+**Configurations**: {3 BHK, 2765-2779, 4.62 Cr* }, {4 B...
+
+================================================================================
+Testing: Typo Handling
+Query: 'citrine ammenities'
+Description: Amenities typo
+✅ Status: PASS
+   Intent: project_facts (expected: project_facts)
+   Confidence: High
+   Answer preview: # Brigade Citrine
+
+**Developer**: Brigade
+
+**Location**: Budigere Cross, East Bangalore
+
+**Configurations**: {2 BHK, 1250, 1.31 Cr*}, {3 BHK, 1548 - 2...
+
+================================================================================
+Testing: Typo Handling
+Query: '2bhk in whtefield'
+Description: Whitefield typo
+✅ Status: PASS
+   Intent: property_search (expected: property_search)
+   Confidence: High
+   Answer preview: • Found 76 projects matching your criteria
+• Here are the details:...
+
+================================================================================
+Testing: Typo Handling
+Query: 'brigade avlon'
+Description: Avalon typo
+✅ Status: PASS
+   Intent: project_facts (expected: project_facts)
+   Confidence: High
+   Answer preview: # Brigade Avalon
+
+**Developer**: Brigade
+
+**Location**: Whitefield, Bangalore, East Bangalore
+
+**Configurations**: {3 BHK, 2765-2779, 4.62 Cr* }, {4 B...
+
+================================================================================
+Testing: Typo Handling
+Query: 'rera numbr'
+Description: Number typo
+✅ Status: PASS
+   Intent: project_facts (expected: project_facts)
+   Confidence: High
+   Answer preview: # Mana Skanda The Right Life
+
+**Developer**: Mana
+
+**Location**: Sarjapur Road, East Bangalore
+
+**Configurations**: {2BHK, 1249 - 1310, 1.35 Cr* }, {3...
+
+################################################################################
+# TESTING CATEGORY: Incomplete Queries - No Context
+################################################################################
+
+================================================================================
+Testing: Incomplete Queries - No Context
+Query: 'price'
+Description: Single word, no context
+✅ Status: PASS
+   Intent: project_facts (expected: any)
+   Confidence: High
+   Answer preview: # Mana Skanda The Right Life
+
+**Developer**: Mana
+
+**Location**: Sarjapur Road, East Bangalore
+
+**Configurations**: {2BHK, 1249 - 1310, 1.35 Cr* }, {3...
+
+================================================================================
+Testing: Incomplete Queries - No Context
+Query: 'more'
+Description: Vague, no context
+✅ Status: PASS
+   Intent: project_facts (expected: any)
+   Confidence: High
+   Answer preview: # Mana Skanda The Right Life
+
+**Developer**: Mana
+
+**Location**: Sarjapur Road, East Bangalore
+
+**Configurations**: {2BHK, 1249 - 1310, 1.35 Cr* }, {3...
+
+================================================================================
+Testing: Incomplete Queries - No Context
+Query: 'details'
+Description: Incomplete, no context
+✅ Status: PASS
+   Intent: project_facts (expected: any)
+   Confidence: High
+   Answer preview: # Mana Skanda The Right Life
+
+**Developer**: Mana
+
+**Location**: Sarjapur Road, East Bangalore
+
+**Configurations**: {2BHK, 1249 - 1310, 1.35 Cr* }, {3...
+
+################################################################################
+# TESTING CATEGORY: Vague References - No Context
+################################################################################
+
+================================================================================
+Testing: Vague References - No Context
+Query: 'it'
+Description: Pronoun, no context
+✅ Status: PASS
+   Intent: project_facts (expected: any)
+   Confidence: High
+   Answer preview: # Mana Skanda The Right Life
+
+**Developer**: Mana
+
+**Location**: Sarjapur Road, East Bangalore
+
+**Configurations**: {2BHK, 1249 - 1310, 1.35 Cr* }, {3...
+
+================================================================================
+Testing: Vague References - No Context
+Query: 'these'
+Description: Pronoun, no context
+✅ Status: PASS
+   Intent: project_facts (expected: any)
+   Confidence: High
+   Answer preview: # Mana Skanda The Right Life
+
+**Developer**: Mana
+
+**Location**: Sarjapur Road, East Bangalore
+
+**Configurations**: {2BHK, 1249 - 1310, 1.35 Cr* }, {3...
+
+################################################################################
+# TESTING CATEGORY: Single Word Queries
+################################################################################
+
+================================================================================
+Testing: Single Word Queries
+Query: 'yes'
+Description: Confirmation
+✅ Status: PASS
+   Intent: project_facts (expected: any)
+   Confidence: High
+   Answer preview: # Mana Skanda The Right Life
+
+**Developer**: Mana
+
+**Location**: Sarjapur Road, East Bangalore
+
+**Configurations**: {2BHK, 1249 - 1310, 1.35 Cr* }, {3...
+
+================================================================================
+Testing: Single Word Queries
+Query: 'no'
+Description: Negation
+✅ Status: PASS
+   Intent: project_facts (expected: any)
+   Confidence: High
+   Answer preview: # Mana Skanda The Right Life
+
+**Developer**: Mana
+
+**Location**: Sarjapur Road, East Bangalore
+
+**Configurations**: {2BHK, 1249 - 1310, 1.35 Cr* }, {3...
+
+================================================================================
+Testing: Single Word Queries
+Query: 'ok'
+Description: Acknowledgment
+✅ Status: PASS
+   Intent: project_facts (expected: any)
+   Confidence: High
+   Answer preview: # Mana Skanda The Right Life
+
+**Developer**: Mana
+
+**Location**: Sarjapur Road, East Bangalore
+
+**Configurations**: {2BHK, 1249 - 1310, 1.35 Cr* }, {3...
+
+================================================================================
+Testing: Single Word Queries
+Query: 'thanks'
+Description: Gratitude
+✅ Status: PASS
+   Intent: sales_conversation (expected: any)
+   Confidence: High
+   Answer preview: You're welcome! If you need more information or have any other questions, feel free to ask. Happy to help!
+
+I'd love to connect you with our relations...
+
+################################################################################
+# TESTING CATEGORY: Mixed Languages
+################################################################################
+
+================================================================================
+Testing: Mixed Languages
+Query: '2 bhk chahiye'
+Description: Hindi + English
+✅ Status: PARTIAL
+   Intent: project_facts (expected: property_search)
+   Confidence: High
+   Answer preview: # Sattva Park Cubix phase 2
+
+**Developer**: Sattva
+
+**Location**: Devanhalli, North Bangalore, North Bangalore
+
+**Configurations**: {2 BHK, 1082, 0.83...
+
+================================================================================
+Testing: Mixed Languages
+Query: 'avalon ka price'
+Description: Hindi + English
+✅ Status: PASS
+   Intent: project_facts (expected: project_facts)
+   Confidence: High
+   Answer preview: # Brigade Avalon
+
+**Developer**: Brigade
+
+**Location**: Whitefield, Bangalore, East Bangalore
+
+**Configurations**: {3 BHK, 2765-2779, 4.62 Cr* }, {4 B...
+
+================================================================================
+Testing: Mixed Languages
+Query: 'citrine ki location'
+Description: Hindi + English
+✅ Status: PASS
+   Intent: project_facts (expected: project_facts)
+   Confidence: High
+   Answer preview: # Brigade Citrine
+
+**Developer**: Brigade
+
+**Location**: Budigere Cross, East Bangalore
+
+**Configurations**: {2 BHK, 1250, 1.31 Cr*}, {3 BHK, 1548 - 2...
+
+################################################################################
+# TESTING CATEGORY: Slang & Abbreviations
+################################################################################
+
+================================================================================
+Testing: Slang & Abbreviations
+Query: 'show me 2bhk'
+Description: No space in 2bhk
+✅ Status: PASS
+   Intent: property_search (expected: property_search)
+   Confidence: High
+   Answer preview: • Found 76 projects matching your criteria
+• Here are the details:...
+
+================================================================================
+Testing: Slang & Abbreviations
+Query: 'show me 3bhk'
+Description: No space in 3bhk
+✅ Status: PASS
+   Intent: property_search (expected: property_search)
+   Confidence: High
+   Answer preview: • Found 76 projects matching your criteria
+• Here are the details:...
+
+================================================================================
+Testing: Slang & Abbreviations
+Query: 'what is rtm'
+Description: RTM abbreviation
+✅ Status: PASS
+   Intent: sales_conversation (expected: sales_conversation)
+   Confidence: High
+   Answer preview: RTM stands for "Ready to Move." It indicates properties where construction is completed and they are available for immediate occupancy.
+
+I'd love to c...
+
+================================================================================
+Testing: Slang & Abbreviations
+Query: 'what is rera'
+Description: RERA abbreviation
+✅ Status: PASS
+   Intent: sales_conversation (expected: sales_conversation)
+   Confidence: High
+   Answer preview: RERA stands for Real Estate Regulatory Authority. It ensures transparency, accountability, and efficiency in real estate transactions by protecting th...
+
+================================================================================
+Testing: Slang & Abbreviations
+Query: 'what is emi'
+Description: EMI abbreviation
+✅ Status: PASS
+   Intent: sales_conversation (expected: sales_conversation)
+   Confidence: High
+   Answer preview: I understand.
+
+EMI stands for Equated Monthly Installment. It's the fixed payment amount made by a borrower to a lender at a specified date each calen...
+
+################################################################################
+# TESTING CATEGORY: No Question Marks
+################################################################################
+
+================================================================================
+Testing: No Question Marks
+Query: 'show me 2bhk'
+Description: Statement, not question
+✅ Status: PASS
+   Intent: property_search (expected: property_search)
+   Confidence: High
+   Answer preview: • Found 76 projects matching your criteria
+• Here are the details:...
+
+================================================================================
+Testing: No Question Marks
+Query: 'avalon price'
+Description: Statement
+✅ Status: PASS
+   Intent: project_facts (expected: project_facts)
+   Confidence: High
+   Answer preview: # Brigade Avalon
+
+**Developer**: Brigade
+
+**Location**: Whitefield, Bangalore, East Bangalore
+
+**Configurations**: {3 BHK, 2765-2779, 4.62 Cr* }, {4 B...
+
+================================================================================
+Testing: No Question Marks
+Query: 'tell me about citrine'
+Description: Statement
+✅ Status: PASS
+   Intent: project_facts (expected: project_facts)
+   Confidence: High
+   Answer preview: # Brigade Citrine
+
+**Developer**: Brigade
+
+**Location**: Budigere Cross, East Bangalore
+
+**Configurations**: {2 BHK, 1250, 1.31 Cr*}, {3 BHK, 1548 - 2...
+
+================================================================================
+Testing: No Question Marks
+Query: 'distance airport avalon'
+Description: Statement
+✅ Status: PASS
+   Intent: sales_conversation (expected: sales_conversation)
+   Confidence: High
+   Answer preview: - **Brigade Avalon** is approximately 40-45 minutes drive from Kempegowda International Airport, about 36 kilometers via NH 44.
+
+I'd love to connect y...
+
+################################################################################
+# TESTING CATEGORY: Multiple Intents
+################################################################################
+
+================================================================================
+Testing: Multiple Intents
+Query: 'show 2bhk and compare with citrine'
+Description: Search + comparison
+✅ Status: PASS
+   Intent: project_comparison (expected: any)
+   Confidence: High
+   Answer preview: Here are 2 BHK options similar to Brigade Citrine, focusing on price and location for comparison:
+
+1. **Brigade Citrine**
+   - Price: ₹1.31 Cr*
+   - S...
+
+================================================================================
+Testing: Multiple Intents
+Query: 'price and amenities of avalon'
+Description: Multiple facts
+✅ Status: PASS
+   Intent: project_facts (expected: any)
+   Confidence: High
+   Answer preview: # Brigade Avalon
+
+**Developer**: Brigade
+
+**Location**: Whitefield, Bangalore, East Bangalore
+
+**Configurations**: {3 BHK, 2765-2779, 4.62 Cr* }, {4 B...
+
+################################################################################
+# TESTING CONTEXT CONTINUITY
+################################################################################
+
+================================================================================
+Testing: Context Continuity
+Query: 'show 2bhk in whitefield'
+Description: Start: Search query
+✅ Status: PASS
+   Intent: property_search (expected: property_search)
+   Confidence: High
+   Answer preview: • Found 14 projects matching your criteria
+• Here are the details:...
+
+================================================================================
+Testing: Context Continuity
+Query: 'price'
+Description: Follow-up: Should understand price of shown projects
+✅ Status: PASS
+   Intent: project_facts (expected: any)
+   Confidence: High
+   Answer preview: # Sattva Songbird
+
+**Developer**: Sattva
+
+**Location**: Budigere Cross, Bangalore, East Bangalore
+
+**Configurations**: {2 BHK, 1268-1280, 1.4 Cr*}, {2...
+
+================================================================================
+Testing: Context Continuity
+Query: 'more'
+Description: Follow-up: Should show more options
+✅ Status: PASS
+   Intent: project_facts (expected: any)
+   Confidence: High
+   Answer preview: # Sattva Songbird
+
+**Developer**: Sattva
+
+**Location**: Budigere Cross, Bangalore, East Bangalore
+
+**Configurations**: {2 BHK, 1268-1280, 1.4 Cr*}, {2...
+
+================================================================================
+Testing: Context Continuity
+Query: 'nearby'
+Description: Follow-up: Should show nearby to last location
+✅ Status: PASS
+   Intent: sales_conversation (expected: any)
+   Confidence: High
+   Answer preview: Nearby options within 10 km from Sattva Songbird:
+
+1. **Prestige Tranquil**
+   - Price: ₹1.2 Cr onwards
+   - Config: 2 BHK | 1190–1220 sqft
+   - Locat...
+
+################################################################################
+# TESTING CATEGORY: Project Name Variations
+################################################################################
+
+================================================================================
+Testing: Project Name Variations
+Query: 'avalon'
+Description: Partial name - should match Brigade Avalon
+✅ Status: PASS
+   Intent: project_facts (expected: project_facts)
+   Confidence: High
+   Answer preview: # Brigade Avalon
+
+**Developer**: Brigade
+
+**Location**: Whitefield, Bangalore, East Bangalore
+
+**Configurations**: {3 BHK, 2765-2779, 4.62 Cr* }, {4 B...
+
+================================================================================
+Testing: Project Name Variations
+Query: 'citrine'
+Description: Partial name - should match Brigade Citrine
+✅ Status: PASS
+   Intent: project_facts (expected: project_facts)
+   Confidence: High
+   Answer preview: # Brigade Citrine
+
+**Developer**: Brigade
+
+**Location**: Budigere Cross, East Bangalore
+
+**Configurations**: {2 BHK, 1250, 1.31 Cr*}, {3 BHK, 1548 - 2...
+
+================================================================================
+Testing: Project Name Variations
+Query: 'brigade avalon'
+Description: Full name
+✅ Status: PASS
+   Intent: project_facts (expected: project_facts)
+   Confidence: High
+   Answer preview: # Brigade Avalon
+
+**Developer**: Brigade
+
+**Location**: Whitefield, Bangalore, East Bangalore
+
+**Configurations**: {3 BHK, 2765-2779, 4.62 Cr* }, {4 B...
+
+################################################################################
+# TESTING CATEGORY: Distance/Connectivity
+################################################################################
+
+================================================================================
+Testing: Distance/Connectivity
+Query: 'distance of airport from brigade avalon'
+Description: Distance query with project
+✅ Status: PASS
+   Intent: sales_conversation (expected: sales_conversation)
+   Confidence: High
+   Answer preview: - Distance from Brigade Avalon to Kempegowda International Airport: approximately 44 km
+- Travel time by car: about 1 hour, depending on traffic condi...
+
+================================================================================
+Testing: Distance/Connectivity
+Query: 'how far is metro from citrine'
+Description: Metro distance
+✅ Status: PASS
+   Intent: sales_conversation (expected: sales_conversation)
+   Confidence: High
+   Answer preview: - Distance from Brigade Citrine to nearest metro station (Whitefield Metro Station): approximately 16 km
+- Travel time by car: about 25 minutes, depen...
+
+================================================================================
+Testing: Distance/Connectivity
+Query: 'nearby schools to avalon'
+Description: Nearby places
+✅ Status: PASS
+   Intent: sales_conversation (expected: sales_conversation)
+   Confidence: High
+   Answer preview: # Nearby Schools to Brigade Avalon:
+- **Whitefield Global School**: Approx. 5 km away
+- **The Deens Academy**: Approx. 7 km away
+- **Gopalan Internati...
+
+################################################################################
+# TESTING CATEGORY: Edge Cases
+################################################################################
+
+================================================================================
+Testing: Edge Cases
+Query: '2bhk @ whitefield'
+Description: Special characters
+✅ Status: PASS
+   Intent: property_search (expected: any)
+   Confidence: High
+   Answer preview: • Found 14 projects matching your criteria
+• Here are the details:...
+
+================================================================================
+Testing: Edge Cases
+Query: '2'
+Description: Numbers only
+✅ Status: PASS
+   Intent: project_facts (expected: any)
+   Confidence: High
+   Answer preview: # Sattva Songbird
+
+**Developer**: Sattva
+
+**Location**: Budigere Cross, Bangalore, East Bangalore
+
+**Configurations**: {2 BHK, 1268-1280, 1.4 Cr*}, {2...
+
+================================================================================
+TEST REPORT
+================================================================================
+
+SUMMARY BY CATEGORY:
+--------------------------------------------------------------------------------
+Typo Handling                  | Total:  6 | Pass:  6 | Partial:  0 | Fail:  0 | Error:  0 | Rate: 100.0%
+Incomplete Queries - No Context | Total:  3 | Pass:  3 | Partial:  0 | Fail:  0 | Error:  0 | Rate: 100.0%
+Vague References - No Context  | Total:  2 | Pass:  2 | Partial:  0 | Fail:  0 | Error:  0 | Rate: 100.0%
+Single Word Queries            | Total:  4 | Pass:  4 | Partial:  0 | Fail:  0 | Error:  0 | Rate: 100.0%
+Mixed Languages                | Total:  3 | Pass:  2 | Partial:  1 | Fail:  0 | Error:  0 | Rate: 100.0%
+Slang & Abbreviations          | Total:  5 | Pass:  5 | Partial:  0 | Fail:  0 | Error:  0 | Rate: 100.0%
+No Question Marks              | Total:  4 | Pass:  4 | Partial:  0 | Fail:  0 | Error:  0 | Rate: 100.0%
+Multiple Intents               | Total:  2 | Pass:  2 | Partial:  0 | Fail:  0 | Error:  0 | Rate: 100.0%
+Context Continuity             | Total:  4 | Pass:  4 | Partial:  0 | Fail:  0 | Error:  0 | Rate: 100.0%
+Project Name Variations        | Total:  3 | Pass:  3 | Partial:  0 | Fail:  0 | Error:  0 | Rate: 100.0%
+Distance/Connectivity          | Total:  3 | Pass:  3 | Partial:  0 | Fail:  0 | Error:  0 | Rate: 100.0%
+Edge Cases                     | Total:  2 | Pass:  2 | Partial:  0 | Fail:  0 | Error:  0 | Rate: 100.0%
+
+================================================================================
+OVERALL SUMMARY:
+  Total Tests: 41
+  ✅ Passed: 40 (97.6%)
+  ⚠️  Partial: 1 (2.4%)
+  ❌ Failed: 0 (0.0%)
+  🔴 Errors: 0 (0.0%)
+================================================================================
+
+Detailed report saved to: corner_case_test_report.json
