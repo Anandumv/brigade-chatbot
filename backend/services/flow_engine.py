@@ -118,8 +118,15 @@ class FlowState(BaseModel):
 class FlowResponse(BaseModel):
     extracted_requirements: Dict[str, Any]
     current_node: str
-    system_action: str
+    system_action: str # Markdown string for general use
     next_redirection: str
+    
+    # New: Structured fields for CopilotResponse compatibility
+    answer_bullets: List[str] = Field(default_factory=list)
+    projects: List[Dict[str, Any]] = Field(default_factory=list)
+    pitch_help: Optional[str] = None
+    next_suggestion: Optional[str] = None
+    coaching_point: Optional[str] = None
 
 # --- LLM HELPERS ---
 def extract_requirements_llm(user_input: str) -> FlowRequirements:
@@ -522,11 +529,20 @@ def execute_sales_copilot_flow(state: FlowState, user_input: str, chat_history: 
     if not action_response:
         action_response = "Could you tell me a bit more about what you're looking for? (Location, Budget, or specific Project)"
 
+    # --- STRUCTURED DATA POPULATION (for assist.py) ---
+    # Convert action_response (markdown) to bullets for frontend if empty
+    bullets = [line.strip().lstrip('-•*').strip() for line in action_response.split('\n') if line.strip() and not line.startswith('#')]
+    
     return FlowResponse(
         extracted_requirements=current_reqs.model_dump(),
         current_node="ROUTER",
         system_action=action_response,
-        next_redirection="ROUTER"
+        next_redirection="ROUTER",
+        answer_bullets=bullets,
+        projects=results[:5] if intent in ["project_discovery", "contextual_query", "ambiguous"] else ([] if not project or intent != "project_specific" else [project]),
+        pitch_help="Focus on the benefits of this choice." if intent != "project_specific" else f"Highlight the USP of {state.selected_project_name}",
+        next_suggestion="Ask if they would like to visit the site." if intent != "schedule_visit" else "Confirm the slot and pickup details.",
+        coaching_point="Use urgency for high-interest projects." if intent == "project_specific" else "Build rapport and understand their lifestyle needs."
     )
 
 def _get_mock_projects():
