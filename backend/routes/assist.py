@@ -33,6 +33,8 @@ async def assist(request: AssistRequest):
         # 1.5. Check if query needs clarification (vague references without context)
         if needs_clarification(request.query, ctx):
             logger.info(f"⚠️ Query needs clarification: '{request.query}' (vague reference without context)")
+            # IMPORTANT: Still save context to maintain sliding TTL window
+            redis_manager.save_context(request.call_id, ctx)
             return CopilotResponse(
                 projects=[],
                 answer=[

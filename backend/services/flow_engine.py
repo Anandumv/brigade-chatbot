@@ -402,7 +402,18 @@ def execute_sales_copilot_flow(state: FlowState, user_input: str, chat_history: 
     
     # 2. Classify Intent
     # ------------------
-    context_str = f"Last Intent: {state.last_intent}. Last Project: {state.selected_project_name}. Loc: {current_reqs.location}"
+    # Build comprehensive context string including last_shown_projects
+    context_parts = [f"Last Intent: {state.last_intent}"]
+    if state.selected_project_name:
+        context_parts.append(f"Last Project: {state.selected_project_name}")
+    if current_reqs.location:
+        context_parts.append(f"Location: {current_reqs.location}")
+    if state.last_shown_projects:
+        project_names = [p.get('name', p.get('project_name', str(p))) for p in state.last_shown_projects[:3]]
+        context_parts.append(f"Last Shown Projects: {', '.join(project_names)}")
+        context_parts.append("CRITICAL: Vague queries (e.g., 'price', 'more', 'details') refer to last shown project.")
+    
+    context_str = ". ".join(context_parts)
     intent_data = classify_user_intent(user_input, context_str, chat_history)
     intent = intent_data.get("intent", "ambiguous")
     state.last_intent = intent
@@ -417,9 +428,22 @@ def execute_sales_copilot_flow(state: FlowState, user_input: str, chat_history: 
     projects_table = get_projects_table()
     
     # --- A. PROJECT SPECIFIC (Details, Brochure, RM) ---
+    # Handle vague queries with context: if user asks "price", "more", "details" and we have last_shown_projects, use first one
+    vague_patterns = ["price", "cost", "more", "details", "tell me", "about it", "what about"]
+    is_vague_query = any(pattern in user_input.lower() for pattern in vague_patterns)
+    
     if intent == "project_specific" or (state.selected_project_name and intent in ["request_info", "schedule_visit"]):
         # Identify Project
         target_name = new_reqs.project_name or state.selected_project_name
+        
+        # If vague query and no explicit project but we have last_shown_projects, use first one
+        if not target_name and is_vague_query and state.last_shown_projects:
+            first_project = state.last_shown_projects[0]
+            target_name = first_project.get('name') or first_project.get('project_name')
+            if target_name:
+                logger.info(f"Using last_shown_projects context for vague query: '{user_input}' -> '{target_name}'")
+                state.selected_project_name = target_name
+        
         if target_name:
             # DB Lookup (Exact/Fuzzy)
             project = _find_project_by_name(projects_table, target_name)

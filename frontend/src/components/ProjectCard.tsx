@@ -135,8 +135,8 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project }) => {
                                 className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
                                 onClick={(e) => {
                                     e.preventDefault();
-                                    // Scroll to project details or open modal
-                                    // For now, just prevent default and could add modal logic later
+                                    // Expand card to show full details when project name is clicked
+                                    setIsExpanded(true);
                                 }}
                             >
                                 {project.project_name || project.name}

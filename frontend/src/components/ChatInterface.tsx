@@ -417,7 +417,14 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                                                         {message.answer_bullets.map((bullet, idx) => (
                                                             <div key={idx} className="flex items-start gap-2">
                                                                 <span className="text-blue-500 mt-1 flex-shrink-0">•</span>
-                                                                <span className="flex-1 text-gray-700 leading-relaxed">{bullet}</span>
+                                                                <span 
+                                                                    className="flex-1 text-gray-700 leading-relaxed prose prose-sm max-w-none"
+                                                                    dangerouslySetInnerHTML={{ 
+                                                                        __html: bullet
+                                                                            .replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-gray-900 bg-yellow-50 px-1 rounded">$1</strong>')
+                                                                            .replace(/\*(.*?)\*/g, '<em class="italic">$1</em>')
+                                                                    }}
+                                                                />
                                                             </div>
                                                         ))}
                                                     </div>
