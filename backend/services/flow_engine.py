@@ -402,21 +402,39 @@ def execute_sales_copilot_flow(state: FlowState, user_input: str, chat_history: 
     
     # 2. Classify Intent
     # ------------------
-    # Build comprehensive context string including last_shown_projects
-    context_parts = [f"Last Intent: {state.last_intent}"]
-    if state.selected_project_name:
-        context_parts.append(f"Last Project: {state.selected_project_name}")
-    if current_reqs.location:
-        context_parts.append(f"Location: {current_reqs.location}")
-    if state.last_shown_projects:
-        project_names = [p.get('name', p.get('project_name', str(p))) for p in state.last_shown_projects[:3]]
-        context_parts.append(f"Last Shown Projects: {', '.join(project_names)}")
-        context_parts.append("CRITICAL: Vague queries (e.g., 'price', 'more', 'details') refer to last shown project.")
+    # CRITICAL: Pre-check for property search patterns before LLM classification
+    # This ensures queries like "3BHK in Whitefield" are always classified as property_search
+    user_lower = user_input.lower()
+    property_search_keywords = [
+        "bhk", "bedroom", "apartment", "flat", "property", "project", "villa",
+        "show", "find", "search", "looking for", "need", "want", "under", "in ", "at "
+    ]
+    has_property_keywords = any(kw in user_lower for kw in property_search_keywords)
+    has_location = any(loc in user_lower for loc in ["whitefield", "sarjapur", "bangalore", "location", "area", "near"])
+    has_budget = any(b in user_lower for b in ["under", "below", "budget", "price", "cr", "lakh", "lac"])
+    has_config = bool(new_reqs.configuration) or any(c in user_lower for c in ["2bhk", "3bhk", "4bhk", "1bhk"])
     
-    context_str = ". ".join(context_parts)
-    intent_data = classify_user_intent(user_input, context_str, chat_history)
-    intent = intent_data.get("intent", "ambiguous")
-    state.last_intent = intent
+    # If query has property search indicators, force project_discovery intent
+    if has_property_keywords and (has_location or has_budget or has_config):
+        logger.info(f"🔍 Detected property search pattern: '{user_input}' -> forcing project_discovery intent")
+        intent = "project_discovery"
+        state.last_intent = intent
+    else:
+        # Build comprehensive context string including last_shown_projects
+        context_parts = [f"Last Intent: {state.last_intent}"]
+        if state.selected_project_name:
+            context_parts.append(f"Last Project: {state.selected_project_name}")
+        if current_reqs.location:
+            context_parts.append(f"Location: {current_reqs.location}")
+        if state.last_shown_projects:
+            project_names = [p.get('name', p.get('project_name', str(p))) for p in state.last_shown_projects[:3]]
+            context_parts.append(f"Last Shown Projects: {', '.join(project_names)}")
+            context_parts.append("CRITICAL: Vague queries (e.g., 'price', 'more', 'details') refer to last shown project.")
+        
+        context_str = ". ".join(context_parts)
+        intent_data = classify_user_intent(user_input, context_str, chat_history)
+        intent = intent_data.get("intent", "ambiguous")
+        state.last_intent = intent
     
     logger.info(f"Router Intent: {intent} | Project: {state.selected_project_name}")
 
