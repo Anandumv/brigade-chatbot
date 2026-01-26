@@ -9,7 +9,7 @@ from typing import List, Dict, Any, Optional
 from openai import OpenAI
 
 from config import settings
-from models.copilot_response import CopilotResponse, BudgetRelaxationResponse, ProjectInfo
+from models.copilot_response import CopilotResponse, BudgetRelaxationResponse, ProjectInfo, LiveCallStructure
 from prompts.sales_copilot_system import COPILOT_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
@@ -24,7 +24,8 @@ class CopilotFormatter:
     def __init__(self):
         self.client = OpenAI(
             api_key=settings.openai_api_key,
-            base_url=settings.openai_base_url
+            base_url=settings.openai_base_url,
+            timeout=10.0  # 10 second timeout for API calls
         )
         self.model = settings.effective_gpt_model
         self.temperature = 0.3  # Low temp for consistent formatting
@@ -37,7 +38,8 @@ class CopilotFormatter:
         relaxed_projects: List[Dict[str, Any]],
         applied_step: Optional[float],
         filters: Dict[str, Any],
-        intent: Optional[str] = None
+        intent: Optional[str] = None,
+        live_call_mode: bool = False
     ) -> CopilotResponse:
         """
         Generate copilot response in strict JSON format.
@@ -74,14 +76,20 @@ class CopilotFormatter:
             "relaxed_projects": relaxed_projects or [],
             "applied_step": applied_step,
             "filters": filters or {},
-            "intent": intent
+            "intent": intent,
+            "live_call_mode": live_call_mode
         }
+        
+        # Update system prompt if live call mode is enabled
+        system_prompt = COPILOT_SYSTEM_PROMPT
+        if live_call_mode:
+            system_prompt += "\n\n⚠️ LIVE CALL MODE ENABLED: Generate live_call_structure with all 6 parts."
 
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": COPILOT_SYSTEM_PROMPT},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": json.dumps(payload, indent=2)}
                 ],
                 temperature=self.temperature,
@@ -107,11 +115,25 @@ class CopilotFormatter:
             # GPT should only provide coaching content, not project data
             json_response['projects'] = project_infos
             logger.info(f"✅ Injected {len(project_infos)} real database projects into response")
+            
+            # Handle live_call_structure if present and live_call_mode is enabled
+            live_call_structure = None
+            if live_call_mode and 'live_call_structure' in json_response:
+                try:
+                    live_call_structure = LiveCallStructure(**json_response['live_call_structure'])
+                    logger.info("✅ Generated live_call_structure for live call scenario")
+                except Exception as e:
+                    logger.warning(f"Failed to parse live_call_structure: {e}")
+                    live_call_structure = None
+            
+            # Remove live_call_structure from json_response before passing to model
+            json_response.pop('live_call_structure', None)
 
             # If budget relaxation was applied, return extended model
             if applied_step and applied_step > 1.0:
                 return BudgetRelaxationResponse(
                     **json_response,
+                    live_call_structure=live_call_structure,
                     relaxation_applied=True,
                     relaxation_step=applied_step,
                     original_budget=context.get("last_budget"),
@@ -119,7 +141,7 @@ class CopilotFormatter:
                 )
 
             # Standard response
-            return CopilotResponse(**json_response)
+            return CopilotResponse(**json_response, live_call_structure=live_call_structure)
 
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse GPT response as JSON: {e}")
@@ -158,7 +180,17 @@ class CopilotFormatter:
                     price_range=self._format_price_range(proj.get("budget_min"), proj.get("budget_max")),
                     bhk=proj.get("configuration") or proj.get("config_summary") or "Configuration not available",
                     amenities=amenities[:5],  # Limit to top 5 amenities
-                    status=proj.get("status") or "Status not available"
+                    status=proj.get("status") or "Status not available",
+                    # NEW: Include all additional fields
+                    brochure_url=proj.get("brochure_url") or proj.get("brochure_link"),
+                    rm_details=proj.get("rm_details") or {},
+                    registration_process=proj.get("registration_process"),
+                    zone=proj.get("zone"),
+                    rera_number=proj.get("rera_number"),
+                    developer=proj.get("developer") or proj.get("developer_name"),
+                    possession_year=proj.get("possession_year"),
+                    possession_quarter=proj.get("possession_quarter"),
+                    matching_units=proj.get("matching_units")
                 ))
             except Exception as e:
                 logger.error(f"Failed to convert project to ProjectInfo: {e}")
@@ -235,7 +267,8 @@ def format_copilot_response(
     relaxed_projects: List[Dict[str, Any]],
     applied_step: Optional[float],
     filters: Dict[str, Any],
-    intent: Optional[str] = None
+    intent: Optional[str] = None,
+    live_call_mode: bool = False
 ) -> CopilotResponse:
     """
     Convenience function to call global copilot_formatter instance.
@@ -247,5 +280,6 @@ def format_copilot_response(
         relaxed_projects=relaxed_projects,
         applied_step=applied_step,
         filters=filters,
-        intent=intent
+        intent=intent,
+        live_call_mode=live_call_mode
     )

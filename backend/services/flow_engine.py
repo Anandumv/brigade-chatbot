@@ -497,11 +497,12 @@ def execute_sales_copilot_flow(state: FlowState, user_input: str, chat_history: 
         if results:
             context_msg = ""
             if is_nearby_query:
-                context_msg = f"Found {len(results)} projects within 10km of **{current_reqs.location}**:"
+                context_msg = f"Found {len(results)} projects within 10km of **{current_reqs.location}**"
             elif current_reqs.budget_max:
-                context_msg = f"Found {len(results)} projects generally within **{current_reqs.budget_max} Cr**:"
+                context_msg = f"Found {len(results)} projects generally within **{current_reqs.budget_max} Cr**"
             
-            action_response = sales_formatter.format_list_response(results[:5], context_msg)
+            # Simplified text response for UI - cards will show details
+            action_response = f"{context_msg or 'Found the following matching projects'}. You can swipe through the cards below to explore, or ask for specific details."
         else:
             action_response = "I couldn't find matches for those exact criteria. Try broadening your location or budget?"
 

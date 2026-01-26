@@ -359,19 +359,26 @@ class Env:
 
     def _create_engine(self, time_zone_name: Optional[str], echo: bool = False) -> None:
         connect_args = {} if time_zone_name is None else {'options': f'-c timezone={time_zone_name}'}
+        iso_level = 'REPEATABLE READ'
+        if self.db_url.startswith('sqlite'):
+            iso_level = None # Use default for sqlite
+            
         self._sa_engine = sql.create_engine(
             self.db_url,
             echo=echo,
             future=True,
-            isolation_level='REPEATABLE READ',
+            isolation_level=iso_level,
             connect_args=connect_args,
         )
         self._logger.info(f'Created SQLAlchemy engine at: {self.db_url}')
         with self.engine.begin() as conn:
-            tz_name = conn.execute(sql.text('SHOW TIME ZONE')).scalar()
-            assert isinstance(tz_name, str)
-            self._logger.info(f'Database time zone is now: {tz_name}')
-            self._default_time_zone = ZoneInfo(tz_name)
+            if not self.db_url.startswith('sqlite'):
+                tz_name = conn.execute(sql.text('SHOW TIME ZONE')).scalar()
+                assert isinstance(tz_name, str)
+                self._logger.info(f'Database time zone is now: {tz_name}')
+                self._default_time_zone = ZoneInfo(tz_name)
+            else:
+                self._default_time_zone = ZoneInfo('UTC')
 
     def _store_db_exists(self) -> bool:
         # With external DB, check if Pixeltable schema tables exist (not just if DB exists).
@@ -380,15 +387,23 @@ class Env:
             engine = sql.create_engine(self.db_url, future=True)
             with engine.connect() as conn:
                 # Check if systeminfo table exists
-                result = conn.execute(sql.text(
-                    "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'systeminfo')"
-                )).scalar()
-                return result
+                if self.db_url.startswith('sqlite'):
+                    result = conn.execute(sql.text(
+                        "SELECT count(name) FROM sqlite_master WHERE type='table' AND name='systeminfo'"
+                    )).scalar()
+                    return result > 0
+                else:
+                    result = conn.execute(sql.text(
+                        "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'systeminfo')"
+                    )).scalar()
+                    return result
         except Exception:
             return False
 
     def _create_store_db(self) -> None:
         # For external DB, try to enable pgvector extension
+        if self.db_url.startswith('sqlite'):
+            return
         try:
             engine = sql.create_engine(self.db_url, future=True, isolation_level='AUTOCOMMIT')
             with engine.begin() as conn:

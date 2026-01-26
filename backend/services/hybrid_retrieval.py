@@ -25,8 +25,9 @@ logger = logging.getLogger(__name__)
 _executor = ThreadPoolExecutor(max_workers=4)
 
 # Query timeout configuration (in seconds)
-QUERY_TIMEOUT = 10  # Maximum time for a single database query
+QUERY_TIMEOUT = 5  # Maximum time for a single database query (reduced for faster response)
 TOTAL_TIMEOUT = 15  # Maximum total time for entire search operation
+MAX_RESULTS = 20  # Maximum number of projects to return (prevent large result set processing)
 
 MOCK_DATA_PATH = os.path.join(os.path.dirname(__file__), '../data/seed_projects.json')
 
@@ -190,6 +191,7 @@ class HybridRetrievalService:
             if self.projects_table:
                 loop = asyncio.get_event_loop()
                 # Add timeout wrapper to prevent hanging queries
+                # Use shorter timeout for database queries
                 results = await asyncio.wait_for(
                     loop.run_in_executor(
                         _executor,
@@ -197,7 +199,7 @@ class HybridRetrievalService:
                         filters,
                         query
                     ),
-                    timeout=TOTAL_TIMEOUT
+                    timeout=QUERY_TIMEOUT  # Use QUERY_TIMEOUT instead of TOTAL_TIMEOUT for individual queries
                 )
                 search_method = "pixeltable"
             else:
@@ -206,20 +208,43 @@ class HybridRetrievalService:
                 search_method = "mock_data"
 
         except asyncio.TimeoutError:
-            logger.error(f"Query timeout after {TOTAL_TIMEOUT}s for query: {query}")
-            # Fallback to mock data if available
-            if self.mock_projects:
-                logger.info("Falling back to mock data after timeout")
-                results = self._query_mock_projects_sync(filters, query)
-                search_method = "mock_data_fallback"
+            logger.error(f"Query timeout after {QUERY_TIMEOUT}s for query: {query}")
+            # Fallback to cached data if available
+            if _all_projects_cache["data"] is not None:
+                logger.info("Falling back to cached projects after timeout")
+                try:
+                    # Try a simplified query with cached data
+                    results = self._query_projects_sync(filters, query)
+                    search_method = "cached_fallback"
+                except Exception as cache_err:
+                    logger.warning(f"Cache fallback failed: {cache_err}")
+                    # Fallback to mock data if available
+                    if self.mock_projects:
+                        logger.info("Falling back to mock data after cache failure")
+                        results = self._query_mock_projects_sync(filters, query)
+                        search_method = "mock_data_fallback"
+                    else:
+                        return {
+                            "projects": [],
+                            "total_matching_projects": 0,
+                            "filters_used": filters.model_dump(exclude_none=True),
+                            "search_method": "timeout_error",
+                            "error": f"Query timeout after {QUERY_TIMEOUT}s - please try a simpler search"
+                        }
             else:
-                return {
-                    "projects": [],
-                    "total_matching_projects": 0,
-                    "filters_used": filters.model_dump(exclude_none=True),
-                    "search_method": "timeout_error",
-                    "error": f"Query timeout after {TOTAL_TIMEOUT}s - please try a simpler search"
-                }
+                # Fallback to mock data if available
+                if self.mock_projects:
+                    logger.info("Falling back to mock data after timeout")
+                    results = self._query_mock_projects_sync(filters, query)
+                    search_method = "mock_data_fallback"
+                else:
+                    return {
+                        "projects": [],
+                        "total_matching_projects": 0,
+                        "filters_used": filters.model_dump(exclude_none=True),
+                        "search_method": "timeout_error",
+                        "error": f"Query timeout after {QUERY_TIMEOUT}s - please try a simpler search"
+                    }
         except Exception as e:
             logger.error(f"Error in search_with_filters: {e}", exc_info=True)
             return {
@@ -383,6 +408,11 @@ class HybridRetrievalService:
                                    if r.get('possession_year') and str(r.get('possession_year')).isdigit() and int(r.get('possession_year')) <= target_year]
                 logger.info(f"After possession filter <= {target_year}: {len(filtered_results)} results")
 
+            # Early exit if no results after filtering
+            if len(filtered_results) == 0:
+                logger.info("No results after filtering, returning empty list")
+                return []
+            
             # Apply Bedroom Filter with Configuration-Level Budget Check
             matching_results = []
             if filters.bedrooms:
@@ -458,6 +488,11 @@ class HybridRetrievalService:
             results = filtered_results
             logger.info(f"Final result count: {len(results)}")
             
+            # Limit results to prevent large result set processing
+            if len(results) > MAX_RESULTS:
+                logger.info(f"Limiting results from {len(results)} to {MAX_RESULTS} projects")
+                results = results[:MAX_RESULTS]
+            
             # Format results
             formatted = []
             for r in results:
@@ -502,8 +537,10 @@ class HybridRetrievalService:
                             "min_display": f"₹{min_cr:.2f} Cr" if min_cr else "Price on request",
                             "max_display": f"₹{max_cr:.2f} Cr" if max_cr else "Price on request"
                         },
-                        "matching_units": [],
-                        "unit_count": 0,
+                        "budget_min": r.get('budget_min'),  # In lakhs (for frontend calculations)
+                        "budget_max": r.get('budget_max'),  # In lakhs (for frontend calculations)
+                        "matching_units": r.get('matching_units', []),  # Include matching_units from filtering
+                        "unit_count": len(r.get('matching_units', [])),
                         "can_expand": True,
                         "relevant_chunks": []
                     })
@@ -782,6 +819,8 @@ class HybridRetrievalService:
                     "city": r.get('zone', '') or r.get('location', ''),
                     "locality": r.get('location', ''),
                     "price_range": price_range,
+                    "budget_min": r.get('budget_min'),  # In lakhs (for frontend calculations)
+                    "budget_max": r.get('budget_max'),  # In lakhs (for frontend calculations)
                     "configuration": r.get('configuration', '2, 3 BHK'),
                     "config_summary": r.get('configuration', '2, 3 BHK'),
                     "status": r.get('status', 'Under Construction'),
@@ -803,6 +842,7 @@ class HybridRetrievalService:
                     "towers": r.get('towers', ''),
                     "floors": r.get('floors', ''),
                     "location_link": r.get('location_link', ''),
+                    "matching_units": r.get('matching_units', []),  # Include matching_units if available
                     "can_expand": True
                 })
             

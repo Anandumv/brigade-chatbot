@@ -12,6 +12,7 @@ from models.copilot_response import CopilotResponse
 from services.redis_context import get_redis_context_manager
 from services.copilot_formatter import copilot_formatter
 from services.flow_engine import FlowState, FlowRequirements, execute_flow
+from services.gpt_intent_classifier import needs_clarification
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,21 @@ async def assist(request: AssistRequest):
         redis_manager = get_redis_context_manager()
         ctx = redis_manager.load_context(request.call_id)
         logger.info(f"📥 Loaded context for call_id={request.call_id}")
+
+        # 1.5. Check if query needs clarification (vague references without context)
+        if needs_clarification(request.query, ctx):
+            logger.info(f"⚠️ Query needs clarification: '{request.query}' (vague reference without context)")
+            return CopilotResponse(
+                projects=[],
+                answer=[
+                    "I want to make sure I understand correctly",
+                    "Which project are you referring to?",
+                    "Could you specify the project name or location you're interested in?"
+                ],
+                pitch_help="Ask for clarification to provide accurate information",
+                next_suggestion="Get specific project name or details from client",
+                coaching_point="Use this moment to gather more information about client's preferences and show attentiveness"
+            )
 
         # 2. Map Redis Context to FlowState (Global State)
         # Note: Redis uses Lakhs (int), FlowEngine uses Crores (float)
@@ -54,12 +70,32 @@ async def assist(request: AssistRequest):
         # Reuse formatter's converter for DB rows -> ProjectInfo
         project_infos = copilot_formatter._convert_to_project_infos(flow_response.projects)
         
+        # Generate live call structure if requested
+        live_call_structure = None
+        if request.live_call_mode:
+            # Use copilot_formatter to generate live call structure
+            try:
+                formatted_response = copilot_formatter.format_response(
+                    query=request.query,
+                    context=ctx,
+                    db_projects=flow_response.projects,
+                    relaxed_projects=[],
+                    applied_step=None,
+                    filters={},
+                    intent=flow_state.last_intent,
+                    live_call_mode=True
+                )
+                live_call_structure = formatted_response.live_call_structure
+            except Exception as e:
+                logger.warning(f"Failed to generate live_call_structure: {e}")
+        
         response = CopilotResponse(
             projects=project_infos,
             answer=flow_response.answer_bullets or [flow_response.system_action],
             pitch_help=flow_response.pitch_help or "I recommend these options based on your preferences.",
             next_suggestion=flow_response.next_suggestion or "Would you like to schedule a site visit?",
-            coaching_point=flow_response.coaching_point or "Build trust by highlighting project ROI and location benefits."
+            coaching_point=flow_response.coaching_point or "Build trust by highlighting project ROI and location benefits.",
+            live_call_structure=live_call_structure
         )
 
         # 5. Sync Back to Redis Context

@@ -5,8 +5,12 @@ from typing import Any, Optional, TypeVar, Union, get_type_hints
 
 import sqlalchemy as sql
 import sqlalchemy.orm as orm
-from sqlalchemy import BigInteger, ForeignKey, Integer, LargeBinary
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import BigInteger, ForeignKey, Integer, LargeBinary, JSON
+try:
+    from sqlalchemy.dialects.postgresql import JSONB, UUID
+except ImportError:
+    JSONB = JSON
+    from sqlalchemy import UUID
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm.decl_api import DeclarativeMeta
 
@@ -65,7 +69,7 @@ class SystemInfo(Base):
     """A single-row table that contains system-wide metadata."""
     __tablename__ = 'systeminfo'
     dummy = sql.Column(Integer, primary_key=True, default=0, nullable=False)
-    md = sql.Column(JSONB, nullable=False)  # SystemInfoMd
+    md = sql.Column(JSON().with_variant(JSONB, "postgresql"), nullable=False)  # SystemInfoMd
 
 
 @dataclasses.dataclass
@@ -78,7 +82,7 @@ class Dir(Base):
 
     id: orm.Mapped[uuid.UUID] = orm.mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, nullable=False)
     parent_id: orm.Mapped[uuid.UUID] = orm.mapped_column(UUID(as_uuid=True), ForeignKey('dirs.id'), nullable=True)
-    md = sql.Column(JSONB, nullable=False)
+    md = sql.Column(JSON().with_variant(JSONB, "postgresql"), nullable=False)
 
 
 @dataclasses.dataclass
@@ -178,7 +182,7 @@ class Table(Base):
 
     id: orm.Mapped[uuid.UUID] = orm.mapped_column(UUID(as_uuid=True), primary_key=True, nullable=False)
     dir_id: orm.Mapped[uuid.UUID] = orm.mapped_column(UUID(as_uuid=True), ForeignKey('dirs.id'), nullable=False)
-    md = sql.Column(JSONB, nullable=False)  # TableMd
+    md = sql.Column(JSON().with_variant(JSONB, "postgresql"), nullable=False)  # TableMd
 
 
 @dataclasses.dataclass
@@ -192,7 +196,7 @@ class TableVersion(Base):
     __tablename__ = 'tableversions'
     tbl_id = sql.Column(UUID(as_uuid=True), ForeignKey('tables.id'), primary_key=True, nullable=False)
     version = sql.Column(BigInteger, primary_key=True, nullable=False)
-    md = sql.Column(JSONB, nullable=False)  # TableVersionMd
+    md = sql.Column(JSON().with_variant(JSONB, "postgresql"), nullable=False)  # TableVersionMd
 
 
 @dataclasses.dataclass
@@ -230,7 +234,7 @@ class TableSchemaVersion(Base):
 
     tbl_id = sql.Column(UUID(as_uuid=True), ForeignKey('tables.id'), primary_key=True, nullable=False)
     schema_version = sql.Column(BigInteger, primary_key=True, nullable=False)
-    md = sql.Column(JSONB, nullable=False)  # TableSchemaVersionMd
+    md = sql.Column(JSON().with_variant(JSONB, "postgresql"), nullable=False)  # TableSchemaVersionMd
 
 
 @dataclasses.dataclass
@@ -254,5 +258,5 @@ class Function(Base):
 
     id = sql.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, nullable=False)
     dir_id = sql.Column(UUID(as_uuid=True), ForeignKey('dirs.id'), nullable=True)
-    md = sql.Column(JSONB, nullable=False)  # FunctionMd
+    md = sql.Column(JSON().with_variant(JSONB, "postgresql"), nullable=False)  # FunctionMd
     binary_obj = sql.Column(LargeBinary, nullable=True)

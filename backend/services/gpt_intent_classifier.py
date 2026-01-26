@@ -14,11 +14,88 @@ from services.sales_agent_prompt import SALES_AGENT_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
+# Hindi-English (Hinglish) keyword translations
+HINDI_TRANSLATIONS = {
+    'chahiye': 'want/need',
+    'ka': 'of',
+    'ki': 'of',
+    'ke': 'of',
+    'mein': 'in',
+    'me': 'in',
+    'kaha': 'where',
+    'kahan': 'where',
+    'kitna': 'how much',
+    'kyun': 'why',
+    'kyu': 'why',
+    'dikhao': 'show',
+    'dikhaao': 'show',
+    'batao': 'tell',
+    'kaunsa': 'which',
+    'hai': 'is',
+    'pe': 'on/at',
+    'se': 'from',
+    'tak': 'until',
+    'dur': 'far',
+    'paas': 'near',
+}
+
+def preprocess_query(query: str) -> str:
+    """
+    Preprocess query to translate common Hindi words to English for better intent classification.
+    This helps GPT understand mixed language (Hinglish) queries.
+    """
+    query_lower = query.lower()
+    
+    # Replace Hindi words with English equivalents (keeping original for context)
+    for hindi, english in HINDI_TRANSLATIONS.items():
+        if hindi in query_lower:
+            # Add English translation in parentheses for GPT context
+            query = query.replace(hindi, f"{hindi}({english})")
+            query = query.replace(hindi.capitalize(), f"{hindi.capitalize()}({english})")
+    
+    return query
+
+
+VAGUE_REFERENCES = ['it', 'this', 'that', 'these', 'those', 'they', 'them']
+
+
+def needs_clarification(query: str, context: Dict) -> bool:
+    """
+    Check if query needs clarification due to vague references without context.
+    
+    Args:
+        query: User's input query
+        context: Context dictionary with last_shown_projects, active_project, last_location, etc.
+    
+    Returns:
+        True if query has vague references AND no context exists
+    """
+    query_lower = query.lower().strip()
+    
+    # Check for vague references
+    query_words = query_lower.split()
+    has_vague_ref = any(word in VAGUE_REFERENCES for word in query_words)
+    
+    if not has_vague_ref:
+        return False
+    
+    # Check if context exists
+    has_context = (
+        context.get('last_shown_projects') or
+        context.get('last_results') or
+        context.get('active_project') or
+        context.get('selected_project_name') or
+        context.get('last_location') or
+        context.get('interested_projects')
+    )
+    
+    return not has_context
+
 # Initialize OpenAI client with timeout
 client = OpenAI(
     api_key=settings.openai_api_key,
     base_url=settings.openai_base_url,
-    timeout=30.0  # 30 second timeout for API calls
+    timeout=10.0  # 10 second timeout for API calls (reduced from 30s for faster response)
 )
 
 
@@ -49,6 +126,11 @@ def classify_intent_gpt_first(
     """
 
     system_prompt = _build_system_prompt()
+
+    # Preprocess query for mixed language (Hinglish) support
+    processed_query = preprocess_query(query)
+    if processed_query != query:
+        logger.info(f"Preprocessed query for Hindi support: '{query}' -> '{processed_query}'")
 
     # Build messages array
     messages = [{"role": "system", "content": system_prompt}]
@@ -181,8 +263,8 @@ def classify_intent_gpt_first(
         if session_state.get("conversation_phase"):
             context_info += f"\n**Phase:** {session_state['conversation_phase']}"
 
-    # Add user query with context
-    user_message = f"Classify this query: {query}"
+    # Add user query with context (use processed query for better classification)
+    user_message = f"Classify this query: {processed_query}"
     if context_info:
         user_message += context_info
 
@@ -280,9 +362,14 @@ Common Hindi words in real estate queries and their English meanings:
 - **dikhao/dikhaao** = show → "projects dikhao" = "show projects" (property_search)
 - **batao** = tell → "price batao" = "tell the price" (project_facts)
 - **kaunsa** = which → "kaunsa better hai" = "which is better" (sales_conversation)
+- **hai** = is → "price kitna hai" = "what is the price"
+- **pe** = on/at → "kahan pe hai" = "where is it"
+- **se** = from → "airport se kitna dur" = "how far from airport"
+- **dur** = far → "kitna dur hai" = "how far is it"
+- **paas** = near → "metro paas hai" = "metro is near"
 
 **CRITICAL HINGLISH INTENT CLASSIFICATION:**
-- "2 bhk chahiye" → intent: property_search (user wants 2BHK), extraction: {configuration: "2BHK"}
+- "2 bhk chahiye" → intent: property_search (user wants 2BHK), NOT project_facts, extraction: {configuration: "2BHK"}
 - "3 bhk chahiye budget 2 crore" → intent: property_search, extraction: {configuration: "3BHK", budget_max: 200}
 - "avalon ka price" → intent: project_facts (asking about Avalon price), extraction: {project_name: "Brigade Avalon", fact_type: "price"}
 - "citrine ki location kahan hai" → intent: project_facts (asking where Citrine is), extraction: {project_name: "Brigade Citrine", fact_type: "location"}

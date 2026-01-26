@@ -159,7 +159,7 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
             const assistantMessage: Message = {
                 id: generateId(),
                 role: 'assistant',
-                content: response.answer,
+                content: typeof response.answer === 'string' ? response.answer : response.answer?.join('\n') || '',
                 timestamp: new Date(),
                 confidence: response.confidence,
                 sources: response.sources,
@@ -168,6 +168,8 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                 refusalReason: response.refusal_reason,
                 suggested_actions: response.suggested_actions,
                 projects: response.projects,
+                // NEW: Handle answer as array (CopilotResponse format)
+                answer_bullets: Array.isArray(response.answer) ? response.answer : undefined,
                 // Phase 2: Enhanced UX data
                 nudge: nudge || response.nudge,
                 urgency_signals: urgencySignals || response.urgency_signals,
@@ -175,6 +177,9 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                 user_profile: userProfileData || response.user_profile,
                 // Phase 3: Sales Coaching
                 coaching_prompt: response.coaching_prompt,
+                coaching_point: (response as any).coaching_point, // CopilotResponse format
+                // NEW: Live call structure
+                live_call_structure: (response as any).live_call_structure, // CopilotResponse format
             };
 
             setMessages((prev) =>
@@ -405,13 +410,30 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                                         </div>
                                     ) : (
                                         <>
-                                            <ResponseCard
-                                                content={message.content}
-                                                confidence={message.confidence}
-                                                sources={message.sources}
-                                                isRefusal={message.isRefusal}
-                                                refusalReason={message.refusalReason}
-                                            />
+                                            {/* 1. Show Answer Bullets FIRST (if available) */}
+                                            {message.answer_bullets && message.answer_bullets.length > 0 && (
+                                                <div className="answer-section mb-4">
+                                                    <div className="answer-bullets space-y-2">
+                                                        {message.answer_bullets.map((bullet, idx) => (
+                                                            <div key={idx} className="flex items-start gap-2">
+                                                                <span className="text-blue-500 mt-1 flex-shrink-0">•</span>
+                                                                <span className="flex-1 text-gray-700 leading-relaxed">{bullet}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Fallback to ResponseCard if no answer_bullets */}
+                                            {!message.answer_bullets && (
+                                                <ResponseCard
+                                                    content={message.content}
+                                                    confidence={message.confidence}
+                                                    sources={message.sources}
+                                                    isRefusal={message.isRefusal}
+                                                    refusalReason={message.refusalReason}
+                                                />
+                                            )}
 
                                             {/* Phase 2: Proactive Nudge Card */}
                                             {message.nudge && (
@@ -467,84 +489,195 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                                                 </div>
                                             )}
 
-                                            {message.projects && message.projects.length > 0 && (
-                                                <div className="mt-4 flex flex-col gap-4 w-full">
-                                                    {message.projects.map((project, idx) => {
-                                                        // Adapter to map backend fields to frontend ProjectCard props
-                                                        const adaptProjectData = (apiProject: any) => {
-                                                            // Handle price range - can be object or need to calculate
-                                                            let priceInfo: any = apiProject.price_range;
-
-                                                            if (!priceInfo || typeof priceInfo === 'string') {
-                                                                const minCr = (apiProject.budget_min || 0) / 100;
-                                                                const maxCr = (apiProject.budget_max || 0) / 100;
-
-                                                                let priceDisplay = 'Price on Request';
-                                                                if (minCr > 0) {
-                                                                    if (maxCr > minCr) {
-                                                                        priceDisplay = `₹${minCr.toFixed(2)} Cr - ₹${maxCr.toFixed(2)} Cr`;
-                                                                    } else {
-                                                                        priceDisplay = `Starting ₹${minCr.toFixed(2)} Cr`;
-                                                                    }
-                                                                }
-                                                                priceInfo = priceDisplay;
-                                                            }
-
-                                                            return {
-                                                                id: apiProject.id || apiProject.project_id || '',
-                                                                name: apiProject.name || 'Unknown Project',
-                                                                project_id: apiProject.project_id || apiProject.id,
-                                                                project_name: apiProject.name || apiProject.project_name || 'Unknown Project',
-                                                                developer: apiProject.developer || apiProject.builder || 'Brigade Group',
-                                                                developer_name: apiProject.developer_name || apiProject.developer || apiProject.builder || 'Brigade Group',
-                                                                location: apiProject.location || 'Bangalore',
-                                                                zone: apiProject.zone,
-                                                                city: apiProject.city || apiProject.zone,
-                                                                locality: apiProject.locality || apiProject.location,
-                                                                price_range: priceInfo,
-                                                                configuration: apiProject.configuration || apiProject.config_summary || '2, 3 BHK',
-                                                                config_summary: apiProject.config_summary || apiProject.configuration,
-                                                                status: apiProject.status || 'Active',
-                                                                possession_year: apiProject.possession_year?.toString(),
-                                                                possession_quarter: apiProject.possession_quarter,
-                                                                rera_number: apiProject.rera_number,
-                                                                image_url: apiProject.image_url,
-                                                                usp: apiProject.usp || [],
-                                                                description: apiProject.description || apiProject.highlights,
-                                                                amenities: apiProject.amenities,
-                                                                highlights: apiProject.highlights,
-                                                                brochure_url: apiProject.brochure_url || apiProject.brochure_link,
-                                                                brochure_link: apiProject.brochure_link || apiProject.brochure_url,
-                                                                rm_details: apiProject.rm_details,
-                                                                rm_contact: apiProject.rm_contact,
-                                                                registration_process: apiProject.registration_process,
-                                                                total_land_area: apiProject.total_land_area,
-                                                                towers: apiProject.towers,
-                                                                floors: apiProject.floors,
-                                                                location_link: apiProject.location_link,
-                                                                can_expand: apiProject.can_expand
-                                                            };
-                                                        };
-
-                                                        const adaptedProject = adaptProjectData(project);
-
-                                                        return (
-                                                            <div key={idx} className="relative w-full space-y-3">
-                                                                <ProjectCard
-                                                                    project={adaptedProject}
-                                                                />
-
-                                                                {/* Phase 2/3: Matching Units Card */}
-                                                                {project.matching_units && project.matching_units.length > 0 && (
-                                                                    <MatchingUnitsCard
-                                                                        matching_units={project.matching_units}
-                                                                        projectName={project.name || project.project_name || 'this project'}
-                                                                    />
-                                                                )}
+                                            {/* Live Call Structure (if available) */}
+                                            {(message as any).live_call_structure && (
+                                                <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                                                    <h4 className="font-semibold text-sm text-blue-900 mb-3">Live Call Guide</h4>
+                                                    <div className="space-y-3 text-sm">
+                                                        <div>
+                                                            <p className="font-medium text-gray-700 mb-1">Situation Reframe:</p>
+                                                            <p className="text-gray-600">{(message as any).live_call_structure.situation_reframe}</p>
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-medium text-gray-700 mb-1">Questions to Ask:</p>
+                                                            <ul className="list-disc list-inside space-y-1 text-gray-600">
+                                                                {(message as any).live_call_structure.consultant_questions.map((q: string, idx: number) => (
+                                                                    <li key={idx}>{q}</li>
+                                                                ))}
+                                                            </ul>
+                                                        </div>
+                                                        {(message as any).live_call_structure.recommended_next_step && (
+                                                            <div>
+                                                                <p className="font-medium text-gray-700 mb-1">Recommended Next Step:</p>
+                                                                <p className="text-gray-600">{(message as any).live_call_structure.recommended_next_step}</p>
                                                             </div>
-                                                        );
-                                                    })}
+                                                        )}
+                                                        {(message as any).live_call_structure.pushback_handling && Object.keys((message as any).live_call_structure.pushback_handling).length > 0 && (
+                                                            <div>
+                                                                <p className="font-medium text-gray-700 mb-1">Pushback Handling:</p>
+                                                                <div className="space-y-2">
+                                                                    {Object.entries((message as any).live_call_structure.pushback_handling).map(([objection, response]: [string, string], idx: number) => (
+                                                                        <div key={idx} className="bg-white p-2 rounded">
+                                                                            <p className="font-medium text-gray-800 text-xs">"{objection}"</p>
+                                                                            <p className="text-gray-600 text-xs mt-1">{response}</p>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                        <div>
+                                                            <p className="font-medium text-gray-700 mb-1">Closing Summary:</p>
+                                                            <p className="text-gray-600">{(message as any).live_call_structure.closing_summary}</p>
+                                                        </div>
+                                                        <div className="pt-2 border-t border-blue-200">
+                                                            <p className="font-medium text-gray-700 mb-1">Post-Call Message:</p>
+                                                            <p className="text-gray-600 whitespace-pre-wrap text-xs">{(message as any).live_call_structure.post_call_message}</p>
+                                                        </div>
+                                                    </div>
                                                 </div>
+                                            )}
+
+                                            {/* 2. THEN Show Projects (after answer) */}
+                                            {message.projects && message.projects.length > 0 && (
+                                                /* Carousel Container with negative margin on mobile to go edge-to-edge */
+                                                <div className="mt-4 w-[calc(100%+32px)] -mx-4 px-4 sm:w-full sm:mx-0 sm:px-0">
+                                                    <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory hide-scrollbar">
+                                                        {message.projects.map((project, idx) => {
+                                                            // Adapter to map backend fields to frontend ProjectCard props
+                                                            const adaptProjectData = (apiProject: any) => {
+                                                                // Handle price range - can be object or need to calculate
+                                                                let priceInfo: any = apiProject.price_range;
+
+                                                                if (!priceInfo || typeof priceInfo === 'string') {
+                                                                    const minCr = (apiProject.budget_min || 0) / 100;
+                                                                    const maxCr = (apiProject.budget_max || 0) / 100;
+
+                                                                    let priceDisplay = 'Price on Request';
+                                                                    if (minCr > 0) {
+                                                                        if (maxCr > minCr) {
+                                                                            priceDisplay = `₹${minCr.toFixed(2)} Cr - ₹${maxCr.toFixed(2)} Cr`;
+                                                                        } else {
+                                                                            priceDisplay = `Starting ₹${minCr.toFixed(2)} Cr`;
+                                                                        }
+                                                                    }
+                                                                    priceInfo = priceDisplay;
+                                                                }
+
+                                                                return {
+                                                                    id: apiProject.id || apiProject.project_id || '',
+                                                                    name: apiProject.name || 'Unknown Project',
+                                                                    project_id: apiProject.project_id || apiProject.id,
+                                                                    project_name: apiProject.name || apiProject.project_name || 'Unknown Project',
+                                                                    developer: apiProject.developer || apiProject.builder || 'Brigade Group',
+                                                                    developer_name: apiProject.developer_name || apiProject.developer || apiProject.builder || 'Brigade Group',
+                                                                    location: apiProject.location || 'Bangalore',
+                                                                    zone: apiProject.zone,
+                                                                    city: apiProject.city || apiProject.zone,
+                                                                    locality: apiProject.locality || apiProject.location,
+                                                                    price_range: priceInfo,
+                                                                    configuration: apiProject.configuration || apiProject.config_summary || '2, 3 BHK',
+                                                                    config_summary: apiProject.config_summary || apiProject.configuration,
+                                                                    status: apiProject.status || 'Active',
+                                                                    possession_year: apiProject.possession_year?.toString(),
+                                                                    possession_quarter: apiProject.possession_quarter,
+                                                                    rera_number: apiProject.rera_number,
+                                                                    image_url: apiProject.image_url,
+                                                                    usp: apiProject.usp || [],
+                                                                    description: apiProject.description || apiProject.highlights,
+                                                                    amenities: apiProject.amenities,
+                                                                    highlights: apiProject.highlights,
+                                                                    brochure_url: apiProject.brochure_url || apiProject.brochure_link,
+                                                                    brochure_link: apiProject.brochure_link || apiProject.brochure_url,
+                                                                    rm_details: apiProject.rm_details,
+                                                                    rm_contact: apiProject.rm_contact,
+                                                                    registration_process: apiProject.registration_process,
+                                                                    total_land_area: apiProject.total_land_area,
+                                                                    towers: apiProject.towers,
+                                                                    floors: apiProject.floors,
+                                                                    location_link: apiProject.location_link,
+                                                                    can_expand: apiProject.can_expand
+                                                                };
+                                                            };
+
+                                                            const adaptedProject = adaptProjectData(project);
+
+                                                            return (
+                                                                <div key={idx} className="relative min-w-[85%] sm:min-w-[320px] max-w-[85%] sm:max-w-[320px] snap-center space-y-3">
+                                                                    <ProjectCard
+                                                                        project={adaptedProject}
+                                                                    />
+
+                                                                    {/* Phase 2/3: Matching Units Card */}
+                                                                    {project.matching_units && project.matching_units.length > 0 && (
+                                                                        <MatchingUnitsCard
+                                                                            matching_units={project.matching_units}
+                                                                            projectName={project.name || project.project_name || 'this project'}
+                                                                        />
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })}
+
+                                                        {/* Spacer for last item padding */}
+                                                        <div className="w-2 flex-shrink-0" />
+                                                    </div>
+                                                </div>
+                                                
+                                                {/* Action Buttons After Projects */}
+                                                {message.projects && message.projects.length > 0 && (
+                                                    <div className="mt-4 flex flex-wrap gap-2 justify-center sm:justify-start">
+                                                        <button
+                                                            onClick={() => {
+                                                                if (message.projects && message.projects.length > 0) {
+                                                                    setSelectedProjectForSchedule(message.projects[0] as ProjectInfo);
+                                                                    setShowScheduleModal(true);
+                                                                }
+                                                            }}
+                                                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                        >
+                                                            Schedule Site Visit
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                // Download all brochures
+                                                                message.projects?.forEach((proj: any) => {
+                                                                    const brochureUrl = proj.brochure_url || proj.brochure_link;
+                                                                    if (brochureUrl) {
+                                                                        window.open(brochureUrl, '_blank');
+                                                                    }
+                                                                });
+                                                            }}
+                                                            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium focus:outline-none focus:ring-2 focus:ring-gray-500"
+                                                        >
+                                                            Download All Brochures
+                                                        </button>
+                                                        {message.projects && message.projects.length > 1 && (
+                                                            <button
+                                                                onClick={() => {
+                                                                    setInput(`Compare ${message.projects?.map((p: any) => p.name || p.project_name).join(' and ')}`);
+                                                                    inputRef.current?.focus();
+                                                                }}
+                                                                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium focus:outline-none focus:ring-2 focus:ring-gray-500"
+                                                            >
+                                                                Compare Projects
+                                                            </button>
+                                                        )}
+                                                        {message.projects && message.projects.length > 0 && (
+                                                            <button
+                                                                onClick={() => {
+                                                                    const firstProject = message.projects?.[0] as any;
+                                                                    const rmContact = firstProject?.rm_details?.contact || firstProject?.rm_contact;
+                                                                    if (rmContact) {
+                                                                        window.open(`tel:${rmContact}`, '_self');
+                                                                    }
+                                                                }}
+                                                                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium focus:outline-none focus:ring-2 focus:ring-gray-500"
+                                                            >
+                                                                Contact RM
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
                                             )}
 
                                             {messages.indexOf(message) === messages.length - 1 && (

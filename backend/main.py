@@ -815,7 +815,41 @@ async def admin_refresh_projects(x_admin_key: str = Header(None)):
         if os.path.exists(seed_file):
             with open(seed_file, 'r') as f:
                 seed_data = json.load(f)
-            projects.insert(seed_data)
+            
+            # Validate that all required fields are present
+            required_fields = ['project_id', 'name', 'developer', 'location', 'zone', 'configuration', 
+                             'budget_min', 'budget_max', 'possession_year', 'possession_quarter', 
+                             'status', 'rera_number', 'brochure_url', 'rm_details', 'registration_process']
+            
+            validated_data = []
+            for project in seed_data:
+                # Ensure all required fields exist, use defaults if missing
+                validated_project = {
+                    'project_id': project.get('project_id', ''),
+                    'name': project.get('name', ''),
+                    'developer': project.get('developer', ''),
+                    'location': project.get('location', ''),
+                    'zone': project.get('zone', ''),
+                    'configuration': project.get('configuration', ''),
+                    'budget_min': project.get('budget_min', 0),
+                    'budget_max': project.get('budget_max', 0),
+                    'possession_year': project.get('possession_year'),
+                    'possession_quarter': project.get('possession_quarter', ''),
+                    'status': project.get('status', ''),
+                    'rera_number': project.get('rera_number', ''),
+                    'description': project.get('description', ''),
+                    'amenities': project.get('amenities', ''),
+                    'usp': project.get('usp', ''),
+                    'rm_details': project.get('rm_details', {}),
+                    'brochure_url': project.get('brochure_url', ''),
+                    'registration_process': project.get('registration_process', ''),
+                    'latitude': project.get('latitude'),
+                    'longitude': project.get('longitude'),
+                }
+                validated_data.append(validated_project)
+            
+            projects.insert(validated_data)
+            logger.info(f"Inserted {len(validated_data)} projects with validated fields")
 
             # CRITICAL: Clear hybrid_retrieval cache after refresh
             # This ensures fresh queries will fetch the new data

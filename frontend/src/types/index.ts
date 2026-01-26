@@ -85,7 +85,7 @@ export interface CoachingPrompt {
 }
 
 export interface ChatQueryResponse {
-    answer: string;
+    answer: string | string[];  // Can be string or array of bullets (CopilotResponse format)
     confidence: ConfidenceLevel;
     sources: SourceInfo[];
     intent: IntentType;
@@ -102,6 +102,7 @@ export interface ChatQueryResponse {
     user_profile?: import('./enhanced-ux').UserProfileData;
     // Phase 3: Sales Coaching
     coaching_prompt?: CoachingPrompt;
+    coaching_point?: string;  // CopilotResponse format
 }
 
 export interface CompareProjectsRequest {
@@ -123,6 +124,8 @@ export interface Message {
     suggested_actions?: string[];
     isLoading?: boolean;
     projects?: any[];
+    // NEW: Answer bullets array (for CopilotResponse format)
+    answer_bullets?: string[];
     // Phase 2: Enhanced UX data
     nudge?: import('./enhanced-ux').ProactiveNudge;
     urgency_signals?: import('./enhanced-ux').UrgencySignal[];
@@ -131,6 +134,8 @@ export interface Message {
     // Phase 3: Sales Coaching
     coaching_prompt?: CoachingPrompt;
     coaching_point?: string;
+    // NEW: Live call structure
+    live_call_structure?: LiveCallStructure;
 }
 
 export interface QueryAnalytics {
@@ -203,12 +208,22 @@ export interface CopilotProjectInfo {
     matching_units?: MatchingUnit[];  // Which configs match search
 }
 
+export interface LiveCallStructure {
+    situation_reframe: string;
+    consultant_questions: string[];
+    recommended_next_step?: string;
+    pushback_handling?: Record<string, string>;
+    closing_summary: string;
+    post_call_message: string;
+}
+
 export interface CopilotResponse {
     projects: CopilotProjectInfo[];
     answer: string[];  // 3-5 bullet points
     pitch_help: string;  // Single call-ready sentence
     next_suggestion: string;  // One-line action
     coaching_point: string;  // NEW: Real-time sales coaching (mandatory)
+    live_call_structure?: LiveCallStructure;  // NEW: 6-part structure for live calls
 
     // Extended fields for budget relaxation
     relaxation_applied?: boolean;

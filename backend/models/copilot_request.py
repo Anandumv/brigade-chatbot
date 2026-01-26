@@ -79,6 +79,11 @@ class AssistRequest(BaseModel):
         description="Quick filters (optional). Overrides context filters if provided."
     )
 
+    live_call_mode: bool = Field(
+        False,
+        description="Enable live call response format with 6-part consultant structure"
+    )
+
     class Config:
         json_schema_extra = {
             "example": {

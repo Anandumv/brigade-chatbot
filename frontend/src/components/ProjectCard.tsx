@@ -130,7 +130,17 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project }) => {
                 <div className="flex justify-between items-start mb-3 gap-3">
                     <div className="flex-1 min-w-0">
                         <h3 className="font-semibold text-lg sm:text-xl text-gray-900 leading-tight truncate">
-                            {project.project_name || project.name}
+                            <a
+                                href={`#project-${project.project_id || project.id || project.name}`}
+                                className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    // Scroll to project details or open modal
+                                    // For now, just prevent default and could add modal logic later
+                                }}
+                            >
+                                {project.project_name || project.name}
+                            </a>
                         </h3>
                         <p className="text-sm text-gray-500 mt-0.5">{project.developer_name || project.developer}</p>
                     </div>
@@ -271,27 +281,52 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project }) => {
                         )}
 
                         {/* Configuration Details */}
-                        {configUnits.length > 0 && (
+                        {(configUnits.length > 0 || project.matching_units) && (
                             <div>
                                 <div className="flex items-center gap-2 mb-2">
                                     <Home className="w-4 h-4 text-blue-600 flex-shrink-0" />
                                     <h4 className="font-semibold text-sm text-gray-900">Unit Configuration</h4>
                                 </div>
-                                <div className="space-y-2">
-                                    {configUnits.map((unit, idx) => (
-                                        <div key={idx} className="bg-gray-50 rounded-lg p-3 text-sm">
-                                            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
-                                                <span className="font-medium text-gray-900">{unit.type}</span>
-                                                <span className="text-blue-600 font-semibold">{unit.price}</span>
-                                            </div>
-                                            {unit.area && (
-                                                <div className="text-gray-600 text-xs mt-1">
-                                                    Area: {unit.area} sq.ft
+                                
+                                {/* Use matching_units if available (from backend), otherwise use parsed configUnits */}
+                                {project.matching_units && project.matching_units.length > 0 ? (
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full border-collapse">
+                                            <thead>
+                                                <tr className="border-b border-gray-200">
+                                                    <th className="text-left py-2 px-3 text-xs font-semibold text-gray-700">Config</th>
+                                                    <th className="text-left py-2 px-3 text-xs font-semibold text-gray-700">Size</th>
+                                                    <th className="text-left py-2 px-3 text-xs font-semibold text-gray-700">Price</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {project.matching_units.map((unit: any, idx: number) => (
+                                                    <tr key={idx} className="border-b border-gray-100">
+                                                        <td className="py-2 px-3 text-sm text-gray-900">{unit.bhk} BHK</td>
+                                                        <td className="py-2 px-3 text-sm text-gray-600">{unit.sqft_range || 'N/A'} sq.ft</td>
+                                                        <td className="py-2 px-3 text-sm text-blue-600 font-semibold">₹{unit.price_cr} Cr</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {configUnits.map((unit, idx) => (
+                                            <div key={idx} className="bg-gray-50 rounded-lg p-3 text-sm">
+                                                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
+                                                    <span className="font-medium text-gray-900">{unit.type}</span>
+                                                    <span className="text-blue-600 font-semibold">{unit.price}</span>
                                                 </div>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
+                                                {unit.area && (
+                                                    <div className="text-gray-600 text-xs mt-1">
+                                                        Area: {unit.area} sq.ft
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         )}
 

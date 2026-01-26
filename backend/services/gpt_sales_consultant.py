@@ -404,6 +404,9 @@ def format_context_for_prompt(context: dict) -> str:
         }
     }
 
+    recent_msgs = context.get('recent_messages', [])
+    last_msg = recent_msgs[-1].get('content', '') if recent_msgs else ""
+    
     return f"""
 PERSISTENT CONTEXT OBJECT (INTERNAL STATE):
 ```json
@@ -412,7 +415,7 @@ PERSISTENT CONTEXT OBJECT (INTERNAL STATE):
 
 RECENT ACTIVITY:
 - Shown: {', '.join([p['name'] for p in projects_shown[:3]])}
-- Last User Msg Truncated: "{str(context.get('recent_messages', [{}])[-1].get('content', ''))[-100:]}"
+- Last User Msg Truncated: "{str(last_msg)[-100:]}"
 """
 
 

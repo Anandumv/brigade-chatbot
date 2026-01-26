@@ -7,6 +7,37 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 
 
+class LiveCallStructure(BaseModel):
+    """
+    6-part structure for live call scenarios with consultant-grade responses.
+    Used when live_call_mode=True in the request.
+    """
+    situation_reframe: str = Field(
+        ...,
+        description="One paragraph restating client situation (spoken on call)"
+    )
+    consultant_questions: List[str] = Field(
+        ...,
+        description="2-4 high-leverage questions to ask on call"
+    )
+    recommended_next_step: Optional[str] = Field(
+        None,
+        description="Clear next action if client asks what to do"
+    )
+    pushback_handling: Optional[Dict[str, str]] = Field(
+        None,
+        description="Common objections with responses (e.g., {'We need to think': 'That's reasonable. What specifically do you want to think through?'})"
+    )
+    closing_summary: str = Field(
+        ...,
+        description="One paragraph alignment summary (spoken)"
+    )
+    post_call_message: str = Field(
+        ...,
+        description="Plain text for WhatsApp/email (no formatting, no emojis)"
+    )
+
+
 class ProjectInfo(BaseModel):
     """
     Project information returned in copilot response.
@@ -81,6 +112,12 @@ class CopilotResponse(BaseModel):
     coaching_point: str = Field(
         ...,
         description="Real-time coaching for sales rep (1-2 sentences, actionable guidance)"
+    )
+
+    # NEW: Live call support
+    live_call_structure: Optional['LiveCallStructure'] = Field(
+        None,
+        description="6-part structure for live call scenarios (only populated when live_call_mode=True)"
     )
 
     class Config:

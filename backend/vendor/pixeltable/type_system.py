@@ -644,7 +644,12 @@ class JsonType(ColumnType):
         return cls(json_schema=d.get('json_schema'), nullable=d['nullable'])
 
     def to_sa_type(self) -> sql.types.TypeEngine:
-        return sql.dialects.postgresql.JSONB()
+        from sqlalchemy import JSON
+        try:
+            from sqlalchemy.dialects.postgresql import JSONB
+            return JSON().with_variant(JSONB, "postgresql")
+        except ImportError:
+            return JSON()
 
     def _to_json_schema(self) -> dict[str, Any]:
         if self.json_schema is None:

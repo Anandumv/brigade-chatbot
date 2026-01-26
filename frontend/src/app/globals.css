@@ -55,7 +55,8 @@ body {
   margin-bottom: 0.75em;
 }
 
-.prose ul, .prose ol {
+.prose ul,
+.prose ol {
   margin-left: 1.5em;
   margin-bottom: 0.75em;
 }
@@ -77,6 +78,7 @@ body {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -87,6 +89,7 @@ body {
     opacity: 0;
     transform: translateY(10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -99,6 +102,7 @@ body {
     max-height: 0;
     transform: translateY(-10px);
   }
+
   to {
     opacity: 1;
     max-height: 2000px;
@@ -133,13 +137,11 @@ body {
 
 /* Button styles */
 .btn-primary {
-  @apply bg-gradient-to-r from-brigade-gold to-yellow-600 text-white px-4 py-2 rounded-lg font-medium 
-         hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  @apply bg-gradient-to-r from-brigade-gold to-yellow-600 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
 }
 
 .btn-secondary {
-  @apply bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg font-medium
-         hover:border-brigade-gold hover:shadow-sm transition-all duration-200;
+  @apply bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg font-medium hover:border-brigade-gold hover:shadow-sm transition-all duration-200;
 }
 
 /* Card styles */
@@ -164,4 +166,22 @@ body {
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  /* IE and Edge */
+  scrollbar-width: none;
+  /* Firefox */
+}
+
+/* Safe area utilities for mobile */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
 }

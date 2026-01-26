@@ -15,9 +15,11 @@ VERSION = 25
 
 def create_system_info(engine: sql.engine.Engine) -> None:
     """Create the system metadata record"""
-    system_md = SystemInfoMd(schema_version=VERSION)
-    record = SystemInfo(md=dataclasses.asdict(system_md))
     with orm.Session(engine, future=True) as session:
+        if session.query(sql.func.count(SystemInfo.dummy)).scalar() > 0:
+            return
+        system_md = SystemInfoMd(schema_version=VERSION)
+        record = SystemInfo(md=dataclasses.asdict(system_md))
         session.add(record)
         session.flush()
         session.commit()

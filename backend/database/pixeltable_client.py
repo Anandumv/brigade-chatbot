@@ -34,17 +34,27 @@ class PixeltableClient:
     
     def __init__(self):
         self.initialized = False
-        self._initialize()
+        self._initialization_error = None
     
-    def _initialize(self):
-        """Initialize Pixeltable tables."""
+    def _ensure_initialized(self):
+        """Lazy initialization of Pixeltable tables."""
+        if self.initialized:
+            return True
+            
         try:
+            logger.info("Initializing PixeltableClient...")
             initialize_pixeltable()
             self.initialized = True
+            self._initialization_error = None
             logger.info("PixeltableClient initialized successfully")
+            return True
         except Exception as e:
-            logger.error(f"Failed to initialize Pixeltable: {e}")
+            import traceback
+            error_msg = f"{str(e)}\n{traceback.format_exc()}"
+            logger.error(f"Failed to initialize Pixeltable:\n{error_msg}")
+            self._initialization_error = error_msg
             self.initialized = False
+            return False
     
     async def log_query(
         self,
@@ -175,6 +185,7 @@ class PixeltableClient:
         status: str = None
     ) -> List[Dict[str, Any]]:
         """Get projects matching filter criteria."""
+        self._ensure_initialized()
         try:
             projects = get_projects_table()
             query = projects.select()
@@ -216,8 +227,35 @@ class PixeltableClient:
     
     def get_analytics(self, days: int = 7) -> Dict[str, Any]:
         """Get query analytics data."""
+        self._ensure_initialized()
         return get_analytics_data(days)
 
+    async def get_user_projects(self, user_id: str) -> List[Dict[str, Any]]:
+        """Get all projects (no user filtering in Pixeltable version)."""
+        self._ensure_initialized()
+        try:
+            projects = get_projects_table()
+            results = projects.select(
+                projects.project_id,
+                projects.name,
+                projects.location,
+                projects.status,
+                projects.rera_number
+            ).collect()
+            
+            return [
+                {
+                    'id': r['project_id'],
+                    'name': r['name'],
+                    'location': r['location'],
+                    'status': r['status'],
+                    'rera_number': r.get('rera_number')
+                }
+                for r in results
+            ]
+        except Exception as e:
+            logger.error(f"Error getting projects: {e}")
+            return []
 
 # Global instance - replaces supabase_client
 pixeltable_client = PixeltableClient()

@@ -42,7 +42,7 @@ def test_scheduling_service():
         contact_name="John Doe",
         contact_phone="+91 98765 43210",
         contact_email="john@example.com",
-        requested_date=date.today() + timedelta(days=2),
+        requested_date=date(2026, 1, 26), # Monday (Weekday)
         requested_time_slot=TimeSlot.MORNING,
         user_notes="Interested in 3BHK units",
         source="test",
@@ -220,7 +220,7 @@ def test_scheduling_service():
         contact_name="John Doe",
         contact_phone="+91 98765 43210",
         contact_email="john@example.com",
-        requested_date=date.today() + timedelta(days=3),
+        requested_date=date(2026, 1, 27), # Tuesday (Weekday)
         requested_time_slot=TimeSlot.AFTERNOON,
         source="test"
     )
@@ -268,16 +268,21 @@ def test_scheduling_service():
     
     assigned_rms = []
     for i in range(6):  # Test 6 visits
+        # Use a different day for each to avoid slot conflicts
+        # Move to later dates to avoid conflict with Test 1/9
+        test_date = date(2026, 1, 29) + timedelta(days=i//3)
         visit_req = SiteVisitRequest(
             user_id=f"test_user_{i}",
             project_id=f"proj_{i}",
             project_name=f"Property {i}",
             contact_name=f"User {i}",
             contact_phone=f"+91 9999{i:05d}",
+            requested_date=test_date, # Distribute over days
             source="test"
         )
         
         result = service.schedule_site_visit(visit_req)
+        assert result['success'] == True, f"Failed at visit {i}: {result.get('message')}"
         assigned_rms.append(result['details']['rm_name'])
     
     # Check round-robin (should cycle through 3 RMs)
