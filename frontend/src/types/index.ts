@@ -54,6 +54,7 @@ export interface ProjectInfo {
     floors?: string;
     location_link?: string;
     can_expand?: boolean;
+    matching_units?: MatchingUnit[];  // NEW: Configuration-level filtering transparency
 }
 
 export interface PersonaInfo {
@@ -124,8 +125,6 @@ export interface Message {
     suggested_actions?: string[];
     isLoading?: boolean;
     projects?: any[];
-    // NEW: Answer bullets array (for CopilotResponse format)
-    answer_bullets?: string[];
     // Phase 2: Enhanced UX data
     nudge?: import('./enhanced-ux').ProactiveNudge;
     urgency_signals?: import('./enhanced-ux').UrgencySignal[];
@@ -135,7 +134,7 @@ export interface Message {
     coaching_prompt?: CoachingPrompt;
     coaching_point?: string;  // NEW: From CopilotResponse
     answer_bullets?: string[];  // NEW: Bullet point answer format
-    live_call_structure?: LiveCallStructure;  // NEW: Live call guide structure
+    live_call_structure?: any;  // NEW: Live call guide structure
 }
 
 export interface QueryAnalytics {
@@ -208,22 +207,12 @@ export interface CopilotProjectInfo {
     matching_units?: MatchingUnit[];  // Which configs match search
 }
 
-export interface LiveCallStructure {
-    situation_reframe: string;
-    consultant_questions: string[];
-    recommended_next_step?: string;
-    pushback_handling?: Record<string, string>;
-    closing_summary: string;
-    post_call_message: string;
-}
-
 export interface CopilotResponse {
     projects: CopilotProjectInfo[];
     answer: string[];  // 3-5 bullet points
     pitch_help: string;  // Single call-ready sentence
     next_suggestion: string;  // One-line action
     coaching_point: string;  // NEW: Real-time sales coaching (mandatory)
-    live_call_structure?: LiveCallStructure;  // NEW: 6-part structure for live calls
 
     // Extended fields for budget relaxation
     relaxation_applied?: boolean;
