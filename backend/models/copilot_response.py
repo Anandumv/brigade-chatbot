@@ -95,7 +95,7 @@ class CopilotResponse(BaseModel):
     answer: List[str] = Field(
         ...,
         min_length=1,
-        max_length=15,
+        max_length=20,  # Increased from 15 to support comprehensive responses
         description="Bullet points (reasoning, NOT facts). Facts go in projects[]"
     )
 

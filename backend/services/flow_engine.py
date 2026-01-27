@@ -405,17 +405,20 @@ def execute_sales_copilot_flow(state: FlowState, user_input: str, chat_history: 
     # CRITICAL: Pre-check for property search patterns before LLM classification
     # This ensures queries like "3BHK in Whitefield" are always classified as property_search
     user_lower = user_input.lower()
+
+    # FIX #4: Removed generic keywords "in " and "at " to avoid false positives
+    # (e.g., "tell me about investment in Sarjapur" should NOT be property search)
     property_search_keywords = [
         "bhk", "bedroom", "apartment", "flat", "property", "project", "villa",
-        "show", "find", "search", "looking for", "need", "want", "under", "in ", "at "
+        "show me", "find me", "search for", "looking for", "need", "want"
     ]
     has_property_keywords = any(kw in user_lower for kw in property_search_keywords)
     has_location = any(loc in user_lower for loc in ["whitefield", "sarjapur", "bangalore", "location", "area", "near"])
     has_budget = any(b in user_lower for b in ["under", "below", "budget", "price", "cr", "lakh", "lac"])
-    has_config = bool(new_reqs.configuration) or any(c in user_lower for c in ["2bhk", "3bhk", "4bhk", "1bhk"])
-    
-    # If query has property search indicators, force project_discovery intent
-    if has_property_keywords and (has_location or has_budget or has_config):
+    has_config = bool(new_reqs.configuration) or any(c in user_lower for c in ["1bhk", "2bhk", "2.5bhk", "3bhk", "4bhk", "5bhk"])
+
+    # Only force property_discovery if EXPLICIT property intent (BHK or property keywords + location/budget)
+    if has_config or (has_property_keywords and (has_location or has_budget)):
         logger.info(f"🔍 Detected property search pattern: '{user_input}' -> forcing project_discovery intent")
         intent = "project_discovery"
         state.last_intent = intent
@@ -475,11 +478,30 @@ def execute_sales_copilot_flow(state: FlowState, user_input: str, chat_history: 
                     url = project.get('brochure_url')
                     action_response = f"📄 **Brochure for {project['name']}**\n{url or 'Available on request via RM.'}"
                 elif "rm" in user_input.lower() or "number" in user_input.lower():
-                    rm = project.get('rm_details') or "+91-9988776655 (Support)"
-                    action_response = f"📞 **Relationship Manager for {project['name']}**\n{rm}"
+                    # FIX #2: Format RM details properly
+                    rm = project.get('rm_details')
+                    if rm and isinstance(rm, dict):
+                        rm_text = f"**{rm.get('name', 'Support')}**: {rm.get('contact', 'N/A')}"
+                    else:
+                        rm_text = "**Support**: +91-9988776655"
+                    action_response = f"📞 **Relationship Manager for {project['name']}**\n\n{rm_text}"
                 else:
-                    # Full Pitch
-                    action_response = sales_formatter.format_pitch_response(project)
+                    # FIX #6: Check if asking about project details/amenities
+                    asking_details = any(word in user_input.lower() for word in [
+                        "amenities", "amenity", "facilities", "features", "specifications",
+                        "details", "about", "tell me", "what", "how"
+                    ])
+
+                    if asking_details:
+                        # Use GPT to generate conversational response about project
+                        try:
+                            action_response = _generate_project_details_response(project, user_input)
+                        except Exception as e:
+                            logger.error(f"GPT generation failed, fallback to formatted response: {e}")
+                            action_response = sales_formatter.format_pitch_response(project)
+                    else:
+                        # General project query - use formatted card
+                        action_response = sales_formatter.format_pitch_response(project)
             else:
                 action_response = f"I couldn't find specific details for '{target_name}'. Let me show you similar options."
                 intent = "project_discovery" # Fallback
@@ -588,6 +610,64 @@ def execute_sales_copilot_flow(state: FlowState, user_input: str, chat_history: 
         coaching_point="Use urgency for high-interest projects." if intent == "project_specific" else "Build rapport and understand their lifestyle needs."
     )
 
+def _generate_project_details_response(project: dict, user_query: str) -> str:
+    """
+    Generate conversational GPT response about project details/amenities.
+    Uses project DB data as context for GPT to generate natural response.
+    """
+    try:
+        import openai
+        import os
+
+        client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+        # Prepare project context
+        project_context = f"""
+Project: {project.get('name')}
+Location: {project.get('location')}
+Configuration: {project.get('configuration')}
+Price Range: ₹{project.get('budget_min', 0)/100:.2f} Cr - ₹{project.get('budget_max', 0)/100:.2f} Cr
+Status: {project.get('status')}
+Possession: Q{project.get('possession_quarter')} {project.get('possession_year')}
+Amenities: {project.get('amenities')}
+USP: {project.get('usp')}
+Developer: {project.get('developer')}
+RERA: {project.get('rera_number')}
+"""
+
+        prompt = f"""You are a real estate sales assistant helping a customer understand a project.
+
+Project Information:
+{project_context}
+
+Customer Question: "{user_query}"
+
+Generate a helpful, conversational response (3-5 bullet points) that:
+1. Directly answers their question using the project data above
+2. Highlights key features relevant to their question
+3. Uses natural, sales-friendly language (not robotic)
+4. Uses bold formatting for emphasis (**text**)
+
+Format as bullet points starting with "•" or "-"."""
+
+        response = client.chat.completions.create(
+            model="gpt-4-turbo-preview",
+            messages=[
+                {"role": "system", "content": "You are a helpful real estate sales assistant."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=500
+        )
+
+        return response.choices[0].message.content.strip()
+
+    except Exception as e:
+        logger.error(f"GPT project details generation failed: {e}")
+        # Fallback to formatted response
+        from services.sales_formatter import sales_formatter
+        return sales_formatter.format_pitch_response(project)
+
 def _get_mock_projects():
     from services.hybrid_retrieval import hybrid_retrieval
     if not hybrid_retrieval.mock_projects:
@@ -595,21 +675,12 @@ def _get_mock_projects():
     return hybrid_retrieval.mock_projects
 
 def _find_project_by_name(table, name_query):
-    """Helper to find project name."""
+    """Helper to find project name with case-insensitive matching."""
     if not name_query: return None
-    
-    # DB Search
+
+    # Fetch all projects from DB
     if table:
         try:
-            # 1. Exact
-            res = table.select(
-                table.project_id, table.name, table.location, table.budget_min, table.budget_max,
-                table.configuration, table.status, table.possession_year, table.possession_quarter,
-                table.amenities, table.usp, table.brochure_url, table.rm_details
-            ).where(table.name == name_query).collect()
-            if res: return res[0]
-            
-            # 2. Fuzzy/Regex
             all_projs = table.select(
                 table.project_id, table.name, table.location, table.budget_min, table.budget_max,
                 table.configuration, table.status, table.possession_year, table.possession_quarter,
@@ -621,7 +692,13 @@ def _find_project_by_name(table, name_query):
     else:
         all_projs = _get_mock_projects()
 
-    # Search in all_projs (DB or Mock)
+    # Step 1: Case-insensitive exact match (FIRST PRIORITY)
+    name_query_lower = name_query.lower()
+    for p in all_projs:
+        if p['name'].lower() == name_query_lower:
+            return p
+
+    # Step 2: Fuzzy match fallback (SECOND PRIORITY)
     import difflib
     names = [p['name'] for p in all_projs]
     matches = difflib.get_close_matches(name_query, names, n=1, cutoff=0.6)
@@ -629,6 +706,7 @@ def _find_project_by_name(table, name_query):
         target = matches[0]
         for p in all_projs:
             if p['name'] == target: return p
+
     return None
 
 def _search_projects(table, reqs, query_text):

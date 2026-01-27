@@ -374,11 +374,25 @@ class HybridRetrievalService:
                 logger.info(f"After developer filter '{filters.developer_name}': {len(filtered_results)} results")
 
             # Apply Project Name filter (Specific project search)
+            # FIX #5: Use same case-insensitive exact match approach as flow_engine
             if filters.project_name and filters.project_name.strip():
                 p_name_lower = filters.project_name.lower()
-                filtered_results = [r for r in filtered_results 
-                                   if p_name_lower in str(r.get('name', '')).lower()]
-                logger.info(f"After project name filter '{filters.project_name}': {len(filtered_results)} results")
+
+                # Step 1: Try exact match first (case-insensitive)
+                exact_match = None
+                for r in filtered_results:
+                    if str(r.get('name', '')).lower() == p_name_lower:
+                        exact_match = r
+                        break
+
+                if exact_match:
+                    filtered_results = [exact_match]
+                    logger.info(f"After project name filter (exact match) '{filters.project_name}': 1 result")
+                else:
+                    # Step 2: Fall back to substring match
+                    filtered_results = [r for r in filtered_results
+                                       if p_name_lower in str(r.get('name', '')).lower()]
+                    logger.info(f"After project name filter (substring) '{filters.project_name}': {len(filtered_results)} results")
 
             
             # Apply budget filter (price in Cr)
