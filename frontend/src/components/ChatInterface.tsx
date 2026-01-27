@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Message, ProjectInfo, PersonaInfo, ChatQueryResponse } from '@/types';
+import { Message, ProjectInfo, PersonaInfo, ChatQueryResponse, ConfidenceLevel, IntentType, CopilotResponse } from '@/types';
 import { SelectedFilters } from '@/types/filters';
 import { UserProfileData, ProactiveNudge, UrgencySignal, SentimentData } from '@/types/enhanced-ux';
 import { apiService } from '@/services/api';
@@ -98,26 +98,25 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
         setMessages((prev) => [...prev, loadingMessage]);
 
         try {
-            // Use filter-aware query if filters are selected
-            const hasFilters = Object.keys(selectedFilters).some(
-                (key) => !key.includes('Min') && !key.includes('Max') && selectedFilters[key as keyof SelectedFilters]
-            );
+            // Use the new /api/assist/ endpoint (spec-compliant CopilotResponse)
+            const copilotResponse = await apiService.sendAssistQuery({
+                call_id: sessionId, // Use sessionId as call_id for context persistence
+                query: userMessage.content,
+                filters: selectedFilters as any, // Pass filters directly (backend will handle conversion)
+            });
 
-            let response: ChatQueryResponse;
-            if (hasFilters) {
-                response = await apiService.sendQueryWithFilters(
-                    userMessage.content,
-                    selectedFilters,
-                    userId
-                );
-            } else {
-                response = await apiService.sendQuery({
-                    query: userMessage.content,
-                    user_id: userId,
-                    project_id: undefined,
-                    persona: undefined,
-                });
-            }
+            // Map CopilotResponse to ChatQueryResponse format for backward compatibility
+            const response: ChatQueryResponse = {
+                answer: copilotResponse.answer, // Already an array of bullets
+                confidence: 'High' as ConfidenceLevel, // CopilotResponse doesn't have confidence field
+                sources: [], // CopilotResponse doesn't have sources field
+                intent: 'project_fact' as IntentType, // Default intent
+                is_refusal: false,
+                response_time_ms: 0,
+                projects: copilotResponse.projects as any[],
+                coaching_point: copilotResponse.coaching_point,
+                suggested_actions: [copilotResponse.next_suggestion],
+            };
 
             // Extract enhanced UX data from response
             let nudge: ProactiveNudge | undefined = response.nudge;
@@ -131,8 +130,9 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
 
             // Parse nudge from response text if not in structured data
             // Backend currently adds nudges to response text with 🎯 prefix
-            if (!nudge && response.answer.includes('🎯')) {
-                const nudgeMatch = response.answer.match(/🎯\s*(.+?)(?:\n\n|$)/);
+            const answerText = Array.isArray(response.answer) ? response.answer.join('\n') : response.answer;
+            if (!nudge && answerText.includes('🎯')) {
+                const nudgeMatch = answerText.match(/🎯\s*(.+?)(?:\n\n|$)/);
                 if (nudgeMatch) {
                     const nudgeText = nudgeMatch[1];
                     // Infer nudge type from message
@@ -177,7 +177,7 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                 user_profile: userProfileData || response.user_profile,
                 // Phase 3: Sales Coaching
                 coaching_prompt: response.coaching_prompt,
-                coaching_point: (response as any).coaching_point, // CopilotResponse format
+                coaching_point: response.coaching_point,  // NEW: From CopilotResponse
                 // NEW: Live call structure
                 live_call_structure: (response as any).live_call_structure, // CopilotResponse format
             };
@@ -266,7 +266,7 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
             const assistantMessage: Message = {
                 id: generateId(),
                 role: 'assistant',
-                content: response.answer,
+                content: typeof response.answer === 'string' ? response.answer : response.answer?.join('\n') || '',
                 timestamp: new Date(),
                 confidence: response.confidence,
                 sources: response.sources,
@@ -275,12 +275,15 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                 refusalReason: response.refusal_reason,
                 suggested_actions: response.suggested_actions,
                 projects: response.projects,
+                // NEW: Handle answer as array (CopilotResponse format)
+                answer_bullets: Array.isArray(response.answer) ? response.answer : undefined,
                 // Phase 2: Enhanced UX data
                 nudge: nudge || response.nudge,
                 urgency_signals: urgencySignals || response.urgency_signals,
                 sentiment: sentiment || response.sentiment,
                 // Phase 3: Sales Coaching
                 coaching_prompt: response.coaching_prompt,
+                coaching_point: response.coaching_point,  // NEW: From CopilotResponse
             };
 
             setMessages((prev) =>
@@ -417,9 +420,9 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                                                         {message.answer_bullets.map((bullet, idx) => (
                                                             <div key={idx} className="flex items-start gap-2">
                                                                 <span className="text-blue-500 mt-1 flex-shrink-0">•</span>
-                                                                <span 
+                                                                <span
                                                                     className="flex-1 text-gray-700 leading-relaxed prose prose-sm max-w-none"
-                                                                    dangerouslySetInnerHTML={{ 
+                                                                    dangerouslySetInnerHTML={{
                                                                         __html: bullet
                                                                             .replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-gray-900 bg-yellow-50 px-1 rounded">$1</strong>')
                                                                             .replace(/\*(.*?)\*/g, '<em class="italic">$1</em>')

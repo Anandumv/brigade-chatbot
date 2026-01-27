@@ -85,7 +85,7 @@ export interface CoachingPrompt {
 }
 
 export interface ChatQueryResponse {
-    answer: string | string[];  // Can be string or array of bullets (CopilotResponse format)
+    answer: string | string[];  // Support both string and array format
     confidence: ConfidenceLevel;
     sources: SourceInfo[];
     intent: IntentType;
@@ -102,7 +102,7 @@ export interface ChatQueryResponse {
     user_profile?: import('./enhanced-ux').UserProfileData;
     // Phase 3: Sales Coaching
     coaching_prompt?: CoachingPrompt;
-    coaching_point?: string;  // CopilotResponse format
+    coaching_point?: string;  // NEW: From CopilotResponse
 }
 
 export interface CompareProjectsRequest {
@@ -133,9 +133,9 @@ export interface Message {
     user_profile?: import('./enhanced-ux').UserProfileData;
     // Phase 3: Sales Coaching
     coaching_prompt?: CoachingPrompt;
-    coaching_point?: string;
-    // NEW: Live call structure
-    live_call_structure?: LiveCallStructure;
+    coaching_point?: string;  // NEW: From CopilotResponse
+    answer_bullets?: string[];  // NEW: Bullet point answer format
+    live_call_structure?: LiveCallStructure;  // NEW: Live call guide structure
 }
 
 export interface QueryAnalytics {
