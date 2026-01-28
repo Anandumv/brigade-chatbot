@@ -147,6 +147,9 @@ def extract_requirements_llm(user_input: str) -> FlowRequirements:
         )
         data = json.loads(response.choices[0].message.content)
         return FlowRequirements(**data)
+    except openai.RateLimitError:
+        logger.error("OpenAI RateLimitError in extract_requirements_llm")
+        raise
     except Exception as e:
         logger.error(f"Extraction failed: {e}")
         return FlowRequirements()
@@ -166,6 +169,9 @@ def generate_persuasion_text(topic: str, context: str) -> str:
             ]
         )
         return response.choices[0].message.content
+    except openai.RateLimitError:
+        logger.error("OpenAI RateLimitError in generate_persuasion_text")
+        raise
     except Exception:
         return "Could not generate persuasion text."
 
@@ -224,6 +230,9 @@ Use 'contextual_query' if referring to previous context ("nearby", "there", "sim
             response_format={"type": "json_object"}
         )
         return json.loads(response.choices[0].message.content)
+    except openai.RateLimitError:
+        logger.error("OpenAI RateLimitError in classify_user_intent")
+        raise
     except Exception as e:
         logger.error(f"Intent classification failed: {e}")
         # Fallback to keyword-based detection
@@ -272,6 +281,9 @@ Override: Ensure output is strictly bullet points as per System Prompt. Start ev
             ]
         )
         return response.choices[0].message.content
+    except openai.RateLimitError:
+        logger.error("OpenAI RateLimitError in generate_contextual_response")
+        raise
     except Exception as e:
         logger.error(f"Contextual response generation failed: {e}")
         return "I'd be happy to help you with that. Could you tell me more about what you're looking for?"
@@ -362,6 +374,9 @@ Use needs_web_search=false for project_details (database has this) and investmen
         logger.info(f"Follow-up intent classified: {result.get('intent')} (confidence: {result.get('confidence')})")
         return result
 
+    except openai.RateLimitError:
+        logger.error("OpenAI RateLimitError in classify_followup_intent")
+        raise
     except Exception as e:
         logger.error(f"Follow-up intent classification failed: {e}")
         return {
@@ -913,6 +928,9 @@ Format as bullet points starting with "•" or "-"."""
 
         return response.choices[0].message.content.strip()
 
+    except openai.RateLimitError:
+        logger.error("OpenAI RateLimitError in _generate_project_details_response")
+        raise
     except Exception as e:
         logger.error(f"GPT project details generation failed: {e}")
         # Fallback to formatted response

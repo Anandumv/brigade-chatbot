@@ -192,7 +192,7 @@ export function FilterPanel({
                                 className="w-full p-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-transparent"
                             >
                                 <option value="">All Configurations</option>
-                                {filterOptions.configurations.map((config) => (
+                                {filterOptions?.configurations?.map((config) => (
                                     <option key={config.value} value={config.value}>
                                         {config.label}
                                     </option>
@@ -213,15 +213,15 @@ export function FilterPanel({
                                 className="w-full p-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-transparent"
                             >
                                 <option value="">All Locations</option>
-                                <optgroup label={filterOptions.locations.north_bangalore.label}>
-                                    {filterOptions.locations.north_bangalore.areas.map((area) => (
+                                <optgroup label={filterOptions?.locations?.north_bangalore?.label || 'North Bangalore'}>
+                                    {filterOptions?.locations?.north_bangalore?.areas?.map((area) => (
                                         <option key={area.value} value={area.label}>
                                             {area.label}
                                         </option>
                                     ))}
                                 </optgroup>
-                                <optgroup label={filterOptions.locations.east_bangalore.label}>
-                                    {filterOptions.locations.east_bangalore.areas.map((area) => (
+                                <optgroup label={filterOptions?.locations?.east_bangalore?.label || 'East Bangalore'}>
+                                    {filterOptions?.locations?.east_bangalore?.areas?.map((area) => (
                                         <option key={area.value} value={area.label}>
                                             {area.label}
                                         </option>
@@ -243,7 +243,7 @@ export function FilterPanel({
                                 className="w-full p-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-transparent"
                             >
                                 <option value="">Any Budget</option>
-                                {filterOptions.budget_ranges.map((budget) => (
+                                {filterOptions?.budget_ranges?.map((budget) => (
                                     <option key={budget.value} value={budget.value}>
                                         {budget.label}
                                     </option>
@@ -264,7 +264,7 @@ export function FilterPanel({
                                 className="w-full p-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-transparent"
                             >
                                 <option value="">Any Time</option>
-                                {filterOptions.possession_years.map((year) => (
+                                {filterOptions?.possession_years?.map((year) => (
                                     <option key={year.value} value={year.value}>
                                         {year.label}
                                     </option>

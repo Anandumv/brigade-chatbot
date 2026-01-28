@@ -502,6 +502,9 @@ export function ChatInterface({ projects, personas }: ChatInterfaceProps) {
                                             {message.projects && message.projects.length > 0 && (
                                                 <div className="mt-4 flex flex-col gap-4 w-full">
                                                     {message.projects.map((project, idx) => {
+                                                        // Defensive check for invalid project data
+                                                        if (!project) return null;
+
                                                         // Adapter to map backend fields to frontend ProjectCard props
                                                         const adaptProjectData = (apiProject: any) => {
                                                             // Handle price range - can be object or need to calculate

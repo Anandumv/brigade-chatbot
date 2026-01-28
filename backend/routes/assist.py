@@ -1,9 +1,5 @@
-"""
-/assist Endpoint Router (Spec-Compliant)
-Main endpoint for Real Estate Sales Copilot with Redis context persistence.
-"""
-
 import logging
+import openai
 from fastapi import APIRouter, HTTPException
 from typing import Optional
 
@@ -31,6 +27,8 @@ async def assist(request: AssistRequest):
         logger.info(f"📥 Loaded context for call_id={request.call_id}")
 
         # 1.5. Check if query needs clarification (vague references without context)
+        # Note: needs_clarification might checks GPT, so we should wrap it too if it raises RateLimitError
+        # But for now assuming it handles it or we catch it here.
         if needs_clarification(request.query, ctx):
             logger.info(f"⚠️ Query needs clarification: '{request.query}' (vague reference without context)")
             # IMPORTANT: Still save context to maintain sliding TTL window
@@ -124,6 +122,20 @@ async def assist(request: AssistRequest):
         logger.info(f"💾 Updated context with Radius/Flow State for call_id={request.call_id}")
 
         return response
+
+    except openai.RateLimitError as e:
+        logger.error(f"⚠️ OpenAI API Quota Exceeded: {e}")
+        return CopilotResponse(
+            projects=[],
+            answer=[
+                "**Service Temporarily Unavailable**",
+                "• Our AI provider is currently experiencing high traffic (Quota Exceeded).",
+                "• Please try again later or contact support."
+            ],
+            pitch_help="System Error: API Limit Reached",
+            next_suggestion="Retry later or use manual search",
+            coaching_point="System Maintenance in progress"
+        )
 
     except Exception as e:
         logger.error(f"❌ /assist endpoint error: {e}", exc_info=True)
