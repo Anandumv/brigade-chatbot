@@ -377,6 +377,10 @@ def execute_sales_copilot_flow(state: FlowState, user_input: str, chat_history: 
     New Intelligent Router replacing rigid nodes.
     Routes based on Intent + Context.
     """
+    # Initialize variables that may be used in return statement
+    project = None
+    results = []
+
     # 1. Extract & Merge Context
     # --------------------------
     new_reqs = extract_requirements_llm(user_input)
