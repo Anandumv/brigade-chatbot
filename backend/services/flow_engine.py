@@ -474,21 +474,21 @@ def execute_sales_copilot_flow(state: FlowState, user_input: str, chat_history: 
                 intent = "project_discovery"
                 state.last_intent = intent
             else:
-            # Build comprehensive context string including last_shown_projects
-            context_parts = [f"Last Intent: {state.last_intent}"]
-            if state.selected_project_name:
-                context_parts.append(f"Last Project: {state.selected_project_name}")
-            if current_reqs.location:
-                context_parts.append(f"Location: {current_reqs.location}")
-            if state.last_shown_projects:
-                project_names = [p.get('name', p.get('project_name', str(p))) for p in state.last_shown_projects[:3]]
-                context_parts.append(f"Last Shown Projects: {', '.join(project_names)}")
-                context_parts.append("CRITICAL: Vague queries (e.g., 'price', 'more', 'details') refer to last shown project.")
+                # Build comprehensive context string including last_shown_projects
+                context_parts = [f"Last Intent: {state.last_intent}"]
+                if state.selected_project_name:
+                    context_parts.append(f"Last Project: {state.selected_project_name}")
+                if current_reqs.location:
+                    context_parts.append(f"Location: {current_reqs.location}")
+                if state.last_shown_projects:
+                    project_names = [p.get('name', p.get('project_name', str(p))) for p in state.last_shown_projects[:3]]
+                    context_parts.append(f"Last Shown Projects: {', '.join(project_names)}")
+                    context_parts.append("CRITICAL: Vague queries (e.g., 'price', 'more', 'details') refer to last shown project.")
 
-            context_str = ". ".join(context_parts)
-            intent_data = classify_user_intent(user_input, context_str, chat_history)
-            intent = intent_data.get("intent", "ambiguous")
-            state.last_intent = intent
+                context_str = ". ".join(context_parts)
+                intent_data = classify_user_intent(user_input, context_str, chat_history)
+                intent = intent_data.get("intent", "ambiguous")
+                state.last_intent = intent
     
     logger.info(f"Router Intent: {intent} | Project: {state.selected_project_name}")
 
