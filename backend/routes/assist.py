@@ -55,8 +55,10 @@ async def assist(request: AssistRequest):
             requirements=FlowRequirements(
                 configuration=ctx.get("last_configuration"),
                 location=ctx.get("last_location"),
+                area=ctx.get("last_area"),
                 budget_max=last_budget_cr,
-                project_name=ctx.get("active_project")
+                project_name=ctx.get("active_project"),
+                feature_requested=ctx.get("last_feature_requested")
             ),
             last_shown_projects=ctx.get("last_results", []),
             last_intent=ctx.get("last_intent"),
@@ -110,7 +112,9 @@ async def assist(request: AssistRequest):
             "active_project": flow_state.selected_project_name or reqs.get("project_name") or ctx.get("active_project"),
             "last_budget": budget_lakhs,
             "last_location": reqs.get("location") or ctx.get("last_location"),
+            "last_area": reqs.get("area") or ctx.get("last_area"),
             "last_configuration": reqs.get("configuration") or ctx.get("last_configuration"),
+            "last_feature_requested": reqs.get("feature_requested") or ctx.get("last_feature_requested"),
             "last_results": flow_response.projects or ctx.get("last_results"),
             "last_intent": flow_state.last_intent,
             "last_filters": reqs # Flow engine requirements are the source of truth for filters now
